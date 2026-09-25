@@ -23,9 +23,10 @@ python3 scripts/orchestrate.py plan contracts-v1
 ```bash
 python3 scripts/orchestrate.py run contracts-v1
 python3 scripts/orchestrate.py status
+python3 scripts/orchestrate.py logs contracts-v1 --follow
 ```
 
-`run` запускает процесс в фоне и сразу возвращает `run_id`, ветку и путь worktree. Следующие независимые задачи можно запускать так же; два задания с одной зоной владения одновременно не стартуют. Диспетчер записывает prompt, лог, итоговый ответ и состояние в `.orchestrator/runs/<run_id>/` — эта папка игнорируется Git и может содержать чувствительную информацию.
+`run` запускает процесс в фоне и сразу возвращает `run_id`, ветку и путь worktree. Следующие независимые задачи можно запускать так же; два задания с одной зоной владения одновременно не стартуют. `status` показывает стадию (`queued`, `running`, `needs_review`, `failed`, `scope_violation`, `accepted`), модель, ветку, worktree и путь лога. `logs TASK --follow` показывает действия агента по мере выполнения; `--raw` выводит полные JSONL события. Можно передать `run_id` вместо имени задачи. Диспетчер записывает prompt, лог и состояние в `.orchestrator/runs/<run_id>/` — эта папка игнорируется Git и может содержать чувствительную информацию.
 
 После `needs_review` человек смотрит diff в worktree, проверяет тесты и соответствие контракту, затем коммитит изменения в ветке агента и сливает ее в основной checkout. Только после этого:
 
@@ -40,7 +41,7 @@ python3 scripts/orchestrate.py accept contracts-v1
 ## Провайдеры
 
 - **Codex:** `codex exec` с выбранной моделью, workspace-write sandbox и JSONL логом.
-- **Claude:** `claude --print` с выбранной моделью, без интерактивных approval prompts; команды, требующие подтверждения, могут быть отклонены и должны попасть в отчет агента.
+- **Claude:** `claude --print --output-format stream-json` с выбранной моделью, без интерактивных approval prompts; команды, требующие подтверждения, могут быть отклонены и должны попасть в отчет агента.
 - **Ollama:** выключен по умолчанию. После проверки локальной coding-модели укажите ее ID и `enabled: true` в `policy.json`; запуск идет через Codex CLI `--oss --local-provider ollama`. Ollama разрешен только для перечисленных узких `allowed_kinds`.
 
 Маршрутизация задается в `policy.json`, а объяснение выбора моделей — в [`docs/model-routing.md`](../docs/model-routing.md). Если модель недоступна в вашем аккаунте, диспетчер не подменяет ее молча: используйте другой провайдер или измените политику осознанно.

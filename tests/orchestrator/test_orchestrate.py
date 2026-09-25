@@ -51,6 +51,16 @@ class OrchestratorTests(unittest.TestCase):
         command = orchestrate.agent_command(run, Path("/tmp/summary.txt"))
         self.assertEqual(command[command.index("--model") + 1], "claude-sonnet-5")
         self.assertIn("--permission-prompts", command)
+        self.assertEqual(command[command.index("--output-format") + 1], "stream-json")
+
+    def test_status_and_log_summary(self):
+        state = {"tasks": {"contracts-v1": {"status": "running", "run_id": "run1"}},
+                 "runs": {"run1": {"provider": "codex", "model": "gpt-6-sol", "branch": "agent/test",
+                                   "worktree": "/tmp/task", "started_at": "now"}}}
+        row = orchestrate.status_rows(self.tasks, state)[0]
+        self.assertEqual((row["task"], row["status"], row["model"]),
+                         ("contracts-v1", "running", "gpt-6-sol"))
+        self.assertIn("hello", orchestrate.summarize_event('{"type":"item.completed","item":{"type":"agent_message","text":"hello"}}'))
 
 
 if __name__ == "__main__":

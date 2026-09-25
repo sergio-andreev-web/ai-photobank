@@ -11,7 +11,9 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -193,7 +195,7 @@ def agent_command(run: dict[str, Any], summary: Path) -> list[str]:
         return command + ["-"]
     if provider == "claude":
         return ["claude", "--print", "--model", model, "--effort", effort,
-                "--output-format", "json", "--permission-mode", "acceptEdits",
+                "--output-format", "stream-json", "--permission-mode", "acceptEdits",
                 "--permission-prompts", "none", run["prompt"]]
     raise OrchestratorError(f"Unsupported provider {provider}")
 
@@ -286,6 +288,82 @@ def accept(task_id: str) -> dict[str, str]:
         return {"task": task_id, "status": "accepted", "branch": run["branch"]}
 
 
+def status_rows(tasks: dict[str, dict[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for task in tasks.values():
+        entry = state["tasks"].get(task["id"], {})
+        row = {"task": task["id"], "status": entry.get("status", "queued")}
+        if "run_id" in entry:
+            run_id = entry["run_id"]
+            run = state["runs"][run_id]
+            row.update({"run_id": run_id, "provider": run["provider"], "model": run["model"],
+                        "branch": run["branch"], "worktree": run["worktree"],
+                        "log": str(RUNTIME / "runs" / run_id / "agent.log"),
+                        "started_at": run["started_at"], "finished_at": run.get("finished_at"),
+                        "changed_paths": run.get("changed_paths", []),
+                        "scope_violations": run.get("scope_violations", []),
+                        "failure": run.get("failure")})
+        rows.append(row)
+    return rows
+
+
+def summarize_event(line: str) -> str:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return line.rstrip()
+    kind = event.get("type", "event")
+    item = event.get("item") or {}
+    if item.get("type") == "agent_message":
+        return str(item.get("text", ""))[:1000]
+    if item.get("type") == "command_execution":
+        return f"{kind}: {str(item.get('command', ''))[:500]}"
+    if kind == "assistant":
+        blocks = (event.get("message") or {}).get("content") or []
+        parts = []
+        for block in blocks:
+            if block.get("type") == "text":
+                parts.append(str(block.get("text", ""))[:1000])
+            elif block.get("type") == "tool_use":
+                parts.append(f"tool: {block.get('name', 'unknown')}")
+        return " | ".join(parts) or kind
+    if kind == "result":
+        return f"result: {str(event.get('result', ''))[:1000]}"
+    return kind
+
+
+def show_logs(identifier: str, tasks: dict[str, dict[str, Any]], follow: bool, raw: bool, lines: int) -> None:
+    with state_lock() as state:
+        if identifier in tasks:
+            run_id = state["tasks"].get(identifier, {}).get("run_id")
+        else:
+            run_id = identifier if identifier in state["runs"] else None
+        if not run_id:
+            raise OrchestratorError(f"No run found for {identifier}")
+    log_path = RUNTIME / "runs" / run_id / "agent.log"
+    while not log_path.exists():
+        if not follow:
+            raise OrchestratorError(f"Log is not available yet: {log_path}")
+        with state_lock() as state:
+            if state["runs"][run_id]["status"] != "running":
+                raise OrchestratorError(f"Log was not created: {log_path}")
+        time.sleep(0.3)
+    with log_path.open(encoding="utf-8", errors="replace") as stream:
+        for line in deque(stream, maxlen=lines):
+            print(line.rstrip() if raw else summarize_event(line), flush=True)
+        if not follow:
+            return
+        while True:
+            line = stream.readline()
+            if line:
+                print(line.rstrip() if raw else summarize_event(line), flush=True)
+                continue
+            with state_lock() as state:
+                if state["runs"][run_id]["status"] != "running":
+                    return
+            time.sleep(0.3)
+
+
 def main() -> int:
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -299,6 +377,11 @@ def main() -> int:
     run.add_argument("task_id")
     run.add_argument("--provider", choices=["codex", "claude", "ollama"])
     commands.add_parser("status", help="Show dispatched task states")
+    logs = commands.add_parser("logs", help="Show an agent's recent events")
+    logs.add_argument("task_or_run_id")
+    logs.add_argument("--follow", action="store_true", help="Continue until the run finishes")
+    logs.add_argument("--raw", action="store_true", help="Print complete JSONL events")
+    logs.add_argument("--lines", type=int, default=50, help="Number of recent events (default: 50)")
     accepted = commands.add_parser("accept", help="Mark a reviewed and merged task complete")
     accepted.add_argument("task_id")
     internal = commands.add_parser("_execute", help=argparse.SUPPRESS)
@@ -319,10 +402,14 @@ def main() -> int:
             print(json.dumps(dispatch(args.task_id, args.provider), ensure_ascii=False, indent=2))
         elif args.command == "accept":
             print(json.dumps(accept(args.task_id), ensure_ascii=False, indent=2))
+        elif args.command == "logs":
+            if args.lines < 1:
+                raise OrchestratorError("--lines must be positive")
+            show_logs(args.task_or_run_id, tasks, args.follow, args.raw, args.lines)
         else:
             with state_lock() as state:
                 if args.command == "status":
-                    print(json.dumps(state, ensure_ascii=False, indent=2))
+                    print(json.dumps(status_rows(tasks, state), ensure_ascii=False, indent=2))
                 elif args.command == "list":
                     rows = []
                     for task in tasks.values():
