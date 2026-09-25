@@ -24,6 +24,8 @@
 | `infrastructure-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Compose и команды по готовым интерфейсам |
 | `infrastructure-web` | Claude **Sonnet 5**, high | Codex **Sol**, high | Публичный HTTPS, хранение и восстановление в облаке |
 | `infrastructure-runpod` | Codex **Sol**, high | Claude **Sonnet 5**, high | GPU deployment, секреты и health checks |
+| `ai-production-key` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Точечная проверка конфигурации и тесты запуска |
+| `ci-tests` | Codex **Sol**, high | Claude **Sonnet 5**, high | Сервисы CI, PostgreSQL с pgvector, кеш зависимостей и честные падения |
 | `integration-qa` | Claude **Opus 5.5**, high | Codex **Sol**, high | Сквозная приемка нескольких сервисов |
 
 Для `Haiku 4.5` оркестратор не передает `--effort`: эта модель не поддерживает соответствующий параметр. `Fable 5.1` доступен только по явному `--model` для длительного исследования или задачи, где Opus на высокой сложности не справился. Для Codex разрешены только `gpt-6-luna` и `gpt-6-sol`; это проверяется даже при ручном выборе. Ollama пока выключен и разрешен только для узких видов задач после явной настройки и проверки локальной модели.
