@@ -13,6 +13,7 @@ import select
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from collections import deque
@@ -285,6 +286,26 @@ def select_for_task(policy: dict[str, Any], task: dict[str, Any], provider: str 
     return selected, reason, usage, errors
 
 
+def checkpoint_due(snapshot: dict[str, Any], policy: dict[str, Any], model: str = "") -> bool:
+    monitor = policy["usage_monitor"]
+    return (snapshot["remaining_percent"] <= monitor["checkpoint_five_hour_remaining_percent"] or
+            snapshot["weekly_remaining_percent"] <= monitor["checkpoint_weekly_remaining_percent"] or
+            (model == "claude-fable-5-1" and snapshot.get("fable_remaining_percent", 0) <=
+             monitor["checkpoint_weekly_remaining_percent"]))
+
+
+def checkpoint_request_path(worktree: str | Path) -> Path:
+    return Path(worktree) / ".orchestrator" / "checkpoint-request.json"
+
+
+def save_checkpoint_request(run: dict[str, Any], reason: str,
+                            usage: dict[str, Any] | None = None) -> Path:
+    path = checkpoint_request_path(run["worktree"])
+    write_json(path, {"run_id": run["run_id"], "task_id": run["task_id"], "reason": reason,
+                      "requested_at": datetime.now(timezone.utc).isoformat(), "usage": usage})
+    return path
+
+
 @contextmanager
 def state_lock() -> Iterator[dict[str, Any]]:
     RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -332,7 +353,7 @@ def readiness(task: dict[str, Any], policy: dict[str, Any], state: dict[str, Any
             reasons.append(f"dependency {dependency} is {task_state(state, dependency)}")
     owned = set(policy["modules"][task["module"]]["owned_paths"])
     for other_id, record in state["tasks"].items():
-        if other_id == task["id"] or record.get("status") not in {"running", "needs_review", "scope_violation"}:
+        if other_id == task["id"] or record.get("status") not in {"running", "checkpointing", "checkpointed", "needs_review", "scope_violation"}:
             continue
         other_module = record.get("module")
         if other_module and owned.intersection(policy["modules"][other_module]["owned_paths"]):
@@ -370,54 +391,304 @@ Assigned work: {task['instructions']}
 
 Run focused checks. In the final report list changed files, checks actually run, contract compliance,
 and any blockers. Do not merge branches or push to a remote repository.
+
+After each meaningful implementation step, check .orchestrator/checkpoint-request.json in this worktree.
+If it exists, stop starting new work. Finish the current safe edit, then give a final checkpoint report
+with headings: Completed, Remaining, Checks, Blockers. Keep partial changes in this worktree.
+Do not write the checkpoint artifact yourself; the orchestrator saves your report.
 """
+
+
+CHECKPOINT_MESSAGE = """Subscription capacity is approaching its limit. Stop starting new work now.
+Finish the current safe edit, then provide a concise checkpoint report with these headings:
+Completed, Remaining, Checks, Blockers. Mention any incomplete file and the exact next step.
+Keep all partial code in this worktree. Do not commit, merge, or push."""
+
+
+def build_resume_prompt(task: dict[str, Any], policy: dict[str, Any], checkpoint: str) -> str:
+    return (build_prompt(task, policy) +
+            "\nResume the existing work in this same worktree. Inspect the partial diff before editing. "
+            "Use this checkpoint as context, verify its claims against the files, and continue from the "
+            "first unfinished step. Do not restart or discard existing changes.\n\n"
+            "Previous checkpoint:\n" + checkpoint)
 
 
 def agent_command(run: dict[str, Any], summary: Path) -> list[str]:
     provider, model, effort = run["provider"], run["model"], run["effort"]
     worktree = run["worktree"]
     if provider in {"codex", "ollama"}:
-        command = ["codex", "exec", "--model", model, "--sandbox", "workspace-write", "--cd", worktree,
-                   "--json", "--output-last-message", str(summary)]
+        command = ["codex", "--sandbox", "workspace-write", "--cd", worktree]
         if provider == "ollama":
             command += ["--oss", "--local-provider", "ollama"]
         else:
             command += ["--config", f'model_reasoning_effort="{effort}"']
+        command += ["exec"]
+        if run.get("resume_session_id"):
+            command += ["resume"]
+        command += ["--model", model, "--json", "--output-last-message", str(summary)]
+        if run.get("resume_session_id"):
+            command += [run["resume_session_id"]]
         return command + ["-"]
     if provider == "claude":
         command = ["claude", "--print", "--model", model, "--output-format", "stream-json",
-                   "--permission-mode", "acceptEdits", "--permission-prompts", "none"]
+                   "--input-format", "stream-json", "--replay-user-messages", "--verbose",
+                   "--permission-mode", "acceptEdits",
+                   "--permission-prompts", "none"]
+        if run.get("resume_session_id"):
+            command += ["--resume", run["resume_session_id"]]
         if effort:
             command += ["--effort", effort]
-        return command + [run["prompt"]]
+        return command
     raise OrchestratorError(f"Unsupported provider {provider}")
+
+
+def _claude_input(message: str) -> str:
+    return json.dumps({"type": "user", "message": {"role": "user", "content": message}},
+                      ensure_ascii=False) + "\n"
+
+
+def _read_agent_output(process: subprocess.Popen[str], log_path: Path, run_id: str,
+                       observed: dict[str, Any]) -> None:
+    assert process.stdout is not None
+    with log_path.open("w", encoding="utf-8") as log:
+        for line in process.stdout:
+            log.write(line)
+            log.flush()
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            session_id = event.get("thread_id") if event.get("type") == "thread.started" else event.get("session_id")
+            if session_id and not observed["session_id"]:
+                observed["session_id"] = session_id
+                with state_lock() as state:
+                    state["runs"][run_id]["agent_session_id"] = session_id
+            if event.get("type") == "result":
+                observed["result_count"] += 1
+                observed["last_result"] = str(event.get("result") or "")
+            item = event.get("item") or {}
+            if item.get("type") == "agent_message" and item.get("text"):
+                observed["last_result"] = str(item["text"])
+
+
+def _checkpoint_report_complete(report: str) -> bool:
+    lowered = report.lower()
+    return "completed" in lowered and "remaining" in lowered
+
+
+def _last_result_from_log(log_path: Path) -> str:
+    if not log_path.exists():
+        return ""
+    last = ""
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "result" and event.get("result"):
+            last = str(event["result"])
+        item = event.get("item") or {}
+        if item.get("type") == "agent_message" and item.get("text"):
+            last = str(item["text"])
+    return last
+
+
+def _checkpoint_followup(run: dict[str, Any], session_id: str, run_dir: Path,
+                         log_path: Path, timeout: int) -> tuple[str, str | None]:
+    followup = dict(run, resume_session_id=session_id, prompt=CHECKPOINT_MESSAGE)
+    followup_summary = run_dir / "checkpoint-summary.txt"
+    command = agent_command(followup, followup_summary)
+    input_text = _claude_input(CHECKPOINT_MESSAGE) if run["provider"] == "claude" else CHECKPOINT_MESSAGE
+    try:
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write("\n--- checkpoint follow-up turn ---\n")
+            result = subprocess.run(command, cwd=run["worktree"], input=input_text,
+                                    text=True, stdout=log, stderr=subprocess.STDOUT,
+                                    timeout=timeout, check=False)
+        report = (followup_summary.read_text(encoding="utf-8") if followup_summary.exists()
+                  else _last_result_from_log(log_path))
+        failure = None if result.returncode == 0 else f"Checkpoint turn exited {result.returncode}"
+        return report, failure
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return "", f"Checkpoint turn failed: {error}"
+
+
+def _write_checkpoint(run: dict[str, Any], report: str, changes: list[str],
+                      reason: str, usage: dict[str, Any] | None,
+                      followup_error: str | None) -> Path:
+    task_dir = RUNTIME / "tasks" / run["task_id"]
+    task_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    task_dir.chmod(0o700)
+    artifact = task_dir / "checkpoint.md"
+    completed = _checkpoint_report_complete(report)
+    lines = [f"# Checkpoint: {run['task_id']}", "",
+             f"- Run: {run['run_id']}",
+             f"- Provider/model: {run['provider']} / {run['model']}",
+             f"- Branch: {run['branch']}",
+             f"- Worktree: {run['worktree']}",
+             f"- Native session: {run.get('agent_session_id') or 'unavailable'}",
+             f"- Reason: {reason}",
+             f"- Agent report complete: {'yes' if completed else 'no'}",
+             f"- Follow-up error: {followup_error or 'none'}", "",
+             f"- Agent log: {RUNTIME / 'runs' / run['run_id'] / 'agent.log'}",
+             f"- Base commit: {run['base']}", "",
+             "## Changed files observed by Git", ""]
+    lines += [f"- {path}" for path in changes] or ["- None"]
+    lines += ["", "## Agent report", "", report.strip() or
+              "No agent report was available. Inspect the diff and agent.log before resuming.", ""]
+    artifact.write_text("\n".join(lines), encoding="utf-8")
+    write_json(task_dir / "checkpoint.json",
+               {"task_id": run["task_id"], "run_id": run["run_id"], "provider": run["provider"],
+                "model": run["model"], "branch": run["branch"], "worktree": run["worktree"],
+                "agent_session_id": run.get("agent_session_id"), "reason": reason,
+                "agent_report_complete": completed, "changed_paths": changes,
+                "usage": usage, "followup_error": followup_error,
+                "saved_at": datetime.now(timezone.utc).isoformat()})
+    local = Path(run["worktree"]) / ".orchestrator" / "checkpoint.md"
+    local.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    local.write_text(artifact.read_text(encoding="utf-8"), encoding="utf-8")
+    return artifact
 
 
 def execute(run_id: str) -> None:
     with state_lock() as state:
         run = dict(state["runs"][run_id])
+    run["run_id"] = run_id
     run_dir = RUNTIME / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     summary = run_dir / "summary.txt"
-    command = agent_command(run, summary)
     log_path = run_dir / "agent.log"
+    observed: dict[str, Any] = {"session_id": None, "result_count": 0, "last_result": ""}
     exit_code = 1
     failure = None
+    checkpoint_requested = False
+    checkpoint_reason = ""
+    checkpoint_usage = None
+    checkpoint_path = None
+    process: subprocess.Popen[str] | None = None
+    reader: threading.Thread | None = None
     try:
-        with log_path.open("w", encoding="utf-8") as log:
-            result = subprocess.run(command, cwd=run["worktree"], input=run["prompt"] if run["provider"] != "claude" else None,
-                                    text=True, stdout=log, stderr=subprocess.STDOUT, check=False)
-        exit_code = result.returncode
         policy, tasks = load_config()
+        process = subprocess.Popen(agent_command(run, summary), cwd=run["worktree"],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True, bufsize=1)
+        reader = threading.Thread(target=_read_agent_output,
+                                  args=(process, log_path, run_id, observed), daemon=True)
+        reader.start()
+        assert process.stdin is not None
+        process.stdin.write(_claude_input(run["prompt"]) if run["provider"] == "claude" else run["prompt"])
+        process.stdin.flush()
+        if run["provider"] != "claude":
+            process.stdin.close()
+        monitor = policy["usage_monitor"]
+        next_poll = time.monotonic() + monitor["poll_seconds"]
+        sent_signal = False
+        while process.poll() is None:
+            request_file = checkpoint_request_path(run["worktree"])
+            if not checkpoint_requested and request_file.exists():
+                request = read_json(request_file)
+                if request.get("run_id") == run_id:
+                    checkpoint_requested = True
+                    checkpoint_reason = str(request.get("reason") or "manual checkpoint")
+                    checkpoint_usage = request.get("usage")
+                    with state_lock() as state:
+                        state["runs"][run_id].update({"status": "checkpointing",
+                                                       "checkpoint_requested_at": request.get("requested_at"),
+                                                       "checkpoint_reason": checkpoint_reason})
+                        state["tasks"][run["task_id"]]["status"] = "checkpointing"
+            if not checkpoint_requested and run["provider"] in {"codex", "claude"} and time.monotonic() >= next_poll:
+                snapshots, errors = read_usage([run["provider"]])
+                next_poll = time.monotonic() + monitor["poll_seconds"]
+                if process.poll() is None and snapshots and checkpoint_due(snapshots[run["provider"]], policy, run["model"]):
+                    save_checkpoint_request(run, "subscription limit approaching", snapshots[run["provider"]])
+                elif errors:
+                    with state_lock() as state:
+                        state["runs"][run_id]["usage_monitor_error"] = errors.get(run["provider"])
+            if checkpoint_requested and not sent_signal:
+                if run["provider"] == "claude":
+                    try:
+                        process.stdin.write(_claude_input(CHECKPOINT_MESSAGE))
+                        process.stdin.flush()
+                        sent_signal = True
+                    except (BrokenPipeError, OSError):
+                        sent_signal = True
+                elif observed["session_id"] and run["provider"] == "codex":
+                    signal = subprocess.run(["codex", "queue", "--thread", observed["session_id"],
+                                             "--message", CHECKPOINT_MESSAGE], cwd=run["worktree"],
+                                            capture_output=True, text=True, timeout=15, check=False)
+                    sent_signal = True
+                    if signal.returncode:
+                        with state_lock() as state:
+                            state["runs"][run_id]["checkpoint_signal_error"] = signal.stderr.strip()
+                elif run["provider"] == "ollama":
+                    sent_signal = True
+            if run["provider"] == "claude" and not process.stdin.closed:
+                expected_results = 2 if checkpoint_requested and sent_signal else 1
+                if observed["result_count"] >= expected_results:
+                    process.stdin.close()
+            time.sleep(0.25)
+        if not checkpoint_requested:
+            request_file = checkpoint_request_path(run["worktree"])
+            if request_file.exists():
+                request = read_json(request_file)
+                if request.get("run_id") == run_id:
+                    checkpoint_requested = True
+                    checkpoint_reason = str(request.get("reason") or "manual checkpoint")
+                    checkpoint_usage = request.get("usage")
+        reader.join(timeout=5)
+        exit_code = process.wait()
+        with state_lock() as state:
+            run["agent_session_id"] = state["runs"][run_id].get("agent_session_id")
+        report = (summary.read_text(encoding="utf-8") if summary.exists() else observed["last_result"])
+        followup_error = None
+        if checkpoint_requested and not _checkpoint_report_complete(report) and run.get("agent_session_id"):
+            fresh, followup_error = _checkpoint_followup(
+                run, run["agent_session_id"], run_dir, log_path,
+                monitor.get("checkpoint_followup_timeout_seconds", 180))
+            report = fresh or report
         changes = changed_paths(Path(run["worktree"]), run["base"])
         violations = outside_ownership(changes, policy["modules"][tasks[run["task_id"]]["module"]]["owned_paths"])
-        status = "scope_violation" if violations else ("needs_review" if exit_code == 0 else "failed")
+        if checkpoint_requested:
+            checkpoint_path = _write_checkpoint(run, report, changes, checkpoint_reason,
+                                                checkpoint_usage, followup_error)
+        status = ("scope_violation" if violations else
+                  "checkpointed" if checkpoint_requested else
+                  "needs_review" if exit_code == 0 else "failed")
     except Exception as error:
         failure = f"{type(error).__name__}: {error}"
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
         changes, violations, status = [], [], "failed"
+        if checkpoint_requested:
+            try:
+                policy, tasks = load_config()
+                changes = changed_paths(Path(run["worktree"]), run["base"])
+                violations = outside_ownership(changes, policy["modules"][tasks[run["task_id"]]["module"]]["owned_paths"])
+                checkpoint_path = _write_checkpoint(run, "", changes, checkpoint_reason,
+                                                    checkpoint_usage, failure)
+                status = "scope_violation" if violations else "checkpointed"
+            except Exception:
+                pass
+    finally:
+        if reader and reader.is_alive():
+            reader.join(timeout=5)
+        if process:
+            if process.stdin and not process.stdin.closed:
+                try:
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
+            if process.stdout and not process.stdout.closed:
+                process.stdout.close()
     with state_lock() as state:
         state["runs"][run_id].update({"status": status, "exit_code": exit_code, "changed_paths": changes,
                                        "scope_violations": violations, "failure": failure,
+                                       "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
                                        "finished_at": datetime.now(timezone.utc).isoformat()})
         state["tasks"][run["task_id"]]["status"] = status
 
@@ -441,7 +712,7 @@ def dispatch(task_id: str, provider: str | None, model: str | None = None,
         worktree = ROOT.parent / f".{ROOT.name}-worktrees" / run_id
         worktree.parent.mkdir(parents=True, exist_ok=True)
         git("worktree", "add", "-b", branch, str(worktree), base)
-        run = {"task_id": task_id, "module": task["module"], "provider": selected["provider"],
+        run = {"run_id": run_id, "task_id": task_id, "module": task["module"], "provider": selected["provider"],
                "model": selected["model"], "effort": selected["effort"], "branch": branch,
                "base": base, "worktree": str(worktree), "prompt": build_prompt(task, policy),
                "status": "running", "started_at": datetime.now(timezone.utc).isoformat(),
@@ -452,14 +723,96 @@ def dispatch(task_id: str, provider: str | None, model: str | None = None,
         run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         run_dir.chmod(0o700)
         (run_dir / "prompt.txt").write_text(run["prompt"], encoding="utf-8")
+        snapshot = usage.get(selected["provider"])
+        if snapshot and checkpoint_due(snapshot, policy, selected["model"]):
+            save_checkpoint_request(run, "subscription limit already near threshold", snapshot)
+    pid = launch_supervisor(run_id)
+    return {"run_id": run_id, "task": task_id, "provider": selected["provider"], "model": selected["model"],
+            "branch": branch, "worktree": str(worktree), "pid": pid,
+            "selection_reason": reason, "usage": usage, "usage_errors": errors}
+
+
+def launch_supervisor(run_id: str) -> int:
     with (RUNTIME / "runs" / run_id / "supervisor.log").open("w", encoding="utf-8") as supervisor:
         process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_execute", run_id],
                                    cwd=ROOT, stdout=supervisor, stderr=subprocess.STDOUT, start_new_session=True)
     with state_lock() as state:
         state["runs"][run_id]["pid"] = process.pid
-    return {"run_id": run_id, "task": task_id, "provider": selected["provider"], "model": selected["model"],
-            "branch": branch, "worktree": str(worktree), "pid": process.pid,
-            "selection_reason": reason, "usage": usage, "usage_errors": errors}
+    return process.pid
+
+
+def request_checkpoint(task_id: str) -> dict[str, str]:
+    with state_lock() as state:
+        entry = state["tasks"].get(task_id, {})
+        if entry.get("status") not in {"running", "checkpointing"}:
+            raise OrchestratorError("Task is not running")
+        run_id = entry["run_id"]
+        run = dict(state["runs"][run_id], run_id=run_id)
+    path = save_checkpoint_request(run, "manual checkpoint")
+    return {"task": task_id, "run_id": run_id, "request": str(path)}
+
+
+def resume(task_id: str, provider: str | None, model: str | None = None,
+           skip_usage_check: bool = False) -> dict[str, Any]:
+    policy, tasks = load_config()
+    if task_id not in tasks:
+        raise OrchestratorError(f"Unknown task {task_id}")
+    task = tasks[task_id]
+    selected, reason, usage, errors = select_for_task(policy, task, provider, model, skip_usage_check)
+    if not shutil.which("codex" if selected["provider"] == "ollama" else selected["provider"]):
+        raise OrchestratorError(f"CLI for {selected['provider']} is not installed")
+    with state_lock() as state:
+        entry = state["tasks"].get(task_id, {})
+        if entry.get("status") not in {"checkpointed", "failed"}:
+            raise OrchestratorError("Task must be checkpointed or failed before resume")
+        previous = dict(state["runs"][entry["run_id"]], run_id=entry["run_id"])
+        worktree = Path(previous["worktree"])
+        if not worktree.is_dir() or git("rev-parse", "--show-toplevel", cwd=worktree, check=False).returncode:
+            raise OrchestratorError("Checkpoint worktree is missing")
+        if git("rev-parse", "HEAD", cwd=worktree).stdout.decode().strip() != previous["base"]:
+            raise OrchestratorError("Checkpoint worktree HEAD changed; review before resuming")
+        artifact = RUNTIME / "tasks" / task_id / "checkpoint.md"
+        if entry["status"] == "failed" or not artifact.is_file():
+            changes = changed_paths(worktree, previous["base"])
+            violations = outside_ownership(changes, policy["modules"][task["module"]]["owned_paths"])
+            if violations:
+                raise OrchestratorError("Review out-of-scope changes before resuming: " + ", ".join(violations))
+            old_dir = RUNTIME / "runs" / entry["run_id"]
+            summary = old_dir / "summary.txt"
+            report = (summary.read_text(encoding="utf-8") if summary.is_file() else
+                      _last_result_from_log(old_dir / "agent.log"))
+            artifact = _write_checkpoint(previous, report, changes,
+                                         "previous run failed or checkpoint artifact missing", None,
+                                         previous.get("failure"))
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+        native_session = (previous.get("agent_session_id") if
+                          selected["provider"] == previous["provider"] else None)
+        prompt = build_resume_prompt(task, policy, artifact.read_text(encoding="utf-8"))
+        run = {"run_id": run_id, "task_id": task_id, "module": task["module"],
+               "provider": selected["provider"], "model": selected["model"], "effort": selected["effort"],
+               "branch": previous["branch"], "base": previous["base"], "worktree": str(worktree),
+               "prompt": prompt, "status": "running", "started_at": datetime.now(timezone.utc).isoformat(),
+               "selection_reason": reason, "usage_at_dispatch": usage, "usage_errors": errors,
+               "resumed_from_run_id": entry["run_id"]}
+        if native_session:
+            run["resume_session_id"] = native_session
+        request_path = checkpoint_request_path(worktree)
+        request_path.unlink(missing_ok=True)
+        state["runs"][run_id] = run
+        state["tasks"][task_id] = {"status": "running", "module": task["module"], "run_id": run_id}
+        run_dir = RUNTIME / "runs" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        run_dir.chmod(0o700)
+        (run_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+        snapshot = usage.get(selected["provider"])
+        if snapshot and checkpoint_due(snapshot, policy, selected["model"]):
+            save_checkpoint_request(run, "subscription limit already near threshold", snapshot)
+    pid = launch_supervisor(run_id)
+    return {"run_id": run_id, "task": task_id, "provider": selected["provider"],
+            "model": selected["model"], "branch": run["branch"], "worktree": str(worktree),
+            "pid": pid, "resumed_from_run_id": run["resumed_from_run_id"],
+            "native_session_reused": bool(native_session), "selection_reason": reason,
+            "usage": usage, "usage_errors": errors}
 
 
 def accept(task_id: str) -> dict[str, str]:
@@ -499,6 +852,11 @@ def status_rows(tasks: dict[str, dict[str, Any]], state: dict[str, Any]) -> list
                         "log": str(RUNTIME / "runs" / run_id / "agent.log"),
                         "started_at": run["started_at"], "finished_at": run.get("finished_at"),
                         "changed_paths": run.get("changed_paths", []),
+                        "agent_session_id": run.get("agent_session_id"),
+                        "resumed_from_run_id": run.get("resumed_from_run_id"),
+                        "checkpoint_path": run.get("checkpoint_path"),
+                        "checkpoint_reason": run.get("checkpoint_reason"),
+                        "usage_monitor_error": run.get("usage_monitor_error"),
                         "scope_violations": run.get("scope_violations", []),
                         "failure": run.get("failure")})
         rows.append(row)
@@ -543,7 +901,7 @@ def show_logs(identifier: str, tasks: dict[str, dict[str, Any]], follow: bool, r
         if not follow:
             raise OrchestratorError(f"Log is not available yet: {log_path}")
         with state_lock() as state:
-            if state["runs"][run_id]["status"] != "running":
+            if state["runs"][run_id]["status"] not in {"running", "checkpointing"}:
                 raise OrchestratorError(f"Log was not created: {log_path}")
         time.sleep(0.3)
     with log_path.open(encoding="utf-8", errors="replace") as stream:
@@ -557,7 +915,7 @@ def show_logs(identifier: str, tasks: dict[str, dict[str, Any]], follow: bool, r
                 print(line.rstrip() if raw else summarize_event(line), flush=True)
                 continue
             with state_lock() as state:
-                if state["runs"][run_id]["status"] != "running":
+                if state["runs"][run_id]["status"] not in {"running", "checkpointing"}:
                     return
             time.sleep(0.3)
 
@@ -578,6 +936,13 @@ def main() -> int:
     run.add_argument("--provider", choices=["codex", "claude", "ollama"])
     run.add_argument("--model", help="Explicit model from policy.json allowed_models")
     run.add_argument("--skip-usage-check", action="store_true", help="Use only with explicit provider/model")
+    continued = commands.add_parser("resume", help="Continue a checkpointed task in its existing worktree")
+    continued.add_argument("task_id")
+    continued.add_argument("--provider", choices=["codex", "claude", "ollama"])
+    continued.add_argument("--model", help="Explicit model from policy.json allowed_models")
+    continued.add_argument("--skip-usage-check", action="store_true", help="Use only with explicit provider/model")
+    checkpoint = commands.add_parser("checkpoint", help="Ask a running task to stop safely and save progress")
+    checkpoint.add_argument("task_id")
     commands.add_parser("usage", help="Read current subscription usage from both CLIs")
     commands.add_parser("status", help="Show dispatched task states")
     logs = commands.add_parser("logs", help="Show an agent's recent events")
@@ -604,6 +969,11 @@ def main() -> int:
         elif args.command == "run":
             print(json.dumps(dispatch(args.task_id, args.provider, args.model, args.skip_usage_check),
                              ensure_ascii=False, indent=2))
+        elif args.command == "resume":
+            print(json.dumps(resume(args.task_id, args.provider, args.model, args.skip_usage_check),
+                             ensure_ascii=False, indent=2))
+        elif args.command == "checkpoint":
+            print(json.dumps(request_checkpoint(args.task_id), ensure_ascii=False, indent=2))
         elif args.command == "usage":
             snapshots, errors = read_usage(policy["providers"])
             print(json.dumps({"usage": snapshots, "errors": errors}, ensure_ascii=False, indent=2))

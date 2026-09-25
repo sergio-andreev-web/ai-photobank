@@ -1,6 +1,11 @@
 import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -155,6 +160,127 @@ class OrchestratorTests(unittest.TestCase):
         run.update(model="claude-haiku-4-5", effort="")
         command = orchestrate.agent_command(run, Path("/tmp/summary.txt"))
         self.assertNotIn("--effort", command)
+
+    def test_checkpoint_thresholds_and_resume_commands(self):
+        snapshot = {"remaining_percent": 25, "weekly_remaining_percent": 90}
+        self.assertTrue(orchestrate.checkpoint_due(snapshot, self.policy))
+        snapshot["remaining_percent"] = 26
+        self.assertFalse(orchestrate.checkpoint_due(snapshot, self.policy))
+        snapshot["fable_remaining_percent"] = 9
+        self.assertTrue(orchestrate.checkpoint_due(snapshot, self.policy, "claude-fable-5-1"))
+        run = {"provider": "codex", "model": "gpt-6-sol", "effort": "high",
+               "worktree": "/tmp/photobank-task", "resume_session_id": "session-1"}
+        command = orchestrate.agent_command(run, Path("/tmp/summary.txt"))
+        self.assertEqual(command[command.index("resume") + 1], "--model")
+        self.assertEqual(command[-2:], ["session-1", "-"])
+        run.update(provider="claude", model="claude-sonnet-5")
+        command = orchestrate.agent_command(run, Path("/tmp/summary.txt"))
+        self.assertEqual(command[command.index("--resume") + 1], "session-1")
+        self.assertEqual(command[command.index("--input-format") + 1], "stream-json")
+        self.assertEqual(json.loads(orchestrate._claude_input("hello"))["message"]["content"], "hello")
+
+    def test_checkpoint_artifact_and_cross_provider_resume(self):
+        task_id = "contracts-v1"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = root / "worktree"
+            (worktree / "contracts").mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(worktree)], check=True)
+            (worktree / ".gitignore").write_text(".orchestrator/\n", encoding="utf-8")
+            (worktree / "contracts" / "partial.txt").write_text("partial", encoding="utf-8")
+            subprocess.run(["git", "-C", str(worktree), "add", ".gitignore", "contracts/partial.txt"], check=True)
+            subprocess.run(["git", "-C", str(worktree), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "base"], check=True)
+            base = subprocess.check_output(["git", "-C", str(worktree), "rev-parse", "HEAD"], text=True).strip()
+            (worktree / "contracts" / "partial.txt").write_text("partially changed", encoding="utf-8")
+            previous = {"run_id": "old-run", "task_id": task_id, "module": "contracts",
+                        "provider": "codex", "model": "gpt-6-sol", "agent_session_id": "codex-session",
+                        "branch": "agent/contracts-v1-old-run", "base": base, "worktree": str(worktree),
+                        "status": "checkpointed", "started_at": "earlier"}
+            report = "Completed: first file\nRemaining: second file\nChecks: none\nBlockers: none"
+            with patch.object(orchestrate, "RUNTIME", root / "runtime"):
+                artifact = orchestrate._write_checkpoint(previous, report, ["contracts/partial.txt"],
+                                                         "subscription limit approaching", None, None)
+                self.assertIn("Remaining: second file", artifact.read_text(encoding="utf-8"))
+                self.assertTrue((root / "runtime" / "tasks" / task_id / "checkpoint.json").exists())
+                with orchestrate.state_lock() as state:
+                    state["tasks"][task_id] = {"status": "checkpointed", "module": "contracts",
+                                               "run_id": "old-run"}
+                    state["runs"]["old-run"] = previous
+                orchestrate.save_checkpoint_request(previous, "manual checkpoint")
+                selected = {"provider": "claude", "model": "claude-sonnet-5", "effort": "high"}
+                with patch.object(orchestrate, "select_for_task", return_value=(selected, "test", {}, {})), \
+                     patch.object(orchestrate, "launch_supervisor", return_value=123):
+                    result = orchestrate.resume(task_id, "claude")
+                self.assertFalse(result["native_session_reused"])
+                self.assertEqual(result["worktree"], str(worktree))
+                self.assertFalse(orchestrate.checkpoint_request_path(worktree).exists())
+                with orchestrate.state_lock() as state:
+                    resumed = state["runs"][result["run_id"]]
+                    self.assertEqual(resumed["resumed_from_run_id"], "old-run")
+                    self.assertNotIn("resume_session_id", resumed)
+                    self.assertIn("Remaining: second file", resumed["prompt"])
+                    resumed["agent_session_id"] = "claude-session"
+                    resumed["status"] = "checkpointed"
+                    state["tasks"][task_id]["status"] = "checkpointed"
+                with patch.object(orchestrate, "select_for_task", return_value=(selected, "test", {}, {})), \
+                     patch.object(orchestrate, "launch_supervisor", return_value=456):
+                    next_result = orchestrate.resume(task_id, "claude")
+                self.assertTrue(next_result["native_session_reused"])
+                with orchestrate.state_lock() as state:
+                    self.assertEqual(state["runs"][next_result["run_id"]]["resume_session_id"],
+                                     "claude-session")
+                    state["runs"][next_result["run_id"]]["status"] = "failed"
+                    state["tasks"][task_id]["status"] = "failed"
+                artifact.unlink()
+                with patch.object(orchestrate, "select_for_task", return_value=(selected, "test", {}, {})), \
+                     patch.object(orchestrate, "launch_supervisor", return_value=789):
+                    recovered = orchestrate.resume(task_id, "claude")
+                self.assertEqual(recovered["worktree"], str(worktree))
+                self.assertIn("contracts/partial.txt", artifact.read_text(encoding="utf-8"))
+
+    def test_running_agent_receives_checkpoint_and_saves_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = root / "worktree"
+            (worktree / "contracts").mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(worktree)], check=True)
+            (worktree / ".gitignore").write_text(".orchestrator/\n", encoding="utf-8")
+            target = worktree / "contracts" / "example.json"
+            target.write_text("{}", encoding="utf-8")
+            subprocess.run(["git", "-C", str(worktree), "add", ".gitignore", "contracts/example.json"], check=True)
+            subprocess.run(["git", "-C", str(worktree), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "base"], check=True)
+            base = subprocess.check_output(["git", "-C", str(worktree), "rev-parse", "HEAD"], text=True).strip()
+            target.write_text('{"done":true}', encoding="utf-8")
+            fake_agent = root / "fake_agent.py"
+            fake_agent.write_text(
+                "import json, sys\n"
+                "print(json.dumps({'type':'system','session_id':'claude-test-session'}), flush=True)\n"
+                "first = json.loads(sys.stdin.readline())\n"
+                "print(json.dumps({'type':'result','result':'Working','session_id':'claude-test-session'}), flush=True)\n"
+                "second = json.loads(sys.stdin.readline())\n"
+                "assert 'checkpoint report' in second['message']['content']\n"
+                "print(json.dumps({'type':'result','result':'Completed: first file\\nRemaining: second file\\nChecks: none\\nBlockers: none','session_id':'claude-test-session'}), flush=True)\n",
+                encoding="utf-8")
+            run = {"run_id": "run-test", "task_id": "contracts-v1", "module": "contracts",
+                   "provider": "claude", "model": "claude-sonnet-5", "effort": "medium",
+                   "branch": "agent/contracts-v1-run-test", "base": base, "worktree": str(worktree),
+                   "prompt": "Create a contract", "status": "running", "started_at": "now"}
+            with patch.object(orchestrate, "RUNTIME", root / "runtime"), \
+                 patch.object(orchestrate, "agent_command", return_value=[sys.executable, str(fake_agent)]):
+                with orchestrate.state_lock() as state:
+                    state["tasks"]["contracts-v1"] = {"status": "running", "module": "contracts",
+                                                     "run_id": "run-test"}
+                    state["runs"]["run-test"] = run
+                orchestrate.save_checkpoint_request(run, "manual checkpoint")
+                orchestrate.execute("run-test")
+                with orchestrate.state_lock() as state:
+                    self.assertEqual(state["tasks"]["contracts-v1"]["status"], "checkpointed")
+                    self.assertEqual(state["runs"]["run-test"]["agent_session_id"], "claude-test-session")
+                    checkpoint_path = Path(state["runs"]["run-test"]["checkpoint_path"])
+                self.assertIn("Remaining: second file", checkpoint_path.read_text(encoding="utf-8"))
+                self.assertIn("contracts/example.json", checkpoint_path.read_text(encoding="utf-8"))
 
     def test_status_and_log_summary(self):
         state = {"tasks": {"contracts-v1": {"status": "running", "run_id": "run1"}},

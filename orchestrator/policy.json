@@ -1,11 +1,16 @@
 {
-  "version": 3,
+  "version": 4,
   "providers": ["codex", "claude"],
   "allowed_models": {
     "codex": ["gpt-6-luna", "gpt-6-sol"],
     "claude": ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5-5", "claude-fable-5-1"]
   },
   "usage_routing": {"switch_margin_percent": 10, "minimum_remaining_percent": 5},
+  "usage_monitor": {
+    "poll_seconds": 30,
+    "checkpoint_five_hour_remaining_percent": 25,
+    "checkpoint_weekly_remaining_percent": 10
+  },
   "modules": {
     "contracts": {"brief": "docs/agent-tasks/00-contracts.md", "owned_paths": ["contracts/", "docs/adr/"]},
     "backend": {"brief": "docs/agent-tasks/01-backend.md", "owned_paths": ["apps/api/"]},
