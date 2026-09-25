@@ -7,6 +7,7 @@ use App\Contracts\Ai\Data\AiHealthResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
 use App\Contracts\Ai\Exceptions\AiException;
+use App\Contracts\Ai\Exceptions\InvalidAiResponseException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -23,8 +24,8 @@ final class HttpAiClient implements AiClientInterface
         private readonly string $baseUrl,
         private readonly ?string $apiKey,
         private readonly int $timeoutSeconds,
-    ) {
-    }
+        private readonly AiResponseValidator $validator = new AiResponseValidator,
+    ) {}
 
     public function analyzeImage(string $imageContents, string $requestId): ImageAnalysisResult
     {
@@ -34,7 +35,10 @@ final class HttpAiClient implements AiClientInterface
                 'request_id' => $requestId,
             ]));
 
-        return ImageAnalysisResult::fromArray($this->decodeOrFail($response, $requestId));
+        $data = $this->decodeOrFail($response, $requestId);
+        $this->validator->assertValidImageAnalysis($data, $requestId);
+
+        return ImageAnalysisResult::fromArray($data);
     }
 
     public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult
@@ -45,7 +49,10 @@ final class HttpAiClient implements AiClientInterface
                 'texts' => array_values($texts),
             ]));
 
-        return TextEmbeddingsResult::fromArray($this->decodeOrFail($response, $requestId));
+        $data = $this->decodeOrFail($response, $requestId);
+        $this->validator->assertValidTextEmbeddings($data, count($texts), $requestId);
+
+        return TextEmbeddingsResult::fromArray($data);
     }
 
     public function health(): AiHealthResult
@@ -93,14 +100,20 @@ final class HttpAiClient implements AiClientInterface
     }
 
     /**
-     * @return array<string, mixed>
+     * @return mixed Decoded 2xx body; shape is checked by the caller's validator.
      *
-     * @throws AiException
+     * @throws AiException On a non-2xx response.
+     * @throws InvalidAiResponseException On a 2xx body that is not JSON.
      */
-    private function decodeOrFail(Response $response, string $requestId): array
+    private function decodeOrFail(Response $response, string $requestId): mixed
     {
         if ($response->successful()) {
-            return $response->json();
+            $data = json_decode($response->body(), true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new InvalidAiResponseException(['/: body is not valid JSON'], $requestId);
+            }
+
+            return $data;
         }
 
         $body = $response->json();

@@ -7,6 +7,8 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\Image;
+use App\Services\Processing\BatchStatusUpdater;
+use App\Services\Processing\ProcessingPipeline;
 use App\Support\Api;
 use App\Support\Presenters\BatchPresenter;
 use App\Support\Presenters\ImagePresenter;
@@ -21,10 +23,10 @@ use Throwable;
 /**
  * contracts/public-api.openapi.yaml — batches/upload (ТЗ §26, §27, §49; ADR-0005).
  *
- * Upload only saves the original and enqueues nothing yet: the background
- * pipeline (metadata/variants/AI analysis/tag resolution) is a later task
- * (backend-processing), so images are created with status=uploaded and no
- * processing_tasks rows.
+ * Upload only saves the original, creates the image (status=uploaded) and
+ * queues its first processing task in the same transaction; metadata,
+ * variants and AI analysis run in the background (§28, §81) — see
+ * App\Services\Processing\ProcessingPipeline.
  */
 class BatchController extends Controller
 {
@@ -148,28 +150,35 @@ class BatchController extends Controller
             }
         }
 
-        // The INSERT runs in its own transaction (a savepoint when the caller already holds one),
+        // The INSERT (together with the image's first processing task, whose queue message is
+        // only sent after commit) runs in its own transaction (a savepoint when the caller already holds one),
         // so a unique violation is rolled back before the winner is looked up below: under
         // Postgres a transaction that failed one statement refuses every further statement,
         // even a plain SELECT, until it is rolled back. The batch's created->uploading bump stays
         // outside it — the two writes don't need to be atomic (a crash between them self-heals on
         // the next request/complete() call, since the state machine treats both statuses the same).
         try {
-            $image = DB::transaction(fn (): Image => Image::create([
-                'batch_id' => $batchModel->id,
-                'original_name' => $this->sanitizeFilename($file->getClientOriginalName()),
-                'storage_key' => $storageKey,
-                'preview_key' => null,
-                'thumbnail_key' => null,
-                'mime_type' => $detectedMime,
-                'extension' => $extension,
-                'width' => null,
-                'height' => null,
-                'file_size' => $file->getSize(),
-                'sha256' => $sha256,
-                'status' => 'uploaded',
-                'created_by' => $request->user()->id,
-            ]));
+            $image = DB::transaction(function () use ($batchModel, $file, $storageKey, $detectedMime, $extension, $sha256, $request): Image {
+                $image = Image::create([
+                    'batch_id' => $batchModel->id,
+                    'original_name' => $this->sanitizeFilename($file->getClientOriginalName()),
+                    'storage_key' => $storageKey,
+                    'preview_key' => null,
+                    'thumbnail_key' => null,
+                    'mime_type' => $detectedMime,
+                    'extension' => $extension,
+                    'width' => null,
+                    'height' => null,
+                    'file_size' => $file->getSize(),
+                    'sha256' => $sha256,
+                    'status' => 'uploaded',
+                    'created_by' => $request->user()->id,
+                ]);
+
+                app(ProcessingPipeline::class)->start($image);
+
+                return $image;
+            });
         } catch (UniqueConstraintViolationException) {
             // Lost a race: another request inserted the same sha256 between our duplicate
             // check above and this INSERT. The unique index on images.sha256 is the actual
@@ -197,22 +206,9 @@ class BatchController extends Controller
         ]);
     }
 
-    public function complete(Request $request, int $batch): JsonResponse
+    public function complete(Request $request, int $batch, BatchStatusUpdater $batches): JsonResponse
     {
-        $batchModel = $this->findBatch($batch);
-
-        if (in_array($batchModel->status, ['created', 'uploading'], true)) {
-            $progress = BatchPresenter::progress($batchModel);
-
-            if ($progress['processed'] === $progress['total']) {
-                $batchModel->status = $this->finalStatus($progress);
-                $batchModel->completed_at = now();
-            } else {
-                $batchModel->status = 'processing';
-            }
-
-            $batchModel->save();
-        }
+        $batchModel = $batches->complete($this->findBatch($batch)->id);
 
         return response()->json(BatchPresenter::toArray($batchModel));
     }
@@ -226,22 +222,6 @@ class BatchController extends Controller
         }
 
         return $batch;
-    }
-
-    /**
-     * @param  array{total: int, processed: int, failed: int}  $progress
-     */
-    private function finalStatus(array $progress): string
-    {
-        if ($progress['total'] > 0 && $progress['failed'] === $progress['total']) {
-            return 'failed';
-        }
-
-        if ($progress['failed'] > 0) {
-            return 'completed_with_errors';
-        }
-
-        return 'completed';
     }
 
     private function sanitizeFilename(?string $name): string
