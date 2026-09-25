@@ -90,10 +90,14 @@ class SearchIndexesTest extends TestCase
         $this->assertCount(3, $page->imageIds);
         $this->assertNotNull($ranking, 'ranking query was not captured');
 
-        // A tiny table makes a seq scan cheapest; disabling it shows whether the partial index
-        // is applicable at all to the query shape (predicate `active`, ORDER BY distance, LIMIT).
+        // A tiny table makes any other plan cheapest, so rule them out: with seq/bitmap scans and
+        // explicit sorts disabled, the planner must use an index that yields distance order, which
+        // shows the partial HNSW index is applicable to the query shape (predicate `active`, ORDER BY
+        // distance then id via incremental sort, LIMIT).
         $plan = DB::transaction(function () use ($ranking): string {
             DB::statement('SET LOCAL enable_seqscan = off');
+            DB::statement('SET LOCAL enable_bitmapscan = off');
+            DB::statement('SET LOCAL enable_sort = off');
 
             return implode("\n", array_map(
                 static fn (object $row): string => $row->{'QUERY PLAN'},
