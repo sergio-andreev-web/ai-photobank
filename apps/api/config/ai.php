@@ -40,4 +40,24 @@ return [
 
     'embedding_dimensions' => 1152,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Active embedding version (ADR-0009)
+    |--------------------------------------------------------------------------
+    |
+    | Only image_embeddings rows whose model_key/model_version equal these
+    | values are stored with active = true, so a vector search never mixes
+    | model versions (§77). model_key is the AI's `models.embedding` without the
+    | organization prefix; model_version is `models.embedding_revision`.
+    | While the version is unset no embedding is activated: the analysis is
+    | still stored, but the image stays out of semantic search until the
+    | version is configured and the image is reprocessed.
+    |
+    */
+
+    'embedding' => [
+        'active_model_key' => env('EMBEDDING_ACTIVE_MODEL_KEY', 'siglip2-so400m-patch14-384'),
+        'active_model_version' => env('EMBEDDING_ACTIVE_MODEL_VERSION'),
+    ],
+
 ];

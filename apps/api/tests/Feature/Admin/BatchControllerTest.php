@@ -3,10 +3,13 @@
 namespace Tests\Feature\Admin;
 
 use App\Contracts\Storage\PhotoStorageInterface;
+use App\Jobs\RunProcessingTask;
 use App\Models\Batch;
 use App\Models\Image;
+use App\Models\ProcessingTask;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Mockery\MockInterface;
 use Tests\Concerns\InteractsAsAdmin;
@@ -86,6 +89,8 @@ class BatchControllerTest extends TestCase
 
     public function test_upload_image_creates_image_and_transitions_batch_to_uploading(): void
     {
+        // Upload answers after saving the original, without waiting for processing (§81).
+        Queue::fake();
         $user = $this->loginAsAdmin();
         $batch = Batch::create(['status' => 'created', 'created_by' => $user->id]);
 
@@ -112,6 +117,11 @@ class BatchControllerTest extends TestCase
 
         $image = Image::first();
         Storage::disk('photobank')->assertExists($image->storage_key);
+
+        // The first stage is queued with the image, nothing else runs inside the request.
+        $task = ProcessingTask::where('image_id', $image->id)->sole();
+        $this->assertSame(['metadata', 'queued', 0, 3], [$task->type, $task->status, $task->attempts, $task->max_attempts]);
+        Queue::assertPushedOn('images.processing', RunProcessingTask::class, fn (RunProcessingTask $job) => $job->taskId === $task->id);
     }
 
     public function test_upload_image_rejects_duplicate_sha256(): void

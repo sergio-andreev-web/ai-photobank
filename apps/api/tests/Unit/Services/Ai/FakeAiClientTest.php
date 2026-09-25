@@ -2,8 +2,11 @@
 
 namespace Tests\Unit\Services\Ai;
 
+use App\Contracts\Ai\Data\Concept;
+use App\Contracts\Ai\Data\ConceptType;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
+use App\Contracts\Ai\Exceptions\AiException;
 use App\Services\Ai\FakeAiClient;
 use PHPUnit\Framework\TestCase;
 
@@ -60,6 +63,41 @@ class FakeAiClientTest extends TestCase
         // Same text -> same embedding, independent of position or other inputs.
         $again = $client->createTextEmbeddings(['red car'], 'request-2');
         $this->assertSame($result->embeddings[0], $again->embeddings[0]);
+    }
+
+    public function test_scripted_failures_are_consumed_in_order_then_calls_succeed(): void
+    {
+        $client = (new FakeAiClient)->failAnalyzeWith(
+            AiException::unavailable('down'),
+            AiException::fromErrorCode('IMAGE_DECODE_FAILED', 'bad', 422),
+        );
+
+        foreach (['AI_SERVICE_UNAVAILABLE', 'IMAGE_DECODE_FAILED'] as $expected) {
+            try {
+                $client->analyzeImage('bytes', 'r');
+                $this->fail('Expected AiException');
+            } catch (AiException $e) {
+                $this->assertSame($expected, $e->errorCode);
+            }
+        }
+
+        $this->assertSame('r', $client->analyzeImage('bytes', 'r')->requestId);
+        $this->assertSame(3, $client->analyzeCallCount());
+    }
+
+    public function test_concepts_can_be_overridden(): void
+    {
+        $client = (new FakeAiClient)->withConcepts([new Concept(ConceptType::Person, 'engineer', 0.96)]);
+
+        $this->assertSame([['type' => 'person', 'label' => 'engineer', 'confidence' => 0.96]], $client->analyzeImage('b', 'r')->toArray()['concepts']);
+    }
+
+    public function test_text_embedding_failures_can_be_scripted(): void
+    {
+        $client = (new FakeAiClient)->failTextEmbeddingsWith(AiException::unavailable('down'));
+
+        $this->expectException(AiException::class);
+        $client->createTextEmbeddings(['x'], 'r');
     }
 
     public function test_health_reports_ok(): void

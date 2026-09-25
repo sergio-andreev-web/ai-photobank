@@ -73,6 +73,28 @@ return [
             'after_commit' => false,
         ],
 
+        // ТЗ §48: heavy async processing. Jobs choose their logical queue
+        // (images.processing / images.ai / images.reprocess, config/photobank.php),
+        // so a worker must consume all three, e.g.
+        // `queue:work rabbitmq --queue=images.reprocess,images.ai,images.processing`.
+        'rabbitmq' => [
+            'driver' => 'rabbitmq',
+            'queue' => env('RABBITMQ_QUEUE', 'images.processing'),
+            'connection' => 'default',
+            'hosts' => [
+                [
+                    'host' => env('RABBITMQ_HOST', '127.0.0.1'),
+                    'port' => (int) env('RABBITMQ_PORT', 5672),
+                    'user' => env('RABBITMQ_USER', 'guest'),
+                    'password' => env('RABBITMQ_PASSWORD', 'guest'),
+                    'vhost' => env('RABBITMQ_VHOST', '/'),
+                ],
+            ],
+            'options' => [],
+            'worker' => 'default',
+            'after_commit' => true,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

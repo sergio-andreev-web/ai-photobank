@@ -10,46 +10,63 @@ use App\Contracts\Ai\Data\ConceptType;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\OcrItem;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
+use Throwable;
 
 /**
  * Deterministic AiClientInterface implementation for tests and GPU-less local
- * dev (ТЗ §7; AGENT A Definition of Done: "Backend должен полностью работать
+ * dev (ТЗ §7, §72; AGENT A Definition of Done: "Backend должен полностью работать
  * с FakeAiClient без реальной модели"). Bound when config('ai.driver') === 'fake'.
  *
  * Every output is a pure function of its input so assertions can rely on
- * exact values instead of "roughly matches".
+ * exact values instead of "roughly matches". Tests can script failures
+ * (AiException for 5xx/429/4xx/unavailable, InvalidAiResponseException for a
+ * 200 that breaks the schema) and override concepts; scripted failures are
+ * consumed one per call, in order, after which calls succeed again.
  */
 final class FakeAiClient implements AiClientInterface
 {
-    private const string VISION_MODEL = 'fake/qwen3-vl-stub';
+    public const string VISION_MODEL = 'fake/qwen3-vl-stub';
 
-    private const string VISION_REVISION = 'fake-vision-rev-1';
+    public const string VISION_REVISION = 'fake-vision-rev-1';
 
-    private const string EMBEDDING_MODEL = 'fake/siglip2-stub';
+    public const string EMBEDDING_MODEL = 'fake/siglip2-stub';
 
-    private const string EMBEDDING_REVISION = 'fake-embedding-rev-1';
+    public const string EMBEDDING_REVISION = 'fake-embedding-rev-1';
 
-    private const string PROMPT_VERSION = 'fake-analysis-v1';
+    public const string PROMPT_VERSION = 'fake-analysis-v1';
+
+    /** @var list<Throwable> */
+    private array $analyzeFailures = [];
+
+    /** @var list<Throwable> */
+    private array $textEmbeddingFailures = [];
+
+    /** @var list<Concept>|null */
+    private ?array $concepts = null;
+
+    /** @var list<string> Request IDs of every analyzeImage() call, failed ones included. */
+    private array $analyzeRequestIds = [];
 
     public function analyzeImage(string $imageContents, string $requestId): ImageAnalysisResult
     {
+        $this->analyzeRequestIds[] = $requestId;
+
+        if ($this->analyzeFailures !== []) {
+            throw array_shift($this->analyzeFailures);
+        }
+
         return new ImageAnalysisResult(
             requestId: $requestId,
             caption: 'Fake caption for deterministic test fixture.',
             ocr: [
                 new OcrItem(text: 'FAKE OCR TEXT', confidence: 0.9),
             ],
-            concepts: [
+            concepts: $this->concepts ?? [
                 new Concept(type: ConceptType::Object, label: 'fake object', confidence: 0.95),
                 new Concept(type: ConceptType::Scene, label: 'fake scene', confidence: 0.85),
             ],
             embedding: $this->deterministicEmbedding('image:'.hash('sha256', $imageContents)),
-            models: new AiModels(
-                vision: self::VISION_MODEL,
-                embedding: self::EMBEDDING_MODEL,
-                visionRevision: self::VISION_REVISION,
-                embeddingRevision: self::EMBEDDING_REVISION,
-            ),
+            models: $this->models(),
             promptVersion: self::PROMPT_VERSION,
             processingMs: 1,
         );
@@ -57,6 +74,10 @@ final class FakeAiClient implements AiClientInterface
 
     public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult
     {
+        if ($this->textEmbeddingFailures !== []) {
+            throw array_shift($this->textEmbeddingFailures);
+        }
+
         return new TextEmbeddingsResult(
             model: self::EMBEDDING_MODEL,
             revision: self::EMBEDDING_REVISION,
@@ -72,12 +93,60 @@ final class FakeAiClient implements AiClientInterface
         return new AiHealthResult(
             status: 'ok',
             device: 'cpu',
-            models: new AiModels(
-                vision: self::VISION_MODEL,
-                embedding: self::EMBEDDING_MODEL,
-                visionRevision: self::VISION_REVISION,
-                embeddingRevision: self::EMBEDDING_REVISION,
-            ),
+            models: $this->models(),
+        );
+    }
+
+    /**
+     * The next count($errors) analyzeImage() calls throw these, in order.
+     */
+    public function failAnalyzeWith(Throwable ...$errors): self
+    {
+        array_push($this->analyzeFailures, ...$errors);
+
+        return $this;
+    }
+
+    /**
+     * The next count($errors) createTextEmbeddings() calls throw these, in order.
+     */
+    public function failTextEmbeddingsWith(Throwable ...$errors): self
+    {
+        array_push($this->textEmbeddingFailures, ...$errors);
+
+        return $this;
+    }
+
+    /**
+     * @param  list<Concept>  $concepts  Returned by every later successful analyzeImage().
+     */
+    public function withConcepts(array $concepts): self
+    {
+        $this->concepts = $concepts;
+
+        return $this;
+    }
+
+    public function analyzeCallCount(): int
+    {
+        return count($this->analyzeRequestIds);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function analyzeRequestIds(): array
+    {
+        return $this->analyzeRequestIds;
+    }
+
+    private function models(): AiModels
+    {
+        return new AiModels(
+            vision: self::VISION_MODEL,
+            embedding: self::EMBEDDING_MODEL,
+            visionRevision: self::VISION_REVISION,
+            embeddingRevision: self::EMBEDDING_REVISION,
         );
     }
 

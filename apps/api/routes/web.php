@@ -43,6 +43,8 @@ Route::prefix('api')->group(function () {
             Route::get('/images/{image}', [ImageController::class, 'show'])->whereNumber('image');
             Route::patch('/images/{image}', [ImageController::class, 'update'])->whereNumber('image');
             Route::delete('/images/{image}', [ImageController::class, 'destroy'])->whereNumber('image');
+            Route::post('/images/{image}/reprocess', [ImageController::class, 'reprocess'])->whereNumber('image');
+            Route::post('/images/{image}/retry', [ImageController::class, 'retry'])->whereNumber('image');
         });
 
         Route::get('/media/images/{image}/{variant}', [MediaController::class, 'show'])

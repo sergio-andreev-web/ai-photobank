@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Image;
+use App\Services\Processing\BatchStatusUpdater;
+use App\Services\Processing\ProcessingPipeline;
 use App\Support\Api;
 use App\Support\Presenters\ImagePresenter;
 use Illuminate\Http\JsonResponse;
@@ -14,11 +16,9 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * contracts/public-api.openapi.yaml — images CRUD (ТЗ §50, §53, §54; ADR-0002, ADR-0006).
- *
- * `reprocess`/`retry` are intentionally not implemented here: they enqueue
- * background processing, which is the backend-processing task's scope per
- * orchestrator/tasks.json (this task only covers auth/batches/upload/media/CRUD).
+ * contracts/public-api.openapi.yaml — images CRUD (ТЗ §50, §53, §54; ADR-0002, ADR-0006)
+ * and the processing actions reprocess (§76) / retry (§47, ADR-0003), whose state
+ * transitions live in App\Services\Processing\ProcessingPipeline.
  */
 class ImageController extends Controller
 {
@@ -102,12 +102,29 @@ class ImageController extends Controller
         ])));
     }
 
-    public function destroy(Request $request, int $image): Response
+    public function destroy(Request $request, int $image, BatchStatusUpdater $batches): Response
     {
         $imageModel = $this->findImage($image);
         $imageModel->delete();
 
+        // Deleted images leave the batch counters (state-machines.md), which may finish the batch.
+        $batches->refresh($imageModel->batch_id);
+
         return response()->noContent();
+    }
+
+    public function reprocess(Request $request, int $image, ProcessingPipeline $pipeline): JsonResponse
+    {
+        $pipeline->reprocess($this->findImage($image)->id);
+
+        return response()->json(ImagePresenter::detail($this->findImage($image)), 202);
+    }
+
+    public function retry(Request $request, int $image, ProcessingPipeline $pipeline): JsonResponse
+    {
+        $pipeline->retry($this->findImage($image)->id);
+
+        return response()->json(ImagePresenter::detail($this->findImage($image)), 202);
     }
 
     private function findImage(int $id): Image

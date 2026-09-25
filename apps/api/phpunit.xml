@@ -35,6 +35,9 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <!-- No GPU/AI service in CI: FakeAiClient is deterministic (ТЗ §7, AGENT A DoD). -->
         <env name="AI_DRIVER" value="fake"/>
+        <!-- FakeAiClient::EMBEDDING_MODEL / EMBEDDING_REVISION, so fake embeddings become active (ADR-0009). -->
+        <env name="EMBEDDING_ACTIVE_MODEL_KEY" value="siglip2-stub"/>
+        <env name="EMBEDDING_ACTIVE_MODEL_VERSION" value="fake-embedding-rev-1"/>
         <env name="FILESYSTEM_DISK" value="local"/>
     </php>
 </phpunit>
