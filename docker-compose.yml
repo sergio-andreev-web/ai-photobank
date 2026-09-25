@@ -70,6 +70,12 @@ services:
       # queue connection is fixed here, not left to the app's own .env
       # default (config/queue.php 'database') — see apps/api/config/queue.php.
       QUEUE_CONNECTION: rabbitmq
+      # Cache (queue restart signal, login throttle) and sessions live in the stack's Redis
+      # through predis (composer.json): the image has no phpredis extension, and the
+      # database drivers would need migrations before the worker can even start.
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      REDIS_CLIENT: predis
       APP_KEY: "${APP_KEY}"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: "${RABBITMQ_USER}"
@@ -122,6 +128,9 @@ services:
       DB_PASSWORD: "${DB_PASSWORD}"
       REDIS_HOST: redis
       QUEUE_CONNECTION: rabbitmq
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      REDIS_CLIENT: predis
       APP_KEY: "${APP_KEY}"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: "${RABBITMQ_USER}"
