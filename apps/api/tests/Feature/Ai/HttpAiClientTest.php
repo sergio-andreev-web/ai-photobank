@@ -88,6 +88,32 @@ class HttpAiClientTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{0: array<string, string>, 1: int|null}>
+     */
+    public static function retryAfterHeaders(): iterable
+    {
+        yield 'seconds' => [['Retry-After' => '30'], 30];
+        yield 'absent' => [[], null];
+        yield 'http date is not guessed' => [['Retry-After' => 'Wed, 21 Oct 2026 07:28:00 GMT'], null];
+        yield 'garbage' => [['Retry-After' => '-5'], null];
+    }
+
+    #[DataProvider('retryAfterHeaders')]
+    public function test_retry_after_seconds_are_carried_on_the_exception(array $headers, ?int $expected): void
+    {
+        Http::fake(['ai.test/*' => Http::response([
+            'error' => ['code' => 'MODEL_NOT_READY', 'message' => 'x', 'details' => [], 'request_id' => 'req-1'],
+        ], 503, $headers)]);
+
+        try {
+            $this->client()->createTextEmbeddings(['каска'], 'req-1');
+            $this->fail('Expected AiException');
+        } catch (AiException $e) {
+            $this->assertSame($expected, $e->retryAfter);
+        }
+    }
+
     public function test_timeout_or_connection_failure_is_retryable_unavailable(): void
     {
         Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));

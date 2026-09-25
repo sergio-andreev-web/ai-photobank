@@ -32,6 +32,9 @@ final class ScriptedEmbeddingsAiClient implements AiClientInterface
     /** @var list<list<string>> Texts of every createTextEmbeddings() call. */
     public array $textCalls = [];
 
+    /** @var list<string> Request IDs of every createTextEmbeddings() call, failed ones included. */
+    public array $requestIds = [];
+
     /** @var list<Throwable> */
     private array $failures = [];
 
@@ -81,6 +84,7 @@ final class ScriptedEmbeddingsAiClient implements AiClientInterface
     public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult
     {
         $this->textCalls[] = $texts;
+        $this->requestIds[] = $requestId;
 
         if ($this->failures !== []) {
             throw array_shift($this->failures);
