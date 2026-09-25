@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.1.0` |
+| Версия | `1.2.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -92,6 +92,7 @@ Inline-примеры в OpenAPI покрывают критические оп�
 Коды ошибок обработки изображения (`images.error_code`, `processing_tasks.error_code`, отдаются в `ImageDetail`),
 все решение ADR: `METADATA_EXTRACTION_FAILED`, `VARIANT_GENERATION_FAILED`, `AI_SERVICE_UNAVAILABLE`,
 `AI_REQUEST_REJECTED` (AI вернул не повторяемую 4xx), `AI_RESPONSE_INVALID` (ответ не прошел `image-analysis.json`),
+`AI_OUTPUT_INVALID` (AI после всех повторов отвечал 502 `MODEL_OUTPUT_INVALID`),
 `TAG_RESOLUTION_FAILED`, `INTERNAL_ERROR`.
 
 Коды AI service и их повторяемость — `schemas/ai-error.json` (`x-known-codes`).
@@ -115,6 +116,7 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    недостающий контракт собственным временным API (см. `.agents`).
 4. Базовая версия MVP — `1.0.0`; последующие изменения проходят через ADR и правила выше.
    `1.1.0` — общие коды `NOT_FOUND` и `METHOD_NOT_ALLOWED` (ADR-0002).
+   `1.2.0` — код ошибки обработки `AI_OUTPUT_INVALID` (ADR-0010).
 
 ## Проверка
 
