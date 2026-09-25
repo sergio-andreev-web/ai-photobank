@@ -1,0 +1,32 @@
+{
+  "name": "@ai-photobank/admin",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "lint": "eslint . --fix",
+    "test": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^1.0.2",
+    "@nuxt/ui": "^3.0.0",
+    "axios": "^1.7.0",
+    "nuxt": "^4.0.0",
+    "pinia": "^4.0.3",
+    "ts-pattern": "^5.1.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "@nuxt/eslint-config": "^0.5.0",
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
