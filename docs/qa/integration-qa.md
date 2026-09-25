@@ -40,3 +40,14 @@ After the infrastructure owner fixes the defaults, run `make setup` from a clean
 | `integration-qa` execution environment | Docker daemon socket access is denied; `apps/admin/node_modules/` is absent in the worktree. | Re-run the deployed/browser checks in an environment with Docker and frontend dependencies. The isolated PHP suite runs, with the backend failure above. |
 
 No API contract inconsistency was found in the acceptance paths inspected. Contract-owned files remain unchanged.
+
+## Resolution (2026-09-25)
+
+| Finding | Fix |
+| --- | --- |
+| Nuxt tag page `per_page=1000` | #35 — the catalog is loaded page by page with `per_page=500`. |
+| Stale `latest_analysis` after reprocess | #34 — latest analysis is chosen by `created_at desc, id desc`. |
+| `make setup` without AI | #37 — `make setup` and `make up` start the `ai` profile (CPU/mock AI behind `AI_BASE_URL`). |
+| Active embedding key vs. mock AI | #32 — `.env.example` defaults to `mock-embedding` / `mock-embedding-v1`; real-model values are documented next to them. |
+
+Re-run on `main` with these fixes: the contract guard passes 6 of 6, and `MvpAcceptanceTest.php` passes 2 tests, 204 assertions on both SQLite and PostgreSQL 17 + pgvector 0.8.0. The browser-driven Nuxt ↔ Laravel ↔ HTTP mock AI run on a deployed Compose stack is still open.
