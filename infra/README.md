@@ -210,7 +210,7 @@ Service endpoints:
 
 | Service | Image | Purpose |
 | --- | --- | --- |
-| `postgres` | `pgvector/pgvector:pg17` | Database with vector support |
+| `postgres` | `pgvector/pgvector:0.8.0-pg17` | Database with vector support |
 | `redis` | `redis:7-alpine` | Cache & sessions |
 | `rabbitmq` | `rabbitmq:3.13-management` | Message queue |
 
