@@ -160,6 +160,8 @@ class DomainSchemaTest extends TestCase
             'image_id' => $image->id,
             'model_key' => 'siglip2-so400m-patch14-384',
             'model_version' => 'testrev1',
+            // vector(1152) NOT NULL on Postgres; opaque nullable text on sqlite.
+            'embedding' => '['.implode(',', array_fill(0, 1152, 0.1)).']',
             'active' => true,
         ]);
 
