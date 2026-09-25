@@ -14,6 +14,8 @@ use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -90,11 +92,20 @@ return Application::configure(basePath: dirname(__DIR__))
                     );
                 }
 
-                // contracts/README.md's error catalog has no generic code for other
-                // framework-level HTTP errors (unmatched route, wrong verb, ...), and these
-                // never occur through routes/web.php's own contract-defined operations.
-                // Do not fabricate a code — defer to Laravel's default rendering and raise
-                // the gap with the contracts owner instead (see task report).
+                // Requests outside the described operations (ADR-0002, contracts 1.1.0): an
+                // unknown path is NOT_FOUND, a known path with an unsupported verb is
+                // METHOD_NOT_ALLOWED with Symfony's Allow header. A missing resource on an
+                // existing route keeps its own code — controllers throw ApiException for that.
+                if ($e instanceof MethodNotAllowedHttpException) {
+                    return ErrorResponse::make($request, 'METHOD_NOT_ALLOWED', 'Method not allowed', [], 405, $e->getHeaders());
+                }
+
+                if ($e instanceof NotFoundHttpException) {
+                    return ErrorResponse::make($request, 'NOT_FOUND', 'Not found', [], 404);
+                }
+
+                // The catalog has no code for the remaining framework-level HTTP errors; defer to
+                // Laravel's default rendering rather than fabricate one.
                 return null;
             }
 
