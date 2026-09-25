@@ -47,7 +47,9 @@ make migrate         # Run migrations
 make seed            # Seed database
 make test            # Run all tests
 make ai-mac          # Run AI natively on Mac with MPS
+make ai-mac-cpu      # Same, but CPU fallback (dev/smoke only)
 make ai-test         # Run AI with CPU for testing
+make ai-health       # Check AI /health and /ready (AI_URL=... for RunPod)
 ```
 
 ## Development Modes
@@ -64,24 +66,51 @@ The CPU AI service is optional (`docker compose --profile ai up -d`).
 
 ### macOS with MPS
 
-For local Mac development with GPU acceleration:
+For local Mac development with GPU acceleration (§8, §58). The rest of the
+stack (Postgres, Redis, RabbitMQ, Laravel, Nuxt, Nginx) still runs in Docker;
+only the AI service runs natively so it can use Apple's MPS backend, which
+isn't available inside Docker Desktop's Linux VM:
 
 ```bash
 # Start services (without AI)
 docker-compose -f docker-compose.yml -f docker-compose.mac.yml up -d
 
-# In another terminal, run AI natively
+# In another terminal: install real-model deps once, then run AI natively
+cd services/ai && pip install -r requirements.txt -r requirements-model.txt && cd ../..
 make ai-mac
 ```
 
-API will connect to AI at `http://host.docker.internal:8001`.
+API will connect to AI at `http://host.docker.internal:8001`. `make ai-mac`
+sets `DEVICE=mps`, `AI_MODEL_PROVIDER=transformers`, `AI_CONCURRENCY=1`
+(§58) and sources the project-root `.env` for the rest (`VISION_MODEL`,
+`EMBEDDING_MODEL`, `AI_SERVICE_API_KEY`, ...), so the key matches what
+`api`/`api-worker` send. If MPS isn't available, `make ai-mac-cpu` runs the
+same profile on CPU — development/smoke only (§58), not representative of
+real latency or (for `float16`) numeric behavior.
+
+**Model cache**: since this process runs on the host, not in a container, its
+HuggingFace cache is a host directory — `AI_MAC_HF_HOME` in `.env` (default
+`~/.cache/photobank-ai/huggingface` if unset), *not* the container-only
+`HF_HOME=/models` used by the `ai-cpu` Docker profile. `make ai-mac` creates
+the directory and passes it as `HF_HOME` to the native process, so weights
+persist across restarts (§68) instead of re-downloading every time.
+
+**Deployment check**: `make ai-health` (defaults to `http://localhost:8001`)
+checks `GET /health` then `GET /ready` (with the `Authorization: Bearer`
+header if `AI_SERVICE_API_KEY` is set) — see `make ai-health` under
+"AI Development" in `make help`.
 
 ### Cloud deployment
 
 This base Compose file (`docker-compose.yml`) is for development and contract
 testing — do not expose it directly to the Internet. `docker-compose.prod.yml`
-is the public cloud production overlay described below. Mac MPS and RunPod
-CUDA AI hosting are handled by the separate `infrastructure-runpod` task.
+is the public cloud production overlay described below, for the Laravel/Nuxt
+side. AI hosting for that profile is a separate RunPod GPU Pod, not part of
+any Compose file here — see `infra/runpod/README.md` for the full build →
+push → create Pod → mount model cache → configure env/API key →
+`AI_BASE_URL` walkthrough (§67), and `infra/runpod/.env.example` for the
+Pod's environment variables. Only `AI_BASE_URL` and `AI_SERVICE_API_KEY`
+change between the Mac and RunPod profiles — no Laravel code changes (§7).
 
 ## Public cloud production profile
 
@@ -244,7 +273,12 @@ DNS resolution:
 | `redis_data` | Redis persistence |
 | `rabbitmq_data` | RabbitMQ state |
 | `photobank_storage` | Image files, cache |
-| `ai_models_cache` | AI model weights (HuggingFace) |
+| `ai_models_cache` | AI model weights (HuggingFace), `ai-cpu` Docker profile only |
+
+Not a Docker volume, but the same role: `make ai-mac`/`make ai-mac-cpu` cache
+weights under the host path `AI_MAC_HF_HOME` (§68) — see "macOS with MPS"
+above. On RunPod it's a Network Volume mounted at `/models` — see
+`infra/runpod/README.md`.
 
 ### File Structure
 
@@ -365,15 +399,20 @@ make setup
 ### AI Service Not Responding
 
 ```bash
-# Check if container is running
+# Check if container is running (ai-cpu profile only — not the Mac native process)
 docker-compose ps ai-cpu
 
 # View AI logs
 make logs-ai
 
-# Test AI health
-curl http://localhost:8001/health
+# Test AI liveness + readiness (works for ai-cpu, native Mac, or RunPod via AI_URL=)
+make ai-health
 ```
+
+For `make ai-mac` / `make ai-mac-cpu` there is no container to check — look at
+the terminal running the command for uvicorn/model-loading errors. A `503`
+from `/ready` right after startup is expected while weights load (§61); see
+`infra/runpod/README.md` "Deployment checks" for the RunPod equivalent.
 
 ## Reset and Clean Up
 

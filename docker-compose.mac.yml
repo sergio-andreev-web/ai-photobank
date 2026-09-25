@@ -1,5 +1,14 @@
-# Override compose for macOS development with native AI service
+# Override compose for macOS development with native AI service (§8, §58).
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.mac.yml up
+#
+# Run the AI service itself with `make ai-mac` (MPS) or `make ai-mac-cpu`
+# (CPU fallback, dev/smoke only) — not part of this Compose file, since it
+# runs natively on the host for GPU access, not in a container. See
+# infra/README.md "macOS with MPS" and services/ai/README.md.
+#
+# AI_SERVICE_API_KEY is not overridden here: `api`/`api-worker` already read
+# it from the project-root .env in the base file, and `make ai-mac` sources
+# the same .env for the native process, so both sides stay in sync (§63).
 
 services:
   api:

@@ -188,6 +188,7 @@ services:
       EMBEDDING_MODEL: "${EMBEDDING_MODEL}"
       HF_HOME: /models
       PROMPT_VERSION: "${PROMPT_VERSION}"
+      AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
     ports:
       - "8001:8000"
     volumes:
