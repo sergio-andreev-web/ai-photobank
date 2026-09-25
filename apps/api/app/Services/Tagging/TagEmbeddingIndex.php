@@ -3,6 +3,7 @@
 namespace App\Services\Tagging;
 
 use App\Services\Processing\EmbeddingVersion;
+use App\Support\Vectors;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -132,38 +133,17 @@ final class TagEmbeddingIndex
 
         $scored = [];
         foreach ($query->get() as $row) {
-            $stored = json_decode((string) $row->embedding, true);
-            if (! is_array($stored) || count($stored) !== count($vector)) {
+            $stored = Vectors::decode($row->embedding);
+            if ($stored === null || count($stored) !== count($vector)) {
                 continue;
             }
 
-            $scored[] = ['tag_id' => (int) $row->tag_id, 'similarity' => self::cosine($vector, $stored)];
+            $scored[] = ['tag_id' => (int) $row->tag_id, 'similarity' => Vectors::cosine($vector, $stored)];
         }
 
         usort($scored, static fn (array $a, array $b): int => [$b['similarity'], $a['tag_id']] <=> [$a['similarity'], $b['tag_id']]);
 
         return $scored;
-    }
-
-    /**
-     * @param  list<float>  $a
-     * @param  list<float|int>  $b
-     */
-    private static function cosine(array $a, array $b): float
-    {
-        $dot = $normA = $normB = 0.0;
-        foreach ($a as $i => $value) {
-            $other = (float) $b[$i];
-            $dot += $value * $other;
-            $normA += $value * $value;
-            $normB += $other * $other;
-        }
-
-        if ($normA === 0.0 || $normB === 0.0) {
-            return 0.0;
-        }
-
-        return $dot / (sqrt($normA) * sqrt($normB));
     }
 
     private function isPgsql(): bool

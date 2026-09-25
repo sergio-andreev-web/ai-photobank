@@ -35,6 +35,8 @@ class AiException extends RuntimeException
 
     /**
      * @param  array<string, mixed>  $details
+     * @param  int|null  $retryAfter  Seconds from the AI's Retry-After header (429 SERVICE_BUSY,
+     *                                503 MODEL_NOT_READY), when it sent one.
      */
     public function __construct(
         public readonly string $errorCode,
@@ -43,6 +45,7 @@ class AiException extends RuntimeException
         public readonly array $details = [],
         public readonly ?string $requestId = null,
         public readonly bool $retryable = false,
+        public readonly ?int $retryAfter = null,
     ) {
         parent::__construct($message);
     }
@@ -56,6 +59,7 @@ class AiException extends RuntimeException
         int $httpStatus,
         array $details = [],
         ?string $requestId = null,
+        ?int $retryAfter = null,
     ): self {
         return new self(
             errorCode: $code,
@@ -64,6 +68,7 @@ class AiException extends RuntimeException
             details: $details,
             requestId: $requestId,
             retryable: self::RETRYABLE_CODES[$code] ?? ($httpStatus >= 500 || $httpStatus === 429),
+            retryAfter: $retryAfter,
         );
     }
 

@@ -13,12 +13,14 @@ class ApiException extends RuntimeException
 {
     /**
      * @param  array<string, mixed>  $details
+     * @param  array<string, string>  $headers  Extra response headers, e.g. Retry-After on a 503.
      */
     public function __construct(
         public readonly string $errorCode,
         public readonly int $status,
         string $message,
         public readonly array $details = [],
+        public readonly array $headers = [],
     ) {
         parent::__construct($message);
     }

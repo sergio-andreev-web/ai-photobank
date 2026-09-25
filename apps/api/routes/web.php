@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\BatchController;
 use App\Http\Controllers\Admin\ImageController;
 use App\Http\Controllers\Admin\ImageTagController;
+use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\TagCandidateController;
 use App\Http\Controllers\Admin\TagController;
 use App\Http\Controllers\Auth\AuthController;
@@ -70,6 +71,8 @@ Route::prefix('api')->group(function () {
             Route::post('/tag-candidates/{candidate}/reject', [TagCandidateController::class, 'reject'])
                 ->whereNumber('candidate');
         });
+
+        Route::post('/search', SearchController::class);
 
         Route::get('/media/images/{image}/{variant}', [MediaController::class, 'show'])
             ->whereNumber('image')

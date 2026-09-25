@@ -125,6 +125,18 @@ final class HttpAiClient implements AiClientInterface
             httpStatus: $response->status(),
             details: is_array($error) ? ($error['details'] ?? []) : [],
             requestId: is_array($error) ? ($error['request_id'] ?? $requestId) : $requestId,
+            retryAfter: self::retryAfterSeconds($response),
         );
+    }
+
+    /**
+     * Retry-After is an integer number of seconds in the AI contract; an
+     * HTTP-date or garbage value is ignored rather than guessed.
+     */
+    private static function retryAfterSeconds(Response $response): ?int
+    {
+        $value = trim($response->header('Retry-After'));
+
+        return ctype_digit($value) ? (int) $value : null;
     }
 }

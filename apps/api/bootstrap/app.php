@@ -44,7 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $isApiRequest = fn (Request $request): bool => $request->is('api/*') || $request->is('sanctum/*');
 
         $exceptions->render(function (ApiException $e, Request $request) {
-            return ErrorResponse::make($request, $e->errorCode, $e->getMessage(), $e->details, $e->status);
+            return ErrorResponse::make($request, $e->errorCode, $e->getMessage(), $e->details, $e->status, $e->headers);
         });
 
         $exceptions->render(function (AuthenticationException $e, Request $request) {
