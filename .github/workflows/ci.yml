@@ -79,12 +79,13 @@ jobs:
           docker run --rm -i hadolint/hadolint < services/ai/Dockerfile || true
         continue-on-error: true
 
-      - name: Validate YAML
+      # Overlays are only valid on top of the base file, so validate the same
+      # combinations the Makefile and docs use.
+      - name: Validate Compose configuration
         run: |
-          for file in docker-compose*.yml; do
-            docker-compose -f "$file" config > /dev/null || exit 1
-          done
-        continue-on-error: true
+          docker compose --env-file .env.example -f docker-compose.yml config -q
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.mac.yml config -q
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config -q
 
   backend-tests-sqlite:
     name: Backend Tests (SQLite)
@@ -245,11 +246,10 @@ jobs:
         working-directory: apps/admin
         run: npx playwright test --project=chromium
 
-  # Full docker-compose stack smoke test. Kept informational/non-blocking:
-  # apps/api/Dockerfile and apps/admin/Dockerfile do not exist in this repo
-  # yet, so `docker-compose build` cannot succeed today. Module test jobs
-  # above (backend-tests-*, ai-tests, admin-tests) are the enforced gate;
-  # this job reports status but never fails the workflow.
+  # Full Compose stack smoke test, informational/non-blocking: the module test
+  # jobs above are the enforced gate. Its steps are skipped until both
+  # apps/api/Dockerfile and apps/admin/Dockerfile exist, so the job stays green
+  # instead of reporting a red check on every run.
   integration:
     name: Integration Smoke (informational)
     runs-on: ubuntu-latest
@@ -259,19 +259,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check service Dockerfiles
+        id: dockerfiles
+        run: |
+          if [ -f apps/api/Dockerfile ] && [ -f apps/admin/Dockerfile ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/api/Dockerfile or apps/admin/Dockerfile is missing; skipping the stack smoke test"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.dockerfiles.outputs.present == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build images
-        run: docker-compose build --no-cache
+        if: steps.dockerfiles.outputs.present == 'true'
+        run: docker compose build --no-cache
 
       - name: Start services
+        if: steps.dockerfiles.outputs.present == 'true'
         run: |
           cp .env.example .env
-          docker-compose up -d
+          docker compose up -d
           sleep 10
 
       - name: Check service health
+        if: steps.dockerfiles.outputs.present == 'true'
         run: |
           max_attempts=30
           attempt=0
@@ -285,13 +299,14 @@ jobs:
           done
           if [ $attempt -eq $max_attempts ]; then
             echo "✗ API health check failed"
-            docker-compose logs
+            docker compose logs
             exit 1
           fi
 
       - name: Check database connectivity
-        run: docker-compose exec -T postgres pg_isready -U photobank
+        if: steps.dockerfiles.outputs.present == 'true'
+        run: docker compose exec -T postgres pg_isready -U photobank
 
       - name: View logs
-        if: failure()
-        run: docker-compose logs
+        if: failure() && steps.dockerfiles.outputs.present == 'true'
+        run: docker compose logs
