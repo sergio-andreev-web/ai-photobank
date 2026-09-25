@@ -135,6 +135,17 @@
       "instructions": "Подключи реальные модели за готовыми интерфейсами, MPS/CUDA профили, кеш весов и model tests. Контролируй память, таймауты и ошибки. Не меняй application-level ответ без изменения контракта."
     },
     {
+      "id": "ai-production-key",
+      "title": "Запрет пустого ключа AI service в production",
+      "module": "ai",
+      "kind": "standard",
+      "depends_on": [
+        "ai-models"
+      ],
+      "preferred_provider": "claude",
+      "instructions": "ADR-0010 требует ошибку конфигурации при старте AI service в production, если AI_SERVICE_API_KEY пустой. Сейчас security.py при пустом ключе отключает проверку для любого окружения. Исправь только services/ai/**: сохрани возможность пустого ключа в development, запрети её на startup при AI_ENVIRONMENT=production, добавь детерминированные тесты обоих режимов. Сверь поведение /health и /ready с контрактом. Не меняй contracts/** или infra/**."
+    },
+    {
       "id": "infrastructure-base",
       "title": "Базовый Compose, env и Makefile",
       "module": "infra",
