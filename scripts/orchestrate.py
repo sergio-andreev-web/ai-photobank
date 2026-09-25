@@ -430,10 +430,12 @@ def agent_command(run: dict[str, Any], summary: Path) -> list[str]:
             command += [run["resume_session_id"]]
         return command + ["-"]
     if provider == "claude":
+        sandbox_settings = {"sandbox": {"enabled": True, "allowUnsandboxedCommands": False,
+                                        "failIfUnavailable": True}}
         command = ["claude", "--print", "--model", model, "--output-format", "stream-json",
                    "--input-format", "stream-json", "--replay-user-messages", "--verbose",
                    "--permission-mode", "acceptEdits",
-                   "--permission-prompts", "none"]
+                   "--permission-prompts", "none", "--settings", json.dumps(sandbox_settings)]
         if run.get("resume_session_id"):
             command += ["--resume", run["resume_session_id"]]
         if effort:
@@ -624,7 +626,9 @@ def execute(run_id: str) -> None:
                     sent_signal = True
             if run["provider"] == "claude" and not process.stdin.closed:
                 expected_results = 2 if checkpoint_requested and sent_signal else 1
-                if observed["result_count"] >= expected_results:
+                complete_checkpoint = (checkpoint_requested and observed["result_count"] > 0 and
+                                       _checkpoint_report_complete(observed["last_result"]))
+                if complete_checkpoint or observed["result_count"] >= expected_results:
                     process.stdin.close()
             time.sleep(0.25)
         if not checkpoint_requested:
@@ -753,7 +757,7 @@ def request_checkpoint(task_id: str) -> dict[str, str]:
 
 
 def resume(task_id: str, provider: str | None, model: str | None = None,
-           skip_usage_check: bool = False) -> dict[str, Any]:
+           skip_usage_check: bool = False, fresh_session: bool = False) -> dict[str, Any]:
     policy, tasks = load_config()
     if task_id not in tasks:
         raise OrchestratorError(f"Unknown task {task_id}")
@@ -785,7 +789,7 @@ def resume(task_id: str, provider: str | None, model: str | None = None,
                                          "previous run failed or checkpoint artifact missing", None,
                                          previous.get("failure"))
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-        native_session = (previous.get("agent_session_id") if
+        native_session = (previous.get("agent_session_id") if not fresh_session and
                           selected["provider"] == previous["provider"] else None)
         prompt = build_resume_prompt(task, policy, artifact.read_text(encoding="utf-8"))
         run = {"run_id": run_id, "task_id": task_id, "module": task["module"],
@@ -869,6 +873,17 @@ def summarize_event(line: str) -> str:
     except json.JSONDecodeError:
         return line.rstrip()
     kind = event.get("type", "event")
+    if kind == "system":
+        subtype = event.get("subtype", "")
+        if subtype in {"thinking_tokens", "hook_progress"}:
+            return ""
+        message = event.get("message") or event.get("error") or ""
+        return f"system {subtype}: {str(message)[:1000]}" if message else f"system {subtype}"
+    if kind == "user":
+        blocks = (event.get("message") or {}).get("content") or []
+        results = [str(block.get("content", ""))[:1000] for block in blocks
+                   if isinstance(block, dict) and block.get("type") == "tool_result"]
+        return "tool result: " + " | ".join(results) if results else ""
     item = event.get("item") or {}
     if item.get("type") == "agent_message":
         return str(item.get("text", ""))[:1000]
@@ -905,14 +920,21 @@ def show_logs(identifier: str, tasks: dict[str, dict[str, Any]], follow: bool, r
                 raise OrchestratorError(f"Log was not created: {log_path}")
         time.sleep(0.3)
     with log_path.open(encoding="utf-8", errors="replace") as stream:
-        for line in deque(stream, maxlen=lines):
-            print(line.rstrip() if raw else summarize_event(line), flush=True)
+        recent: deque[str] = deque(maxlen=lines)
+        for line in stream:
+            display = line.rstrip() if raw else summarize_event(line)
+            if display:
+                recent.append(display)
+        for display in recent:
+            print(display, flush=True)
         if not follow:
             return
         while True:
             line = stream.readline()
             if line:
-                print(line.rstrip() if raw else summarize_event(line), flush=True)
+                display = line.rstrip() if raw else summarize_event(line)
+                if display:
+                    print(display, flush=True)
                 continue
             with state_lock() as state:
                 if state["runs"][run_id]["status"] not in {"running", "checkpointing"}:
@@ -941,6 +963,8 @@ def main() -> int:
     continued.add_argument("--provider", choices=["codex", "claude", "ollama"])
     continued.add_argument("--model", help="Explicit model from policy.json allowed_models")
     continued.add_argument("--skip-usage-check", action="store_true", help="Use only with explicit provider/model")
+    continued.add_argument("--fresh-session", action="store_true",
+                           help="Use checkpoint files without reusing the provider's native session")
     checkpoint = commands.add_parser("checkpoint", help="Ask a running task to stop safely and save progress")
     checkpoint.add_argument("task_id")
     commands.add_parser("usage", help="Read current subscription usage from both CLIs")
@@ -970,7 +994,8 @@ def main() -> int:
             print(json.dumps(dispatch(args.task_id, args.provider, args.model, args.skip_usage_check),
                              ensure_ascii=False, indent=2))
         elif args.command == "resume":
-            print(json.dumps(resume(args.task_id, args.provider, args.model, args.skip_usage_check),
+            print(json.dumps(resume(args.task_id, args.provider, args.model,
+                                    args.skip_usage_check, args.fresh_session),
                              ensure_ascii=False, indent=2))
         elif args.command == "checkpoint":
             print(json.dumps(request_checkpoint(args.task_id), ensure_ascii=False, indent=2))

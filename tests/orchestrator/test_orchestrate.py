@@ -235,8 +235,9 @@ class OrchestratorTests(unittest.TestCase):
                 artifact.unlink()
                 with patch.object(orchestrate, "select_for_task", return_value=(selected, "test", {}, {})), \
                      patch.object(orchestrate, "launch_supervisor", return_value=789):
-                    recovered = orchestrate.resume(task_id, "claude")
+                    recovered = orchestrate.resume(task_id, "claude", fresh_session=True)
                 self.assertEqual(recovered["worktree"], str(worktree))
+                self.assertFalse(recovered["native_session_reused"])
                 self.assertIn("contracts/partial.txt", artifact.read_text(encoding="utf-8"))
 
     def test_running_agent_receives_checkpoint_and_saves_report(self):
@@ -258,7 +259,6 @@ class OrchestratorTests(unittest.TestCase):
                 "import json, sys\n"
                 "print(json.dumps({'type':'system','session_id':'claude-test-session'}), flush=True)\n"
                 "first = json.loads(sys.stdin.readline())\n"
-                "print(json.dumps({'type':'result','result':'Working','session_id':'claude-test-session'}), flush=True)\n"
                 "second = json.loads(sys.stdin.readline())\n"
                 "assert 'checkpoint report' in second['message']['content']\n"
                 "print(json.dumps({'type':'result','result':'Completed: first file\\nRemaining: second file\\nChecks: none\\nBlockers: none','session_id':'claude-test-session'}), flush=True)\n",
