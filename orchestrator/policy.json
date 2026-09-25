@@ -16,7 +16,7 @@
     "backend": {"brief": "docs/agent-tasks/01-backend.md", "owned_paths": ["apps/api/"]},
     "frontend": {"brief": "docs/agent-tasks/02-admin-frontend.md", "owned_paths": ["apps/admin/"]},
     "ai": {"brief": "docs/agent-tasks/03-ai-service.md", "owned_paths": ["services/ai/"]},
-    "infra": {"brief": "docs/agent-tasks/04-infrastructure.md", "owned_paths": ["infra/", "docker-compose.yml", "docker-compose.mac.yml", "Makefile", ".env.example", ".github/"]},
+    "infra": {"brief": "docs/agent-tasks/04-infrastructure.md", "owned_paths": ["infra/", "docker-compose.yml", "docker-compose.mac.yml", "docker-compose.prod.yml", "Makefile", ".env.example", ".gitignore", ".github/"]},
     "qa": {"brief": "docs/agent-tasks/05-integration-qa.md", "owned_paths": ["tests/contracts/", "tests/e2e/", "docs/qa/"]}
   },
   "routes": {
