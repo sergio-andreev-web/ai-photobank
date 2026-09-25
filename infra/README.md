@@ -78,10 +78,106 @@ API will connect to AI at `http://host.docker.internal:8001`.
 
 ### Cloud deployment
 
-This base Compose setup is for development and contract testing. Public HTTPS,
-secrets, persistent storage, deployment automation, and the CUDA AI host are
-handled by the dedicated cloud and RunPod tasks. Do not expose this development
-configuration directly to the Internet.
+This base Compose file (`docker-compose.yml`) is for development and contract
+testing — do not expose it directly to the Internet. `docker-compose.prod.yml`
+is the public cloud production overlay described below. Mac MPS and RunPod
+CUDA AI hosting are handled by the separate `infrastructure-runpod` task.
+
+## Public cloud production profile
+
+`docker-compose.prod.yml` overlays `docker-compose.yml` for a single public
+host (VM, VPS, cloud compute instance):
+
+```bash
+cp .env.example .env
+# edit .env: APP_KEY, NGINX_SERVER_NAME, SESSION_DOMAIN,
+# SANCTUM_STATEFUL_DOMAINS, DB/RabbitMQ passwords, AI_BASE_URL, etc.
+# (populate secret values from your host's secret store, not by hand)
+mkdir -p certs && cp /path/to/fullchain.pem /path/to/privkey.pem certs/
+make prod-config   # validate the merged config
+make prod-up
+make prod-health
+```
+
+### What the profile changes vs. the base Compose file
+
+- **HTTPS/TLS**: `nginx` terminates TLS on 443 using a cert/key mounted from
+  `NGINX_CERTS_DIR` (see `infra/nginx/templates/production.conf.template`,
+  rendered by the official nginx image's envsubst-on-templates entrypoint).
+  Port 80 only redirects to HTTPS, serves `/health`, and has a spare
+  `/.well-known/acme-challenge/` location for certbot-style renewal if you
+  wire one up later.
+- **Single origin**: Nuxt (`/`), Laravel API (`/api/`) and Sanctum
+  (`/sanctum/`) are all served from one HTTPS origin, matching ADR-0001 — no
+  CORS. `admin` and the database/queue services no longer publish host
+  ports; only nginx's 80/443 are public.
+- **Protected media**: `/_protected/` stays `internal` in nginx — reachable
+  only via Laravel's `X-Accel-Redirect` after the backend authorizes a
+  request, never served directly (§57, §63).
+- **50 MiB upload limit**: `client_max_body_size` in nginx is driven by
+  `NGINX_CLIENT_MAX_BODY_SIZE` (default `50m`), matching
+  `PHOTO_MAX_UPLOAD_BYTES` (ADR-0005). The PHP-side `upload_max_filesize` /
+  `post_max_size` in `apps/api`'s (not yet written) Dockerfile must be set to
+  the same value — nginx alone does not raise PHP's own limit.
+- **Secrets via env/secret store**: containers still read configuration via
+  `${VAR}` substitution from the environment `docker compose` is invoked
+  with. Nothing here stores secret *values* — populate `.env` (or inject
+  environment variables directly) from your platform's secret manager
+  (systemd `EnvironmentFile`, Docker/Swarm secrets, Vault, your cloud
+  provider's secret panel, ...) at deploy time. Never commit `.env` or
+  `certs/`.
+- **Persistent volumes**: `postgres_data` and `photobank_storage` are named
+  Docker volumes, unchanged from the base file — they persist across
+  `up`/`down` as long as the host's Docker data root is on persistent disk.
+- **Immutable containers**: the dev bind-mounts of `./apps/api` and
+  `./apps/admin` source into the containers are dropped; only the built
+  image and the persistent volumes are used.
+- **AI stays external**: no `ai-cpu` service is started by this overlay.
+  Point `AI_BASE_URL` at a RunPod (or other) HTTPS endpoint.
+
+### Backup / restore
+
+```bash
+make backup                       # writes ./backups/<timestamp>/{db.dump,photos.tar.gz}
+make restore SNAPSHOT=<timestamp> # destructive: restores DB + photo storage
+```
+
+Both run a one-off `postgres:17-alpine` container (`backup-tools`, profile
+`backup`) against the already-running `postgres` service and the
+`photobank_storage` volume — start the stack with `make prod-up` first.
+`restore.sh` asks for an explicit `yes` confirmation before overwriting
+anything. Back up before every deploy that runs new migrations.
+
+### Health and readiness
+
+- `GET /health` at the nginx edge (both HTTP and HTTPS) always returns `200
+  OK` if nginx itself is reachable — it does not check the backend.
+- `nginx` only starts once `api` and `admin`'s own healthchecks
+  (`condition: service_healthy`) pass, which in turn depend on
+  Postgres/Redis/RabbitMQ being healthy (base file, unchanged).
+- **Known gap**: `contracts/public-api.openapi.yaml` does not define a
+  public `/health` (or `/ready`) path under `/api`, so there is no
+  contract-backed way to check Laravel's own DB/queue/storage readiness
+  through the public origin. The container-internal check
+  (`http://localhost:8000/health` inside the `api`/`api-worker`
+  containers, not proxied by nginx) is the only signal available today. If
+  end-to-end readiness needs to be checkable from outside the host, the
+  contract owner needs to add a `/api/health` (or similar) path first —
+  this infra task does not invent one.
+
+### Dependencies not yet satisfied (blockers for actually running this profile)
+
+- `apps/api/Dockerfile` does not exist yet (owned by the backend agent). The
+  `api` and `api-worker` services build from `./apps/api`; until that
+  Dockerfile lands, `docker compose build`/`up` for either profile fails at
+  the build step. The Dockerfile must set `upload_max_filesize` and
+  `post_max_size` in `php.ini` to at least `PHOTO_MAX_UPLOAD_BYTES` and
+  implement the `GET /health` endpoint both Compose files already probe.
+- `apps/admin/` does not exist yet (owned by the frontend agent, Nuxt app +
+  Dockerfile). Same build-context dependency for the `admin` service.
+- Both gaps already existed in the base Compose file
+  (`infrastructure-base`); this task does not change that ownership
+  boundary, only documents the exact production-profile impact.
 
 ## Health Checks
 
