@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ai_environment.lower() == "production"
+
+    @model_validator(mode="after")
+    def _require_api_key_in_production(self) -> "Settings":
+        # ADR-0010: empty AI_SERVICE_API_KEY disables the check (local dev only);
+        # production must fail fast at startup instead of silently running unauthenticated.
+        if self.is_production and not self.ai_service_api_key:
+            raise ValueError(
+                "AI_SERVICE_API_KEY must not be empty when AI_ENVIRONMENT=production"
+            )
+        return self
 
 
 @lru_cache

@@ -2,7 +2,9 @@
 
 /health and /ready are unauthenticated (contract `security: []` override).
 When AI_SERVICE_API_KEY is unset, requests are accepted without a key
-(local development), matching contracts/ai-api.openapi.yaml.
+(local development), matching contracts/ai-api.openapi.yaml. Settings rejects
+an empty key at startup when AI_ENVIRONMENT=production (see config.py), so by
+the time this module runs, an empty key here only ever means development.
 """
 from __future__ import annotations
 
