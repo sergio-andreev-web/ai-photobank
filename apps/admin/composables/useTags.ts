@@ -1,9 +1,17 @@
-import type { Tag, TagList, Alias } from '~/types/api'
+import type { Tag, TagAlias, TagCreateRequest, TagList, TagPatchRequest, TagStatus, TagType } from '~/types/api'
 
 export function useTags() {
   const api = useApi()
 
-  async function listTags(params?: any) {
+  async function listTags(params?: {
+    page?: number
+    per_page?: number
+    q?: string
+    type?: TagType
+    status?: TagStatus
+    parent_id?: number
+    sort?: string
+  }) {
     const { data } = await api.get<TagList>('/admin/tags', { params })
     return data
   }
@@ -13,32 +21,29 @@ export function useTags() {
     return data
   }
 
-  async function createTag(name: string, type: string, parentId?: number) {
-    const { data } = await api.post<Tag>('/admin/tags', {
-      name,
-      type,
-      parent_id: parentId || undefined,
-    })
+  async function createTag(request: TagCreateRequest) {
+    const { data } = await api.post<Tag>('/admin/tags', request)
     return data
   }
 
-  async function updateTag(id: number, updates: Partial<Tag>) {
-    const { data } = await api.patch<Tag>(`/admin/tags/${id}`, updates)
+  async function updateTag(id: number, patch: TagPatchRequest) {
+    const { data } = await api.patch<Tag>(`/admin/tags/${id}`, patch)
     return data
   }
 
-  async function archiveTag(id: number) {
-    const { data } = await api.patch<Tag>(`/admin/tags/${id}`, { archived_at: new Date().toISOString() })
+  async function deleteTag(id: number) {
+    const { data, status } = await api.delete<Tag | undefined>(`/admin/tags/${id}`)
+    // 200 = archived because in use, 204 = deleted outright (§50).
+    return status === 200 ? data ?? null : null
+  }
+
+  async function createAlias(tagId: number, alias: string, locale?: string | null) {
+    const { data } = await api.post<TagAlias>(`/admin/tags/${tagId}/aliases`, { alias, locale })
     return data
   }
 
-  async function createAlias(tagId: number, alias: string) {
-    const { data } = await api.post<Alias>('/admin/aliases', { tag_id: tagId, alias })
-    return data
-  }
-
-  async function deleteAlias(id: number) {
-    await api.delete(`/admin/aliases/${id}`)
+  async function deleteAlias(tagId: number, aliasId: number) {
+    await api.delete(`/admin/tags/${tagId}/aliases/${aliasId}`)
   }
 
   return {
@@ -46,7 +51,7 @@ export function useTags() {
     getTag,
     createTag,
     updateTag,
-    archiveTag,
+    deleteTag,
     createAlias,
     deleteAlias,
   }

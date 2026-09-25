@@ -1,11 +1,27 @@
-// Auth types
+// Types mirror contracts/public-api.openapi.yaml (v1.0.0) and contracts/schemas/enums.json.
+// Client code must ignore unknown response fields and treat unknown error codes as a generic error.
+
+export interface PaginationMeta {
+  page: number
+  per_page: number
+  total: number
+  last_page: number
+}
+
+export interface PaginationParams {
+  page?: number
+  per_page?: number
+  sort?: string
+}
+
+// Auth
+export type UserRole = 'admin'
+
 export interface User {
   id: number
-  email: string
   name: string
-  role: 'admin' | 'user'
-  created_at: string
-  updated_at: string
+  email: string
+  role: UserRole
 }
 
 export interface LoginRequest {
@@ -13,7 +29,7 @@ export interface LoginRequest {
   password: string
 }
 
-// Dashboard types
+// Dashboard
 export interface Dashboard {
   images_count: number
   tags_count: number
@@ -22,8 +38,14 @@ export interface Dashboard {
   failed_images_count: number
 }
 
-// Batch types
-export type BatchStatus = 'created' | 'uploading' | 'processing' | 'completed' | 'failed'
+// Batches
+export type BatchStatus =
+  | 'created'
+  | 'uploading'
+  | 'processing'
+  | 'completed'
+  | 'completed_with_errors'
+  | 'failed'
 
 export interface BatchProgress {
   total: number
@@ -33,7 +55,7 @@ export interface BatchProgress {
 
 export interface Batch {
   id: number
-  name: string
+  name: string | null
   status: BatchStatus
   progress: BatchProgress
   created_at: string
@@ -43,181 +65,284 @@ export interface Batch {
 
 export interface BatchList {
   data: Batch[]
-  meta: {
-    page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
+  meta: PaginationMeta
 }
 
 export interface BatchCreateRequest {
-  name?: string
+  name?: string | null
 }
 
-// Image types
-export type ImageStatus = 'pending' | 'processing' | 'completed' | 'failed'
+// Tags
+export type TagType =
+  | 'object'
+  | 'person'
+  | 'activity'
+  | 'scene'
+  | 'location'
+  | 'season'
+  | 'weather'
+  | 'brand'
+  | 'event'
+  | 'color'
+  | 'concept'
+  | 'other'
 
-export interface Image {
-  id: number
-  batch_id: number
-  filename: string
-  status: ImageStatus
-  error_code: string | null
-  created_at: string
-  updated_at: string
-}
+export type TagStatus = 'active' | 'archived'
 
-export interface ImageDetail extends Image {
-  caption: string | null
-  extracted_text: string | null
-  embedding_model_key: string | null
-  image_tags: ImageTag[]
-  tag_candidates: TagCandidate[]
-  processing_tasks: ProcessingTask[]
-}
-
-export interface ImageList {
-  data: Image[]
-  meta: {
-    page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
-}
-
-// Image tags types
-export interface ImageTag {
-  id: number
-  image_id: number
-  tag_id: number
-  reason: 'auto' | 'manual'
-  created_at: string
-  tag?: Tag
-}
-
-// Tag types
-export type TagType = 'concept' | 'category' | 'property'
-
-export interface Tag {
+export interface TagRef {
   id: number
   name: string
   type: TagType
-  parent_id: number | null
-  archived_at: string | null
+  status: TagStatus
+}
+
+export interface TagAlias {
+  id: number
+  tag_id: number
+  alias: string
+  normalized_alias: string
+  locale: string | null
   created_at: string
   updated_at: string
+}
+
+export interface Tag {
+  id: number
+  parent_id: number | null
+  name: string
+  slug: string
+  normalized_name: string
+  type: TagType
+  status: TagStatus
+  images_count: number
+  aliases: TagAlias[]
+  created_at: string
+  updated_at: string
+  // Client-side only, populated while building a tree from the flat list.
   children?: Tag[]
-  aliases?: Alias[]
 }
 
 export interface TagList {
   data: Tag[]
-  meta: {
-    page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
+  meta: PaginationMeta
 }
 
-// Alias types
-export interface Alias {
-  id: number
-  tag_id: number
+export interface TagCreateRequest {
+  name: string
+  type: TagType
+  parent_id?: number | null
+}
+
+export interface TagPatchRequest {
+  name?: string
+  type?: TagType
+  parent_id?: number | null
+  status?: TagStatus
+}
+
+export interface AliasCreateRequest {
   alias: string
+  locale?: string | null
+}
+
+// Images
+export type ImageStatus = 'uploaded' | 'queued' | 'processing' | 'ready' | 'failed'
+
+export interface ImageUrls {
+  thumbnail: string | null
+  preview: string | null
+  original: string
+}
+
+export interface ImageSummary {
+  id: number
+  batch_id: number
+  original_name: string
+  status: ImageStatus
+  tags: TagRef[]
+  urls: ImageUrls
+  created_at: string
+}
+
+export interface ImageList {
+  data: ImageSummary[]
+  meta: PaginationMeta
+}
+
+export type ImageTagSource = 'ai' | 'manual' | 'import'
+
+export interface ImageTag {
+  tag: TagRef
+  source: ImageTagSource
+  confidence: number | null
+  locked: boolean
   created_at: string
   updated_at: string
 }
 
-// Tag candidate types
-export type CandidateStatus = 'pending' | 'approved' | 'merged' | 'rejected'
+export interface Concept {
+  type: TagType
+  label: string
+  confidence: number
+}
+
+export interface OcrItem {
+  text: string
+  confidence: number
+}
+
+export interface ImageAnalysis {
+  id: number
+  vision_model: string
+  vision_model_version: string | null
+  embedding_model: string
+  embedding_model_version: string | null
+  prompt_version: string
+  caption: string | null
+  concepts: Concept[]
+  ocr: OcrItem[]
+  processing_ms: number | null
+  created_at: string
+}
+
+export type ProcessingTaskType = 'metadata' | 'variants' | 'ai_analysis' | 'tag_resolution' | 'finalize'
+export type ProcessingTaskStatus = 'queued' | 'processing' | 'succeeded' | 'failed'
+
+export interface ProcessingTask {
+  type: ProcessingTaskType
+  status: ProcessingTaskStatus
+  attempts: number
+  max_attempts: number
+  error_code: string | null
+  error_message: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface ImageDetail {
+  id: number
+  batch_id: number
+  original_name: string
+  status: ImageStatus
+  urls: ImageUrls
+  created_at: string
+  updated_at: string
+  mime_type: string
+  extension: string
+  width: number | null
+  height: number | null
+  file_size: number
+  sha256: string
+  caption: string | null
+  ocr_text: string | null
+  error_code: string | null
+  error_message: string | null
+  image_tags: ImageTag[]
+  latest_analysis: ImageAnalysis | null
+  processing_tasks: ProcessingTask[]
+}
+
+export interface ImagePatchRequest {
+  original_name?: string
+}
+
+export interface ImageTagCreateRequest {
+  tag_id: number
+}
+
+// Tag candidates
+export type TagCandidateStatus = 'pending' | 'created' | 'merged' | 'rejected'
+
+export interface CandidateSampleImage {
+  id: number
+  thumbnail_url: string | null
+  confidence: number | null
+}
 
 export interface TagCandidate {
   id: number
-  image_id: number
-  concept: string
-  status: CandidateStatus
-  confidence: number
+  display_name: string
+  normalized_name: string
+  type: TagType
+  status: TagCandidateStatus
+  occurrences_count: number
+  closest_tag: TagRef | null
+  similarity: number | null
+  sample_images: CandidateSampleImage[]
   created_at: string
   updated_at: string
   resolved_at: string | null
+  resolved_by: number | null
   resolved_tag_id: number | null
-  resolved_tag?: Tag
 }
 
 export interface TagCandidateList {
   data: TagCandidate[]
-  meta: {
-    page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
+  meta: PaginationMeta
 }
 
-// Processing task types
-export type ProcessingTaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
-export type ProcessingTaskType = 'metadata_extraction' | 'variant_generation' | 'ai_analysis' | 'tag_resolution'
-
-export interface ProcessingTask {
-  id: number
-  image_id: number
-  type: ProcessingTaskType
-  status: ProcessingTaskStatus
-  error_code: string | null
-  created_at: string
-  updated_at: string
-  completed_at: string | null
+export interface CandidateApproveRequest {
+  name?: string
+  type?: TagType
+  parent_id?: number | null
 }
 
-// Search types
+export interface CandidateMergeRequest {
+  tag_id: number
+  create_alias?: boolean
+}
+
+export interface CandidateResolution {
+  candidate: TagCandidate
+  tag: TagRef | null
+  attached_images_count: number
+  alias_created: boolean
+}
+
+// Search
 export type SearchMode = 'tags' | 'semantic' | 'hybrid'
 
-export interface SearchRequest {
-  q: string
-  mode: SearchMode
-  tag_ids?: number[]
+interface SearchRequestCommon {
   page?: number
   per_page?: number
   debug?: boolean
 }
 
-export interface SearchResult {
-  id: number
-  filename: string
-  similarity?: number
+export interface SearchTagsRequest extends SearchRequestCommon {
+  mode: 'tags'
+  tag_ids: number[]
+}
+
+export interface SearchSemanticRequest extends SearchRequestCommon {
+  mode: 'semantic'
+  query: string
+}
+
+export interface SearchHybridRequest extends SearchRequestCommon {
+  mode: 'hybrid'
+  query: string
+  tag_ids: number[]
+}
+
+export type SearchRequest = SearchTagsRequest | SearchSemanticRequest | SearchHybridRequest
+
+export interface SearchResultItem extends ImageSummary {
+  semantic_score?: number
 }
 
 export interface SearchResponse {
-  data: SearchResult[]
-  meta: {
-    page: number
-    per_page: number
-    total: number
-    last_page: number
-  }
-  debug?: Record<string, any>
+  data: SearchResultItem[]
+  meta: PaginationMeta & { mode: SearchMode }
 }
 
-// Error types
+// Errors
+export interface ApiErrorBody {
+  code: string
+  message: string
+  details: Record<string, any>
+  trace_id: string
+}
+
 export interface ApiError {
-  error: {
-    code: string
-    message: string
-    details: Record<string, any>
-    trace_id: string
-  }
-}
-
-export interface ValidationDetails {
-  fields?: Record<string, string[]>
-}
-
-// Pagination
-export interface PaginationParams {
-  page?: number
-  per_page?: number
-  sort?: string
+  error: ApiErrorBody
 }
