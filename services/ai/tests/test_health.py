@@ -28,6 +28,23 @@ def test_ready_returns_ready_once_started(client):
     assert body["prompt_version"] == "image-analysis-v1"
 
 
+def test_health_and_ready_stay_unauthenticated_when_api_key_is_configured():
+    from fastapi.testclient import TestClient
+
+    from app.app import create_app
+    from tests.conftest import make_settings
+
+    # Contract `security: []` for probes; inference routes still require the key.
+    secured_settings = make_settings(AI_ENVIRONMENT="production", AI_SERVICE_API_KEY="s3cret")
+    with TestClient(create_app(secured_settings)) as secured_client:
+        assert secured_client.get("/health").status_code == 200
+        assert secured_client.get("/ready").status_code == 200
+
+        protected = secured_client.post("/v1/embeddings/text", json={"texts": ["cat"]})
+        assert protected.status_code == 401
+        assert protected.json()["error"]["code"] == "UNAUTHORIZED"
+
+
 def test_ready_returns_503_model_not_ready_when_startup_failed(app_settings):
     from fastapi.testclient import TestClient
 
