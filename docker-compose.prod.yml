@@ -42,10 +42,13 @@ services:
       SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS}"
       TRUSTED_PROXIES: "${TRUSTED_PROXIES}"
       PHOTO_MAX_UPLOAD_BYTES: "${PHOTO_MAX_UPLOAD_BYTES}"
-    # `!override` replaces (rather than merges) the base dev bind-mount
-    # (`./apps/api:/app`): Compose merges `volumes` by target path and would
-    # otherwise keep it alongside this list, masking the built image with a
-    # host directory that does not exist on a production host.
+    # The base file itself has no source bind mount (see docker-compose.yml),
+    # so this is just the storage volume — `!override` (rather than a plain
+    # `volumes:`) is kept defensively: if a production deploy is ever run
+    # with docker-compose.dev.yml still on the command line by mistake, this
+    # still replaces (not merges with) that overlay's `./apps/api:/app` bind
+    # mount, which would otherwise mask the built image on a host with no
+    # source checkout.
     volumes: !override
       - photobank_storage:/app/storage
 
@@ -66,6 +69,8 @@ services:
       NUXT_PUBLIC_API_BASE: "/api"
     # Only reachable through nginx, not published on the host directly.
     ports: !reset []
+    # See the api/api-worker comment above: defensive guard against
+    # docker-compose.dev.yml's `./apps/admin:/app` bind mount leaking in.
     volumes: !reset []
 
   nginx:

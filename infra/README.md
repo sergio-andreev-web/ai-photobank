@@ -64,6 +64,21 @@ make up
 
 The CPU AI service is optional (`docker compose --profile ai up -d`).
 
+### Editing source without a rebuild
+
+`docker-compose.yml` builds `api`/`api-worker`/`admin` from their images and
+does not bind-mount source — on a clean checkout there is no host `vendor/`
+or `.output/` to shadow the image's own, so a plain `make up`/`up` works
+right after `git clone`. To bind-mount `./apps/api` and `./apps/admin` for
+local editing instead, add the opt-in overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+See the comments in `docker-compose.dev.yml` for what it does and does not
+give you (no Nuxt hot-reload — that still needs `npm run dev` on the host).
+
 ### macOS with MPS
 
 For local Mac development with GPU acceleration (§8, §58). The rest of the
@@ -199,9 +214,19 @@ anything. Back up before every deploy that runs new migrations.
 - `apps/api/Dockerfile` does not exist yet (owned by the backend agent). The
   `api` and `api-worker` services build from `./apps/api`; until that
   Dockerfile lands, `docker compose build`/`up` for either profile fails at
-  the build step. The Dockerfile must set `upload_max_filesize` and
-  `post_max_size` in `php.ini` to at least `PHOTO_MAX_UPLOAD_BYTES` and
-  implement the `GET /health` endpoint both Compose files already probe.
+  the build step. The Dockerfile must:
+  - set `upload_max_filesize` and `post_max_size` in `php.ini` to at least
+    `PHOTO_MAX_UPLOAD_BYTES`;
+  - serve on port 8000 inside the container (both Compose files' `api`
+    healthcheck and nginx's `upstream api { server api:8000; }` assume this);
+  - respond `200` on `GET /up` (Laravel's own default health route) — this
+    is the exact path both Compose files' `api` healthcheck probes
+    (`curl -f http://localhost:8000/up`), not `/health`: nginx's `/health` is
+    a separate static stub it answers itself, never proxied to `api`.
+  - honor `QUEUE_CONNECTION=rabbitmq` (already set by both Compose files) and
+    the `EMBEDDING_ACTIVE_MODEL_KEY`/`EMBEDDING_ACTIVE_MODEL_VERSION` env
+    vars this infra task added — see root `.env.example` and
+    `apps/api/config/photobank.php`/ADR-0009.
 - `apps/admin/` does not exist yet (owned by the frontend agent, Nuxt app +
   Dockerfile). Same build-context dependency for the `admin` service.
 - Both gaps already existed in the base Compose file
@@ -316,6 +341,10 @@ Key variables:
 - `DB_*`: Database connection
 - `AI_BASE_URL`: AI service endpoint
 - `TAG_*_THRESHOLD`: ML model thresholds
+- `QUEUE_WORKER_TIMEOUT`: `api-worker`'s `queue:work --timeout`; must stay
+  greater than `AI_REQUEST_TIMEOUT`
+- `EMBEDDING_ACTIVE_MODEL_KEY` / `EMBEDDING_ACTIVE_MODEL_VERSION`: which
+  embedding version is active for semantic search (ADR-0009)
 
 ## Database
 
