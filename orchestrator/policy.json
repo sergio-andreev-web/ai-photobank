@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "providers": ["codex", "claude"],
+  "modules": {
+    "contracts": {"brief": "docs/agent-tasks/00-contracts.md", "owned_paths": ["contracts/", "docs/adr/"]},
+    "backend": {"brief": "docs/agent-tasks/01-backend.md", "owned_paths": ["apps/api/"]},
+    "frontend": {"brief": "docs/agent-tasks/02-admin-frontend.md", "owned_paths": ["apps/admin/"]},
+    "ai": {"brief": "docs/agent-tasks/03-ai-service.md", "owned_paths": ["services/ai/"]},
+    "infra": {"brief": "docs/agent-tasks/04-infrastructure.md", "owned_paths": ["infra/", "docker-compose.yml", "docker-compose.mac.yml", "Makefile", ".env.example", ".github/"]},
+    "qa": {"brief": "docs/agent-tasks/05-integration-qa.md", "owned_paths": ["tests/contracts/", "tests/e2e/", "docs/qa/"]}
+  },
+  "routes": {
+    "contract_design": {"default_provider": "codex", "codex": {"model": "gpt-6-sol", "effort": "high"}, "claude": {"model": "claude-sonnet-5", "effort": "high"}},
+    "migration": {"default_provider": "codex", "codex": {"model": "gpt-6-luna", "effort": "medium"}, "claude": {"model": "claude-sonnet-5", "effort": "medium"}},
+    "backend_complex": {"default_provider": "claude", "codex": {"model": "gpt-6-sol", "effort": "high"}, "claude": {"model": "claude-sonnet-5", "effort": "high"}},
+    "frontend_flow": {"default_provider": "codex", "codex": {"model": "gpt-6-sol", "effort": "medium"}, "claude": {"model": "claude-sonnet-5", "effort": "medium"}},
+    "ai_mock": {"default_provider": "claude", "codex": {"model": "gpt-6-luna", "effort": "medium"}, "claude": {"model": "claude-sonnet-5", "effort": "medium"}},
+    "ai_models": {"default_provider": "claude", "codex": {"model": "gpt-6-sol", "effort": "high"}, "claude": {"model": "claude-sonnet-5", "effort": "high"}},
+    "infra_simple": {"default_provider": "codex", "codex": {"model": "gpt-6-luna", "effort": "medium"}, "claude": {"model": "claude-sonnet-5", "effort": "medium"}},
+    "integration": {"default_provider": "codex", "codex": {"model": "gpt-6-sol", "effort": "high"}, "claude": {"model": "claude-sonnet-5", "effort": "high"}},
+    "review": {"default_provider": "claude", "codex": {"model": "gpt-6-astra", "effort": "medium"}, "claude": {"model": "claude-opus-5-5", "effort": "medium"}}
+  },
+  "ollama": {
+    "enabled": false,
+    "model": "",
+    "allowed_kinds": ["migration", "ai_mock", "infra_simple"]
+  }
+}

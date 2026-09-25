@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "contracts-v1",
+      "title": "Зафиксировать контракты MVP",
+      "module": "contracts",
+      "kind": "contract_design",
+      "depends_on": [],
+      "required_outputs": ["contracts/public-api.openapi.yaml", "contracts/ai-api.openapi.yaml", "contracts/schemas/image-analysis.json"],
+      "instructions": "Создай проект OpenAPI и JSON Schema из однозначных требований ТЗ. Для пробелов из docs/development-plan.md подготовь варианты решений в ADR и перечисли вопросы координатору; не объявляй свои предположения утвержденным контрактом. Проверь схемы, примеры и моки. Не реализуй сервисы."
+    },
+    {
+      "id": "backend-migrations",
+      "title": "Миграции и модели данных Laravel",
+      "module": "backend",
+      "kind": "backend_complex",
+      "depends_on": ["contracts-v1"],
+      "instructions": "Создай миграции и базовые модели строго по утвержденным схемам и enum. Проверь FK, индексы, pgvector и soft delete. Не реализуй API или очередь."
+    },
+    {
+      "id": "backend-core",
+      "title": "Laravel API и фоновая обработка с FakeAiClient",
+      "module": "backend",
+      "kind": "backend_complex",
+      "depends_on": ["backend-migrations"],
+      "instructions": "Реализуй публичный API, storage, pipeline, taxonomy и поиск по контрактам. Используй FakeAiClient и детерминированные тесты без GPU."
+    },
+    {
+      "id": "admin-frontend",
+      "title": "Административный Nuxt интерфейс",
+      "module": "frontend",
+      "kind": "frontend_flow",
+      "depends_on": ["contracts-v1"],
+      "instructions": "Реализуй экраны из ТЗ против mock server по public OpenAPI. Не читай внутренности backend и не обращайся к AI напрямую."
+    },
+    {
+      "id": "ai-mock",
+      "title": "FastAPI контракт и mock модели",
+      "module": "ai",
+      "kind": "ai_mock",
+      "depends_on": ["contracts-v1"],
+      "instructions": "Реализуй AI API, Pydantic схемы, preprocessing, health/readiness и детерминированные mock модели. CI не требует GPU."
+    },
+    {
+      "id": "ai-models",
+      "title": "SigLIP2 и Qwen3-VL",
+      "module": "ai",
+      "kind": "ai_models",
+      "depends_on": ["ai-mock"],
+      "instructions": "Подключи реальные модели за существующими интерфейсами, MPS/CUDA профили, кеш весов и model tests. Не меняй application-level ответ."
+    },
+    {
+      "id": "infrastructure-base",
+      "title": "Базовый Compose и Makefile",
+      "module": "infra",
+      "kind": "infra_simple",
+      "depends_on": ["contracts-v1"],
+      "instructions": "Собери Compose, env template и команды Makefile по готовым интерфейсам, включая mock/CPU AI и базовые health checks. Dockerfile сервисов принадлежат владельцам сервисов. Не делай RunPod deployment в этой задаче."
+    },
+    {
+      "id": "infrastructure-runpod",
+      "title": "Mac MPS и RunPod deployment",
+      "module": "infra",
+      "kind": "backend_complex",
+      "depends_on": ["infrastructure-base", "ai-models"],
+      "instructions": "Добавь Mac MPS и RunPod CUDA инструкции, model cache volume, сервисный API key и deployment проверки. Не меняй application logic."
+    },
+    {
+      "id": "integration-qa",
+      "title": "Контрактные и сквозные проверки MVP",
+      "module": "qa",
+      "kind": "integration",
+      "depends_on": ["backend-core", "admin-frontend", "ai-mock", "infrastructure-base"],
+      "instructions": "Создай и прогони контрактные и E2E проверки сценария §75 с mock AI, отказом AI, retry, suppression и поиском. Не меняй чужие модули."
+    }
+  ]
+}
