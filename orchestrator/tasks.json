@@ -22,7 +22,7 @@
       "id": "backend-core",
       "title": "Laravel API и фоновая обработка с FakeAiClient",
       "module": "backend",
-      "kind": "backend_complex",
+      "kind": "backend_core",
       "depends_on": ["backend-migrations"],
       "instructions": "Реализуй публичный API, storage, pipeline, taxonomy и поиск по контрактам. Используй FakeAiClient и детерминированные тесты без GPU."
     },

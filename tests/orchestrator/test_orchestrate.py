@@ -18,7 +18,7 @@ class OrchestratorTests(unittest.TestCase):
         migration = orchestrate.route(self.policy, {"kind": "migration", "module": "backend"})
         backend = orchestrate.route(self.policy, self.tasks["backend-core"])
         self.assertEqual((migration["provider"], migration["model"]), ("codex", "gpt-6-luna"))
-        self.assertEqual((backend["provider"], backend["model"]), ("claude", "claude-sonnet-5"))
+        self.assertEqual((backend["provider"], backend["model"]), ("claude", "claude-opus-5-5"))
 
     def test_ollama_requires_explicit_opt_in(self):
         with self.assertRaises(orchestrate.OrchestratorError):

@@ -14,6 +14,7 @@
 | Механическое заполнение схем, примеров и mock fixtures по уже согласованному контракту | GPT-6 Luna, medium | Claude Sonnet 5; Haiku 4.5 для совсем узких правок | Sol/Sonnet проверяет валидность схем и согласованность примеров |
 | Простые миграции БД строго по утвержденной таблице | GPT-6 Luna, medium | Claude Sonnet 5; Haiku 4.5 для одной простой таблицы | Sol/Sonnet проверяет FK, unique, индексы и rollback; сложные vector/soft-delete миграции — сразу Sol/Sonnet |
 | Backend auth, upload, storage, variants, CRUD | GPT-6 Sol, medium | Claude Sonnet 5 | Sol high / Opus для безопасности, конкурентной загрузки и дедупликации |
+| Весь `backend-core` одним заданием: API, очереди, taxonomy, поиск | GPT-6 Sol, high | Claude Opus 5.5, high | Если разделить на узкие задачи с отдельной приемкой, большую часть можно вернуть Sonnet 5 |
 | Очереди, idempotency, retry, reprocess, AI client | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus для ревью гонок и неясных переходов состояний |
 | Taxonomy, TagResolver, moderation и защита ручных тегов | GPT-6 Sol, high | Claude Sonnet 5 | Второе ревью Astra/Opus на пограничных случаях и сохранении инвариантов |
 | pgvector, версии embeddings, hybrid search | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus для решений о версиях/индексах и проблем качества поиска |
