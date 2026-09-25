@@ -1,8 +1,7 @@
-# Runtime dependencies for the FastAPI contract + mock models (this task's
-# scope). Real SigLIP2/Qwen3-VL integration is a follow-up task that will add
-# torch/transformers (declared as the AI stack in docs/technical-specification.md
-# §5); app/device.py already probes torch when present but does not require it,
-# so CI stays light and GPU-free (§73).
+# Runtime dependencies for the FastAPI contract + mock models. The real
+# SigLIP2/Qwen3-VL stack (torch/transformers, §5) lives in
+# requirements-model.txt and is imported lazily, so CI stays light and
+# GPU-free (§73).
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4

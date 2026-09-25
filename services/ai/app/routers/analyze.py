@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from ..concurrency import InferenceLimiter
 from ..config import Settings
+from ..inference import translate_model_errors
 from ..models.registry import ModelRegistry
 from ..preprocessing import preprocess_image
 from ..schemas.analysis import AnalysisModels, ImageAnalysisResponse
@@ -60,8 +61,9 @@ def analyze_image(
 
     with limiter.slot(request_id=request_id):
         started = time.monotonic()
-        vision_result = registry.vision_model.analyze(processed)
-        embedding = registry.embedding_model.image_embedding(processed)
+        with translate_model_errors(request_id=request_id, prompt_version=settings.prompt_version):
+            vision_result = registry.vision_model.analyze(processed)
+            embedding = registry.embedding_model.image_embedding(processed)
         processing_ms = int((time.monotonic() - started) * 1000)
 
     payload = {

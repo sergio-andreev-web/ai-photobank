@@ -1,0 +1,10 @@
+# Real-model stack for AI_MODEL_PROVIDER=transformers (SigLIP2 + Qwen3-VL).
+# Not needed for the mock/CI profile (§73). Qwen3-VL requires transformers
+# >= 4.57; `dtype=`/`device_map=` loading needs accelerate.
+# On Linux x86_64 the PyPI torch wheel ships CUDA; on macOS arm64 it has MPS.
+-r requirements.txt
+torch>=2.5,<3
+transformers>=4.57.0,<6
+accelerate>=1.0,<2
+huggingface_hub>=0.34
+safetensors>=0.4

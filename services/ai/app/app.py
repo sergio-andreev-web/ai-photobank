@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,8 +17,6 @@ from .request_id import RequestIdMiddleware
 from .routers import analyze, embeddings, health
 from .schemas.errors import AiServiceError
 
-logger = logging.getLogger("ai_service")
-
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
@@ -31,11 +28,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        try:
-            app.state.registry.startup()
-        except Exception:
-            logger.exception("ai_service.startup_failed")
+        # Real weights take minutes and load in the background so /health stays
+        # live meanwhile (ADR-0010); failures are logged and keep /ready at 503.
+        registry: ModelRegistry = app.state.registry
+        registry.start()
         yield
+        registry.shutdown()
 
     app = FastAPI(title="AI Photobank — AI Service", version="1.0.0", lifespan=lifespan, **docs_kwargs)
 

@@ -44,6 +44,31 @@ def test_resolve_device_rejects_unknown_value():
         resolve_device("tpu")
 
 
+@pytest.mark.parametrize(
+    "configured, device, bf16, expected",
+    [
+        ("auto", AiDevice.CUDA, True, "bfloat16"),
+        ("auto", AiDevice.CUDA, False, "float16"),
+        ("auto", AiDevice.MPS, False, "bfloat16"),
+        ("auto", AiDevice.CPU, True, "float32"),
+        ("float16", AiDevice.MPS, False, "float16"),
+        ("float32", AiDevice.CUDA, True, "float32"),
+    ],
+)
+def test_resolve_dtype_profiles(configured, device, bf16, expected):
+    from app.device import resolve_dtype
+
+    assert resolve_dtype(configured, device, cuda_bf16_fn=lambda: bf16) == expected
+
+
+def test_ensure_device_available_accepts_present_accelerators_and_cpu():
+    from app.device import ensure_device_available
+
+    ensure_device_available(AiDevice.CUDA, cuda_available_fn=lambda: True, mps_available_fn=lambda: False)
+    ensure_device_available(AiDevice.MPS, cuda_available_fn=lambda: False, mps_available_fn=lambda: True)
+    ensure_device_available(AiDevice.CPU, cuda_available_fn=lambda: False, mps_available_fn=lambda: False)
+
+
 def test_cuda_and_mps_available_do_not_raise_without_torch():
     from app.device import cuda_available, mps_available
 
