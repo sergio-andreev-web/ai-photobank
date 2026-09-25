@@ -95,6 +95,16 @@
       "instructions": "Реализуй tag, semantic и hybrid search по контрактам. Явно выбранные теги остаются жестким фильтром, поиск по тегам работает без AI, версии embeddings не смешиваются. Проверь ранжирование, пустые результаты, отказ AI и индексы тестами."
     },
     {
+      "id": "backend-reindex",
+      "title": "Переиндексация embeddings тегов и изображений",
+      "module": "backend",
+      "kind": "standard_high",
+      "depends_on": [
+        "backend-search"
+      ],
+      "instructions": "Добавь artisan-команды переиндексации по ADR-0009 для активной версии (EMBEDDING_ACTIVE_MODEL_KEY и EMBEDDING_ACTIVE_MODEL_VERSION). photobank:reindex-tags ставит пересчёт embedding для тегов без embedding активной версии (существующие теги и исчерпавшие повторы) через имеющийся механизм пересчёта тегов. photobank:reindex-images ставит reprocess для изображений в статусе ready без активного embedding активной версии через имеющийся механизм reprocess: история analyses и embeddings сохраняется, старые строки деактивируются, ручные теги и suppression переживают. Обе команды идемпотентны (повторный запуск не создаёт дублей задач), работают батчами, поддерживают --dry-run и ограничение объёма и печатают итог. Не меняй публичный API и contracts/**; тесты с FakeAiClient без GPU."
+    },
+    {
       "id": "admin-frontend-base",
       "title": "Каркас Nuxt и базовые экраны",
       "module": "frontend",
@@ -212,6 +222,16 @@
         "backend-processing"
       ],
       "instructions": "Сделай так, чтобы стек по docker-compose.yml и с production-overlay поднимался с чистого checkout. (1) api и api-worker: QUEUE_CONNECTION=rabbitmq; прокинь EMBEDDING_ACTIVE_MODEL_KEY и EMBEDDING_ACTIVE_MODEL_VERSION (и опиши их в корневом .env.example); worker слушает --queue=images.reprocess,images.ai,images.processing, его --timeout больше AI_REQUEST_TIMEOUT (см. apps/api/config/queue.php, config/photobank.php и apps/api/.env.example). (2) Монтирование ./apps/api и ./apps/admin в /app перекрывает собранные в образах vendor и .output: убери его из базового файла или вынеси в отдельный dev-override, сохранив том хранилища фото. (3) Job Integration Smoke в .github/workflows/ci.yml должен реально собирать и поднимать стек, когда есть apps/api/Dockerfile и apps/admin/Dockerfile, и проверять health через nginx; сверь upstream nginx (api:8000, admin:3000) и healthcheck сервисов. Не меняй apps/**, services/** и contracts/**; требования к образам сервисов запиши для их владельцев."
+    },
+    {
+      "id": "infra-compose-v2",
+      "title": "Команды Compose v2 в Makefile и документации",
+      "module": "infra",
+      "kind": "infra_simple",
+      "depends_on": [
+        "compose-runtime"
+      ],
+      "instructions": "Замени вызовы устаревшего docker-compose (v1) на docker compose (v2 plugin) в Makefile и infra/README.md, не меняя поведение целей: те же файлы, профили и порядок шагов. Проверь make -n для всех изменённых целей и что в Makefile не осталось docker-compose. Не трогай docker-compose*.yml и .github/**."
     },
     {
       "id": "integration-qa",
