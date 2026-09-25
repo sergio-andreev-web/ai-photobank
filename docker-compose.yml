@@ -155,6 +155,10 @@ services:
       --queue=images.reprocess,images.ai,images.processing
       --sleep=3 --tries=3 --max-time=3600
       --timeout=${QUEUE_WORKER_TIMEOUT:-360}
+    # The api image inherits FrankenPHP's HEALTHCHECK (Caddy admin :2019), which a queue
+    # worker never serves; without this the worker always reports unhealthy.
+    healthcheck:
+      disable: true
     depends_on:
       - postgres
       - redis
