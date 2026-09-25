@@ -1,0 +1,429 @@
+openapi: 3.1.0
+info:
+  title: AI Photobank — AI Service API
+  version: 0.1.0-draft
+  summary: HTTP-контракт Laravel ↔ FastAPI AI service.
+  description: |
+    Статус: **черновик, не утвержден** (см. contracts/README.md).
+
+    AI service получает бинарное изображение или тексты и возвращает анализ/embeddings.
+    Он не знает пользователей, записи изображений, ID тегов и не обращается к PostgreSQL (§33).
+    Один и тот же контракт действует для Mac MPS, CPU и RunPod CUDA (§8, §58, §67).
+
+    Маркировка:
+    - `x-tz` — требование взято из ТЗ (номер раздела);
+    - `x-decision-status: proposed` + `x-adr` — предложение контрактного этапа, ожидает решения координатора.
+
+    Трассировка (proposed, ADR-0002/ADR-0010): Laravel передает `X-Request-ID`
+    во всех запросах; AI возвращает тот же `X-Request-ID` в заголовке ответа (§64) и
+    в `request_id` тела ошибки. Для analyze Laravel передает одинаковое значение в
+    заголовке и в поле `request_id` формы (§31).
+
+    Все не-2xx ответы имеют форму `schemas/ai-error.json`, включая ошибки валидации.
+    Повторы (proposed): 5xx и 429 — повторяемые; прочие 4xx — не повторяемые.
+  x-contract-status: draft
+servers:
+  - url: http://localhost:8001
+    description: Native macOS / CPU profile (§7, §8)
+  - url: https://{runpodHost}
+    description: RunPod CUDA (§67)
+    variables:
+      runpodHost:
+        default: example.runpod.net
+tags:
+  - name: probes
+    description: Liveness/readiness для infra и AiClientInterface::health().
+  - name: inference
+    description: Анализ изображений и text embeddings.
+paths:
+  /health:
+    get:
+      tags: [probes]
+      operationId: getHealth
+      summary: Liveness — процесс жив
+      description: |
+        Возвращает 200, пока процесс FastAPI отвечает, даже если модели еще загружаются (proposed, ADR-0010).
+        Форма ответа — из §30. Без аутентификации, чтобы health checks infra не требовали секрет.
+        §61 одновременно говорит «только затем /health возвращает ready» и «добавить readiness отдельно»;
+        предлагается трактовать готовность моделей только через `/ready`.
+      x-tz: "§30, §61"
+      x-decision-status: proposed
+      x-adr: ADR-0010
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: Процесс жив.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                mps:
+                  value:
+                    status: ok
+                    device: mps
+                    models:
+                      vision: Qwen/Qwen3-VL-4B-Instruct
+                      embedding: google/siglip2-so400m-patch14-384
+  /ready:
+    get:
+      tags: [probes]
+      operationId: getReady
+      summary: Readiness — модели загружены и self-check пройден
+      description: |
+        200 только после шагов §61: конфигурация валидна, device проверен, модели загружены,
+        размерность проверена, self-check пройден. Иначе 503 `MODEL_NOT_READY`.
+        Без аутентификации (proposed).
+      x-tz: "§61"
+      x-decision-status: proposed
+      x-adr: ADR-0010
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      responses:
+        '200':
+          description: Готов принимать inference-запросы.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+              examples:
+                ready:
+                  value:
+                    status: ready
+                    device: cuda
+                    models:
+                      vision: Qwen/Qwen3-VL-8B-Instruct
+                      embedding: google/siglip2-so400m-patch14-384
+                    embedding_dimensions: 1152
+                    prompt_version: image-analysis-v1
+        '503':
+          $ref: '#/components/responses/NotReady'
+  /v1/images/analyze:
+    post:
+      tags: [inference]
+      operationId: analyzeImage
+      summary: Полный анализ одного изображения
+      description: |
+        Один вызов возвращает caption, OCR, concepts и image embedding (§29, §31).
+        Перед inference сервис проверяет MIME по содержимому, декодирует изображение,
+        исправляет EXIF-ориентацию, конвертирует в RGB и ограничивает разрешение (§62).
+        Операция без побочных эффектов: повтор с тем же request_id безопасен (но результат VLM
+        может отличаться между вызовами).
+      x-tz: "§29, §31, §62"
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image, request_id]
+              properties:
+                image:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    Бинарное изображение (§31). Обычно preview или специальная AI-копия (§12).
+                    Допустимые форматы (proposed): image/jpeg, image/png, image/webp — по содержимому.
+                    Максимальный размер (proposed): 20 MiB, настраивается `AI_MAX_IMAGE_BYTES`.
+                request_id:
+                  $ref: '#/components/schemas/RequestId'
+            encoding:
+              image:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '200':
+          description: Анализ по `schemas/image-analysis.json`.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/image-analysis.json'
+              examples:
+                full:
+                  summary: Полный ответ с 1152-мерным embedding
+                  externalValue: ./examples/ai/analyze-response.json
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/ImageTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableImage'
+        '429':
+          $ref: '#/components/responses/ServiceBusy'
+        '500':
+          $ref: '#/components/responses/InferenceFailed'
+        '502':
+          $ref: '#/components/responses/ModelOutputInvalid'
+        '503':
+          $ref: '#/components/responses/NotReady'
+  /v1/embeddings/text:
+    post:
+      tags: [inference]
+      operationId: createTextEmbeddings
+      summary: Batch text embeddings
+      description: |
+        Embeddings тем же embedding-моделью, что и image embeddings (§32). Порядок сохраняется:
+        embeddings[i] соответствует texts[i]. Laravel сам ограничивает размер пачки лимитом из контракта.
+      x-tz: "§32"
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/text-embeddings.json#/$defs/TextEmbeddingsRequest'
+            examples:
+              tzExample:
+                externalValue: ./examples/ai/text-embeddings-request.json
+      responses:
+        '200':
+          description: Embeddings по одному на каждый текст.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/text-embeddings.json#/$defs/TextEmbeddingsResponse'
+              examples:
+                full:
+                  externalValue: ./examples/ai/text-embeddings-response.json
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/InvalidRequest'
+        '429':
+          $ref: '#/components/responses/ServiceBusy'
+        '500':
+          $ref: '#/components/responses/InferenceFailed'
+        '503':
+          $ref: '#/components/responses/NotReady'
+security:
+  - serviceApiKey: []
+components:
+  securitySchemes:
+    serviceApiKey:
+      type: http
+      scheme: bearer
+      description: |
+        Service API key (§63, §69 `AI_SERVICE_API_KEY`). Способ передачи
+        `Authorization: Bearer <key>` — proposed (ADR-0010; альтернатива — `X-API-Key`).
+        Обязателен в production. Если ключ в конфигурации AI не задан (локальная разработка),
+        сервис принимает запросы без него (proposed). /health и /ready — без ключа.
+      x-decision-status: proposed
+      x-adr: ADR-0010
+  parameters:
+    RequestIdHeader:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: |
+        ID запроса от Laravel (§64). Laravel всегда передает его для /v1/*. Если заголовок
+        отсутствует, AI генерирует свой ID и возвращает его в ответе.
+      schema:
+        $ref: '#/components/schemas/RequestId'
+  headers:
+    RequestId:
+      description: Тот же ID, что в запросе (§64), либо сгенерированный AI.
+      schema:
+        $ref: '#/components/schemas/RequestId'
+  schemas:
+    RequestId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._:-]+$'
+      description: Рекомендуется UUID. Ограничения формата — proposed (ADR-0002).
+      examples: [0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42]
+    Models:
+      type: object
+      additionalProperties: false
+      required: [vision, embedding]
+      x-tz: "§30"
+      properties:
+        vision:
+          type: string
+          minLength: 1
+        embedding:
+          type: string
+          minLength: 1
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, device, models]
+      x-tz: "§30"
+      properties:
+        status:
+          const: ok
+        device:
+          $ref: './schemas/enums.json#/$defs/AiDevice'
+        models:
+          $ref: '#/components/schemas/Models'
+    ReadyResponse:
+      type: object
+      additionalProperties: false
+      required: [status, device, models, embedding_dimensions, prompt_version]
+      x-decision-status: proposed
+      x-adr: ADR-0010
+      properties:
+        status:
+          const: ready
+        device:
+          $ref: './schemas/enums.json#/$defs/AiDevice'
+        models:
+          $ref: '#/components/schemas/Models'
+        embedding_dimensions:
+          const: 1152
+        prompt_version:
+          type: string
+          minLength: 1
+    AiError:
+      $ref: './schemas/ai-error.json'
+  responses:
+    InvalidRequest:
+      description: Нет обязательного поля, неверный формат или превышены лимиты (`INVALID_REQUEST`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            missingImage:
+              value:
+                error:
+                  code: INVALID_REQUEST
+                  message: Field "image" is required
+                  details:
+                    fields:
+                      image: [required]
+                  request_id: 0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42
+    Unauthorized:
+      description: Нет или неверен service API key (`UNAUTHORIZED`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            unauthorized:
+              value:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid service API key
+                  details: {}
+                  request_id: null
+    ImageTooLarge:
+      description: Размер файла больше лимита (`IMAGE_TOO_LARGE`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            tooLarge:
+              value:
+                error:
+                  code: IMAGE_TOO_LARGE
+                  message: Image exceeds maximum size
+                  details:
+                    max_bytes: 20971520
+                  request_id: 0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42
+    UnsupportedMediaType:
+      description: Содержимое файла не является поддерживаемым изображением (`UNSUPPORTED_MEDIA_TYPE`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            unsupported:
+              value:
+                error:
+                  code: UNSUPPORTED_MEDIA_TYPE
+                  message: Unsupported image type
+                  details:
+                    detected_mime: application/pdf
+                  request_id: 0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42
+    UnprocessableImage:
+      description: Изображение не декодируется (`IMAGE_DECODE_FAILED`) или форма невалидна (`INVALID_REQUEST`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            decodeFailed:
+              value:
+                error:
+                  code: IMAGE_DECODE_FAILED
+                  message: Cannot decode image
+                  details: {}
+                  request_id: 0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42
+    ServiceBusy:
+      description: Очередь inference заполнена (`SERVICE_BUSY`, повторяемая). Может содержать Retry-After.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+    InferenceFailed:
+      description: Внутренняя ошибка inference (`INFERENCE_FAILED`/`INTERNAL_ERROR`, повторяемая).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+    ModelOutputInvalid:
+      description: |
+        Ответ VLM не удалось разобрать в схему даже после внутренних попыток (`MODEL_OUTPUT_INVALID`, повторяемая).
+        Сервис никогда не возвращает 200 с ответом, не прошедшим `image-analysis.json`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            invalidOutput:
+              value:
+                error:
+                  code: MODEL_OUTPUT_INVALID
+                  message: Vision model returned invalid structured output
+                  details:
+                    prompt_version: image-analysis-v1
+                  request_id: 0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42
+    NotReady:
+      description: Модели еще не загружены или self-check не пройден (`MODEL_NOT_READY`, повторяемая).
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AiError'
+          examples:
+            loading:
+              value:
+                error:
+                  code: MODEL_NOT_READY
+                  message: Models are loading
+                  details:
+                    stage: loading_models
+                  request_id: null
