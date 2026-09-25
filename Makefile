@@ -42,15 +42,16 @@ help:
 # First-time setup: compose up, migrations, seed
 setup: .env
 	@echo "Initializing development environment..."
-	docker-compose up -d postgres redis rabbitmq
+	docker compose up -d postgres redis rabbitmq
 	@echo "Waiting for database..."
 	@sleep 5
-	docker-compose up -d api
+	docker compose up -d api
 	@echo "Running migrations..."
-	docker-compose exec -T api php artisan migrate --force
+	docker compose exec -T api php artisan migrate --force
 	@echo "Seeding database..."
-	docker-compose exec -T api php artisan db:seed
-	docker-compose up -d
+	docker compose exec -T api php artisan db:seed
+	# AI_BASE_URL defaults to the CPU/mock AI container, which lives behind the ai profile.
+	docker compose --profile ai up -d
 	@echo ""
 	@echo "✓ Setup complete!"
 	@echo "Frontend:  http://localhost:3000"
@@ -66,55 +67,55 @@ setup: .env
 
 # Start all services
 up:
-	docker-compose up -d
+	docker compose --profile ai up -d
 
 # Start all services with ./apps/api and ./apps/admin bind-mounted for local
 # editing (docker-compose.dev.yml) — see infra/README.md "Editing source
 # without a rebuild".
 up-dev:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Start with AI CPU profile for testing
 up-ai:
-	docker-compose --profile ai up -d
+	docker compose --profile ai up -d
 
 # Stop all services
 down:
-	docker-compose down
+	docker compose down
 
 # Run migrations
 migrate:
-	docker-compose exec api php artisan migrate
+	docker compose exec api php artisan migrate
 
 # Seed database
 seed:
-	docker-compose exec api php artisan db:seed
+	docker compose exec api php artisan db:seed
 
 # Run all tests
 test: test-backend test-frontend test-ai
 
 test-backend:
-	docker-compose exec api php artisan test
+	docker compose exec api php artisan test
 
 test-frontend:
-	docker-compose exec admin npm run test
+	docker compose exec admin npm run test
 
 test-ai:
-	docker-compose --profile ai exec ai-cpu pytest -v
+	docker compose --profile ai exec ai-cpu pytest -v
 
 # Code quality checks
 lint: lint-backend lint-frontend lint-ai
 
 lint-backend:
-	docker-compose exec api ./vendor/bin/pint --test
-	docker-compose exec api ./vendor/bin/phpstan analyse
+	docker compose exec api ./vendor/bin/pint --test
+	docker compose exec api ./vendor/bin/phpstan analyse
 
 lint-frontend:
-	docker-compose exec admin npm run lint
+	docker compose exec admin npm run lint
 
 lint-ai:
-	docker-compose --profile ai exec ai-cpu flake8 .
-	docker-compose --profile ai exec ai-cpu black --check .
+	docker compose --profile ai exec ai-cpu flake8 .
+	docker compose --profile ai exec ai-cpu black --check .
 
 # Run AI service natively on macOS with MPS (§8, §58). Runs outside Docker
 # (host GPU access) while the rest of the stack stays in containers — see
@@ -147,7 +148,7 @@ _ai-mac-run:
 
 # Run AI service with CPU (for testing without GPU)
 ai-test:
-	docker-compose --profile ai up ai-cpu
+	docker compose --profile ai up ai-cpu
 
 # Deployment check: liveness + readiness of a running AI service (native Mac,
 # ai-cpu container, or a RunPod deployment). Usage:
@@ -172,17 +173,17 @@ ai-health:
 
 # View logs in follow mode
 logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 # View specific service logs
 logs-api:
-	docker-compose logs -f api
+	docker compose logs -f api
 
 logs-ai:
-	docker-compose --profile ai logs -f ai-cpu
+	docker compose --profile ai logs -f ai-cpu
 
 logs-admin:
-	docker-compose logs -f admin
+	docker compose logs -f admin
 
 # Reset all containers and volumes (data loss!)
 reset:
@@ -190,7 +191,7 @@ reset:
 	@echo "All data will be lost."
 	@read -p "Type 'yes' to confirm: " confirm; \
 	if [ "$$confirm" = "yes" ]; then \
-		docker-compose down -v; \
+		docker compose down -v; \
 		echo "✓ Reset complete"; \
 	else \
 		echo "Cancelled"; \
@@ -198,15 +199,15 @@ reset:
 
 # Shell into API container
 shell-api:
-	docker-compose exec api sh
+	docker compose exec api sh
 
 # Shell into admin container
 shell-admin:
-	docker-compose exec admin sh
+	docker compose exec admin sh
 
 # Database shell
 db-shell:
-	docker-compose exec postgres psql -U $${DB_USERNAME} -d $${DB_DATABASE}
+	docker compose exec postgres psql -U $${DB_USERNAME} -d $${DB_DATABASE}
 
 # RabbitMQ management console
 rabbitmq-console:
@@ -219,7 +220,7 @@ health:
 	@curl -s http://localhost/health || echo "❌ API health check failed"
 	@curl -s http://localhost:3000 > /dev/null && echo "✓ Admin UI is up" || echo "❌ Admin UI is down"
 	@curl -s http://localhost:8001/health || echo "❌ AI service health check failed"
-	@docker-compose exec -T postgres pg_isready -U $${DB_USERNAME} > /dev/null && echo "✓ PostgreSQL is up" || echo "❌ PostgreSQL is down"
+	@docker compose exec -T postgres pg_isready -U $${DB_USERNAME} > /dev/null && echo "✓ PostgreSQL is up" || echo "❌ PostgreSQL is down"
 
 # --- Public cloud production profile ---------------------------------------
 # Requires apps/api/Dockerfile and apps/admin/Dockerfile (owned by the
@@ -257,11 +258,11 @@ restore:
 
 # Clean build cache
 clean-build:
-	docker-compose build --no-cache
+	docker compose build --no-cache
 
 # View container status
 ps:
-	docker-compose ps
+	docker compose ps
 
 # Full cleanup (including images)
 fclean: down

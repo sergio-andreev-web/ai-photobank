@@ -88,7 +88,7 @@ isn't available inside Docker Desktop's Linux VM:
 
 ```bash
 # Start services (without AI)
-docker-compose -f docker-compose.yml -f docker-compose.mac.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
 
 # In another terminal: install real-model deps once, then run AI natively
 cd services/ai && pip install -r requirements.txt -r requirements-model.txt && cd ../..
@@ -277,7 +277,7 @@ Service endpoints:
 To run with AI:
 
 ```bash
-docker-compose --profile ai up -d
+docker compose --profile ai up -d
 ```
 
 ## Networking
@@ -368,7 +368,7 @@ make seed
 
 ```bash
 # Via Makefile
-docker-compose exec postgres psql -U photobank -d photobank
+docker compose exec postgres psql -U photobank -d photobank
 
 # Or with make shortcut
 make db-shell
@@ -411,7 +411,7 @@ lsof -i :80
 make logs-api
 
 # Roll back migrations
-docker-compose exec api php artisan migrate:rollback
+docker compose exec api php artisan migrate:rollback
 
 # Re-run setup
 make migrate
@@ -421,7 +421,7 @@ make migrate
 
 ```bash
 # Remove database volume and restart
-docker-compose down -v
+docker compose down -v
 make setup
 ```
 
@@ -429,7 +429,7 @@ make setup
 
 ```bash
 # Check if container is running (ai-cpu profile only — not the Mac native process)
-docker-compose ps ai-cpu
+docker compose ps ai-cpu
 
 # View AI logs
 make logs-ai
