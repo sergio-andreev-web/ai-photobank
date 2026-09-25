@@ -7,23 +7,23 @@
       </div>
 
       <form class="space-y-6" @submit.prevent="handleLogin">
-        <UFormGroup label="Email" name="email" required>
+        <UFormField label="Email" name="email" required>
           <UInput
             v-model="form.email"
             type="email"
             placeholder="admin@example.com"
             autocomplete="email"
           />
-        </UFormGroup>
+        </UFormField>
 
-        <UFormGroup label="Password" name="password" required>
+        <UFormField label="Password" name="password" required>
           <UInput
             v-model="form.password"
             type="password"
             placeholder="••••••••"
             autocomplete="current-password"
           />
-        </UFormGroup>
+        </UFormField>
 
         <div v-if="auth.error" class="rounded-md bg-red-50 p-4 text-sm text-red-700">
           {{ auth.error }}

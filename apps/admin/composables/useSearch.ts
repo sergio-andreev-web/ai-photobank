@@ -4,7 +4,7 @@ export function useSearch() {
   const api = useApi()
 
   async function search(request: SearchRequest) {
-    const { data } = await api.post<SearchResponse>('/admin/search', request)
+    const { data } = await api.post<SearchResponse>('/search', request)
     return data
   }
 

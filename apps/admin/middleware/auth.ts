@@ -1,4 +1,4 @@
-export default defineRouteMiddleware(async (to, from) => {
+export default defineNuxtRouteMiddleware(async (to) => {
   const auth = useAuthStore()
 
   if (!auth.user) {

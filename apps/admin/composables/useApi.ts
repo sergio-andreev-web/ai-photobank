@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import axios from 'axios'
+import type { AxiosInstance, AxiosError } from 'axios'
 import type { ApiError } from '~/types/api'
 
 let instance: AxiosInstance | null = null

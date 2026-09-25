@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-lg bg-red-50 p-4">
+  <div class="rounded-lg bg-red-50 p-4" role="alert">
     <div class="flex items-start">
       <div class="flex-shrink-0">
         <span class="text-2xl">⚠️</span>
@@ -13,6 +13,15 @@
           {{ details }}
         </div>
       </div>
+      <button
+        v-if="dismissible"
+        type="button"
+        class="ml-4 flex-shrink-0 text-red-500 hover:text-red-700"
+        aria-label="Dismiss"
+        @click="$emit('dismiss')"
+      >
+        ✕
+      </button>
     </div>
   </div>
 </template>
@@ -23,9 +32,15 @@ withDefaults(
     title?: string
     message?: string
     details?: string
+    dismissible?: boolean
   }>(),
   {
     title: 'Error',
+    dismissible: true,
   }
 )
+
+defineEmits<{
+  dismiss: []
+}>()
 </script>
