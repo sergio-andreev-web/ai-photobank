@@ -11,9 +11,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
  */
 final readonly class LocalPhotoStorage implements PhotoStorageInterface
 {
-    public function __construct(private Filesystem $disk)
-    {
-    }
+    public function __construct(private Filesystem $disk) {}
 
     public function put(string $storageKey, mixed $contents): void
     {

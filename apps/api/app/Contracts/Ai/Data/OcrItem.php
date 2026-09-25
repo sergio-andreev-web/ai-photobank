@@ -11,8 +11,7 @@ final readonly class OcrItem
     public function __construct(
         public string $text,
         public float $confidence,
-    ) {
-    }
+    ) {}
 
     public static function fromArray(array $data): self
     {

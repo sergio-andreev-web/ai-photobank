@@ -27,5 +27,4 @@ class BatchModelTest extends TestCase
         $this->assertEquals('Test Batch', $batch->name);
         $this->assertEquals('created', $batch->status);
     }
-
 }
