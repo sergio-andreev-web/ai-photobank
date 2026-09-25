@@ -24,6 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // The API is only reached through nginx in the Compose stacks; trust its
+        // X-Forwarded-* headers so the client IP (login throttling) and scheme are real.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             AssignRequestId::class,
         ]);
