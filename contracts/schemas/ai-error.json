@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-photobank.local/contracts/schemas/ai-error.json",
+  "title": "AI service error",
+  "description": "Тело любого не-2xx ответа AI service, включая ошибки валидации FastAPI (стандартный формат FastAPI `{detail: [...]}` должен быть заменен). Форма повторяет стандартную ошибку §51, но вместо trace_id содержит request_id (§64). Каталог кодов и правило повторов — утверждено (ADR-0010).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "x-adr": "ADR-0010",
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "details", "request_id"],
+      "properties": {
+        "code": { "$ref": "#/$defs/AiErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Человекочитаемое сообщение для логов. Laravel не принимает решений по message."
+        },
+        "details": {
+          "type": "object",
+          "description": "Машиночитаемые детали. Не содержит путей файловой системы, секретов и содержимого изображения."
+        },
+        "request_id": {
+          "type": ["string", "null"],
+          "maxLength": 128,
+          "description": "Значение X-Request-ID запроса либо поля request_id; null, если ID не удалось прочитать (например, 401 до разбора тела)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "AiErrorCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Известные коды перечислены в x-known-codes. Клиент обязан обрабатывать неизвестный код как общую ошибку по HTTP-статусу. Повтор: 5xx и 429 — повторяемые, остальные 4xx — нет (утверждено).",
+      "x-known-codes": {
+        "INVALID_REQUEST": { "http": [400, 422], "retryable": false },
+        "UNAUTHORIZED": { "http": [401], "retryable": false },
+        "IMAGE_TOO_LARGE": { "http": [413], "retryable": false },
+        "UNSUPPORTED_MEDIA_TYPE": { "http": [415], "retryable": false },
+        "IMAGE_DECODE_FAILED": { "http": [422], "retryable": false },
+        "SERVICE_BUSY": { "http": [429], "retryable": true },
+        "INFERENCE_FAILED": { "http": [500], "retryable": true },
+        "INTERNAL_ERROR": { "http": [500], "retryable": true },
+        "MODEL_OUTPUT_INVALID": { "http": [502], "retryable": true },
+        "MODEL_NOT_READY": { "http": [503], "retryable": true }
+      }
+    }
+  }
+}

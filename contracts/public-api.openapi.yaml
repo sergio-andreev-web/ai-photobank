@@ -1,0 +1,2566 @@
+openapi: 3.1.0
+info:
+  title: AI Photobank — Public API
+  version: 1.0.0
+  summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
+  description: |
+    Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
+
+    Nuxt обращается только к этому API (§10, §70 Agent B). Frontend не читает БД,
+    файловую систему и AI service, не повторяет логику TagResolver.
+
+    Маркировка:
+    - `x-tz` — операция или поле взяты из ТЗ (номер раздела);
+    - `x-adr` — ссылка на утвержденное архитектурное решение.
+
+    Общие правила (утверждено, ADR-0002):
+    - JSON в UTF-8; даты — RFC 3339 в UTC (`2026-09-25T13:43:55Z`); ID — int64.
+    - Один ресурс возвращается как объект без обертки (как в примерах §26, §49).
+    - Коллекции: `{ "data": [...], "meta": { page, per_page, total, last_page } }`.
+    - Клиент игнорирует неизвестные поля ответа; добавление поля — minor-изменение.
+    - Все ошибки — `{ "error": { code, message, details, trace_id } }` (§51). Логика клиента строится
+      только на `error.code` и HTTP-статусе; неизвестный код обрабатывается как общая ошибка.
+    - Каждый ответ содержит заголовок `X-Request-ID`, равный `error.trace_id` для ошибок (§64).
+  x-contract-status: accepted
+servers:
+  - url: /
+    description: |
+      Same-origin за nginx: Nuxt и Laravel (`/api`, `/sanctum`) под одним origin, поэтому CORS не нужен
+      (утверждено, ADR-0001).
+tags:
+  - name: auth
+  - name: dashboard
+  - name: batches
+  - name: images
+  - name: image-tags
+  - name: tags
+  - name: aliases
+  - name: tag-candidates
+  - name: search
+  - name: media
+security:
+  - sessionCookie: []
+paths:
+  /sanctum/csrf-cookie:
+    get:
+      tags: [auth]
+      operationId: getCsrfCookie
+      summary: Получить XSRF-TOKEN cookie перед login
+      description: |
+        Стандартный маршрут Laravel Sanctum SPA. Устанавливает cookie `XSRF-TOKEN`; клиент передает его значение
+        в заголовке `X-XSRF-TOKEN` во всех изменяющих запросах (POST/PATCH/DELETE).
+      x-adr: ADR-0001
+      security: []
+      responses:
+        '204':
+          description: Cookie установлена.
+          headers:
+            Set-Cookie:
+              description: XSRF-TOKEN=...; Path=/; SameSite=Lax
+              schema:
+                type: string
+  /api/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Вход администратора
+      x-tz: "§50"
+      description: |
+        Создает серверную сессию (cookie-сессия Sanctum SPA, утверждено ADR-0001). Регенерирует ID сессии.
+        Пользователь с ролью, отличной от admin, получает 403 `FORBIDDEN`.
+      security:
+        - xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              admin:
+                value:
+                  email: admin@example.com
+                  password: secret-password
+      responses:
+        '200':
+          description: Вход выполнен; установлена cookie сессии.
+          headers:
+            Set-Cookie:
+              description: Cookie сессии Laravel (HttpOnly; SameSite=Lax; Secure в production).
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              examples:
+                admin:
+                  $ref: '#/components/examples/UserAdmin'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          description: Неверные учетные данные (`INVALID_CREDENTIALS`) или невалидное тело (`VALIDATION_ERROR`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error:
+                      code: INVALID_CREDENTIALS
+                      message: Invalid email or password
+                      details: {}
+                      trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Выход
+      x-tz: "§50"
+      description: Инвалидирует сессию и XSRF-токен. Идемпотентен — без сессии тоже 204 (утверждено, ADR-0001).
+      security:
+        - xsrfToken: []
+      responses:
+        '204':
+          description: Сессия завершена.
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Текущий пользователь
+      x-tz: "§50"
+      responses:
+        '200':
+          description: Пользователь текущей сессии.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              examples:
+                admin:
+                  $ref: '#/components/examples/UserAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /api/admin/dashboard:
+    get:
+      tags: [dashboard]
+      operationId: getDashboard
+      summary: Счетчики для экрана Dashboard
+      description: |
+        Экран Dashboard обязателен (§52), endpoint в §50 не назван. Предлагается отдельный endpoint
+        вместо пяти запросов к спискам (ADR-0003).
+      x-tz: "§52"
+      x-adr: ADR-0003
+      responses:
+        '200':
+          description: Счетчики.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+              examples:
+                sample:
+                  value:
+                    images_count: 1240
+                    tags_count: 318
+                    pending_candidates_count: 27
+                    processing_images_count: 12
+                    failed_images_count: 3
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/batches:
+    get:
+      tags: [batches]
+      operationId: listBatches
+      summary: Список batch-загрузок
+      x-tz: "§50"
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          required: false
+          description: Фильтр по статусу (утверждено).
+          schema:
+            $ref: './schemas/enums.json#/$defs/BatchStatus'
+        - name: sort
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            type: string
+            enum: ['-created_at', created_at]
+            default: '-created_at'
+      responses:
+        '200':
+          description: Страница batch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [batches]
+      operationId: createBatch
+      summary: Создать batch
+      x-tz: "§26"
+      description: Первый шаг загрузки (§26). Новый batch имеет статус `created` и нулевой progress.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+            examples:
+              named:
+                value:
+                  name: Буровая площадка, сентябрь 2026
+      responses:
+        '201':
+          description: Batch создан. Ответ — надмножество примера §26 (`id`, `status`).
+          headers:
+            Location:
+              schema:
+                type: string
+              description: /api/admin/batches/{id}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+              examples:
+                created:
+                  value:
+                    id: 42
+                    name: Буровая площадка, сентябрь 2026
+                    status: created
+                    progress:
+                      total: 0
+                      processed: 0
+                      failed: 0
+                    created_at: '2026-09-25T13:43:55Z'
+                    updated_at: '2026-09-25T13:43:55Z'
+                    completed_at: null
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/batches/{batch}:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    get:
+      tags: [batches]
+      operationId: getBatch
+      summary: Состояние и progress batch (polling)
+      x-tz: "§49"
+      description: |
+        Frontend опрашивает примерно раз в 2 секунды (§49), WebSockets не используются.
+        Правила счетчиков `progress` — утверждено (ADR-0005, contracts/state-machines.md).
+      responses:
+        '200':
+          description: Batch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+              examples:
+                processing:
+                  $ref: '#/components/examples/BatchProcessing'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/BatchNotFound'
+  /api/admin/batches/{batch}/images:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    post:
+      tags: [batches]
+      operationId: uploadBatchImage
+      summary: Загрузить один файл в batch
+      x-tz: "§26, §27, §81"
+      description: |
+        Один файл на запрос (§26); frontend может грузить параллельно 3–5 файлов.
+        Ответ приходит после сохранения оригинала и постановки обработки в очередь; AI не ожидается (§81).
+        Content-based MIME-проверка, санитизация имени, случайное имя хранения (§63).
+        Дубликат по SHA-256 не сохраняется: 409 `IMAGE_ALREADY_EXISTS` с `details.existing_image_id` (§27);
+        frontend показывает файл как skipped duplicate.
+        Имя поля формы, допустимые типы, лимит размера и код 201 — утверждено (ADR-0005).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    Файл изображения. Имя поля `image` — утверждено. Допустимые типы по содержимому (утверждено):
+                    image/jpeg, image/png, image/webp. Лимит размера настраивается (§63), значение по умолчанию —
+                    вопрос ADR-0005.
+            encoding:
+              image:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '201':
+          description: Файл сохранен; обработка поставлена в очередь. Статус изображения `uploaded` или `queued`.
+          x-adr: ADR-0005
+          headers:
+            Location:
+              schema:
+                type: string
+              description: /api/admin/images/{id}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageSummary'
+              examples:
+                uploaded:
+                  $ref: '#/components/examples/ImageUploaded'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/BatchNotFound'
+        '409':
+          description: |
+            `IMAGE_ALREADY_EXISTS` — файл с тем же SHA-256 уже есть (§27; HTTP 409 — утверждено);
+            `BATCH_NOT_ACCEPTING_UPLOADS` — batch уже завершен (утверждено).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                duplicate:
+                  $ref: '#/components/examples/ErrorImageAlreadyExists'
+                batchClosed:
+                  value:
+                    error:
+                      code: BATCH_NOT_ACCEPTING_UPLOADS
+                      message: Batch is not accepting uploads
+                      details:
+                        status: completed
+                      trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+        '413':
+          $ref: '#/components/responses/FileTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/batches/{batch}/complete:
+    parameters:
+      - $ref: '#/components/parameters/BatchId'
+    post:
+      tags: [batches]
+      operationId: completeBatch
+      summary: Сообщить, что все файлы batch отправлены
+      x-tz: "§26"
+      description: |
+        Идемпотентен (§26): повторный вызов возвращает текущее состояние без изменений.
+        Переводит batch в `processing` или сразу в финальный статус, если все изображения уже обработаны
+        (утверждено, ADR-0005). После complete новые файлы не принимаются.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '200':
+          description: Текущее состояние batch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Batch'
+              examples:
+                processing:
+                  $ref: '#/components/examples/BatchProcessing'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/BatchNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images:
+    get:
+      tags: [images]
+      operationId: listImages
+      summary: Библиотека изображений
+      x-tz: "§50, §53"
+      description: |
+        Фильтры §53: tags, status, batch, date. Параметры фильтров и сортировки — утверждено (ADR-0002).
+        Удаленные (soft delete) изображения не возвращаются.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: './schemas/enums.json#/$defs/ImageStatus'
+        - name: batch_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - $ref: '#/components/parameters/TagIdsFilter'
+        - name: created_from
+          in: query
+          required: false
+          description: Включительно, RFC 3339.
+          schema:
+            type: string
+            format: date-time
+        - name: created_to
+          in: query
+          required: false
+          description: Не включительно, RFC 3339.
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            type: string
+            enum: ['-created_at', created_at]
+            default: '-created_at'
+      responses:
+        '200':
+          description: Страница изображений.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/images/{image}:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    get:
+      tags: [images]
+      operationId: getImage
+      summary: Карточка изображения
+      x-tz: "§50, §54"
+      responses:
+        '200':
+          description: Изображение с тегами, последним анализом и состоянием обработки.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetail'
+              examples:
+                ready:
+                  $ref: '#/components/examples/ImageDetailReady'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+    patch:
+      tags: [images]
+      operationId: updateImage
+      summary: Изменить редактируемые поля изображения
+      x-tz: "§50"
+      description: |
+        ТЗ не определяет редактируемые поля. Предложение: только отображаемое имя `original_name`.
+        Caption/OCR не редактируются, так как reprocess их перезаписывает (§76). Теги меняются через
+        /tags (§41). Открытый вопрос ADR-0006.
+      x-adr: ADR-0006
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImagePatchRequest'
+      responses:
+        '200':
+          description: Обновленное изображение.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [images]
+      operationId: deleteImage
+      summary: Удалить изображение (soft delete)
+      x-tz: "§50, §78"
+      description: |
+        Soft delete (§78). Файлы и история анализов не удаляются в MVP (утверждено). Повторный DELETE → 404.
+        Удаленное изображение исключается из списков, поиска, media и счетчиков.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '204':
+          description: Удалено.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/{image}/reprocess:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    post:
+      tags: [images]
+      operationId: reprocessImage
+      summary: Повторный AI-анализ
+      x-tz: "§50, §76"
+      description: |
+        Не удаляет manual tags, suppressions и оригинал; может обновить caption, OCR, AI concepts, AI tags,
+        embedding и создает новую запись image_analyses, не удаляя старые (§76).
+        Если изображение уже `queued`/`processing`, новая задача не создается и возвращается 202 с текущим
+        состоянием (утверждено, ADR-0003).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '202':
+          description: Анализ поставлен в очередь.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/{image}/retry:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    post:
+      tags: [images]
+      operationId: retryImage
+      summary: Повторить упавшую обработку
+      description: |
+        Кнопка Retry после исчерпания попыток (§3, §47) в §50 не названа. Предложение (ADR-0003):
+        доступно только для `status=failed`; перезапускает обработку с первой упавшей задачи
+        processing_tasks со сбросом attempts. Иначе 409 `IMAGE_NOT_RETRYABLE`.
+      x-tz: "§3, §47"
+      x-adr: ADR-0003
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '202':
+          description: Обработка поставлена в очередь, статус `queued`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '409':
+          description: '`IMAGE_NOT_RETRYABLE` — изображение не в статусе failed.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFailed:
+                  value:
+                    error:
+                      code: IMAGE_NOT_RETRYABLE
+                      message: Only failed images can be retried
+                      details:
+                        status: ready
+                      trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/{image}/tags:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    post:
+      tags: [image-tags]
+      operationId: addImageTag
+      summary: Вручную добавить тег
+      x-tz: "§41"
+      description: |
+        Создает или переводит связь в `source=manual`, `locked=true` (§41). Существующая AI-связь
+        с тем же тегом становится manual. Suppression этого тега для изображения снимается (утверждено, ADR-0006).
+        Повторное добавление уже manual тега — 200 без изменений (утверждено). Архивный тег → 409 `TAG_ARCHIVED`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageTagCreateRequest'
+            examples:
+              add:
+                value:
+                  tag_id: 14
+      responses:
+        '200':
+          description: Связь уже была manual; изменений нет.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTag'
+        '201':
+          description: Связь создана или переведена в manual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageTag'
+              examples:
+                manual:
+                  value:
+                    tag:
+                      id: 14
+                      name: Каска
+                      type: object
+                      status: active
+                    source: manual
+                    confidence: null
+                    locked: true
+                    created_at: '2026-09-25T14:00:00Z'
+                    updated_at: '2026-09-25T14:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`IMAGE_NOT_FOUND` или `TAG_NOT_FOUND`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/TagArchived'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/images/{image}/tags/{tag}:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+      - $ref: '#/components/parameters/TagId'
+    delete:
+      tags: [image-tags]
+      operationId: removeImageTag
+      summary: Вручную удалить тег
+      x-tz: "§41"
+      description: |
+        `{tag}` — ID тега. Удаляет связь и создает image_tag_suppressions, чтобы reprocess не вернул тег (§19, §41).
+        ТЗ требует suppression для AI-тега; создавать ее и при удалении manual-тега — утверждено (ADR-0006).
+        Если связи нет — 404 `IMAGE_TAG_NOT_FOUND`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '204':
+          description: Связь удалена, suppression создана.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`IMAGE_NOT_FOUND` или `IMAGE_TAG_NOT_FOUND`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/tags:
+    get:
+      tags: [tags]
+      operationId: listTags
+      summary: Каталог canonical tags
+      x-tz: "§50, §55"
+      description: |
+        Плоский список; дерево строится клиентом по `parent_id` (§55 tree/list). Для загрузки всего дерева
+        допускается per_page до 500 (утверждено, ADR-0002).
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - name: per_page
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: q
+          in: query
+          required: false
+          description: Поиск по name и aliases после нормализации (утверждено).
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: './schemas/enums.json#/$defs/TagType'
+        - name: status
+          in: query
+          required: false
+          description: По умолчанию возвращаются все статусы (утверждено).
+          schema:
+            $ref: './schemas/enums.json#/$defs/TagStatus'
+        - name: parent_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: sort
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            type: string
+            enum: [name, '-name', '-images_count', '-created_at']
+            default: name
+      responses:
+        '200':
+          description: Страница тегов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [tags]
+      operationId: createTag
+      summary: Создать canonical tag
+      x-tz: "§16, §50, §55"
+      description: |
+        Canonical tag создается только действием администратора (§2). Уникальность `normalized_name + type` (§16);
+        конфликт → 409 `TAG_ALREADY_EXISTS` с `details.existing_tag_id`. Правила нормализации и коллизий с aliases —
+        утверждено (ADR-0007). После создания backend регенерирует tag embedding (§21).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreateRequest'
+            examples:
+              helmet:
+                value:
+                  name: Каска
+                  type: object
+                  parent_id: null
+      responses:
+        '201':
+          description: Тег создан.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+              examples:
+                helmet:
+                  $ref: '#/components/examples/TagHelmet'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/TagAlreadyExists'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/TagValidationError'
+  /api/admin/tags/{tag}:
+    parameters:
+      - $ref: '#/components/parameters/TagId'
+    get:
+      tags: [tags]
+      operationId: getTag
+      summary: Тег с aliases
+      x-tz: "§50"
+      responses:
+        '200':
+          description: Тег.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+              examples:
+                helmet:
+                  $ref: '#/components/examples/TagHelmet'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+    patch:
+      tags: [tags]
+      operationId: updateTag
+      summary: Переименовать, сменить родителя/тип, архивировать или восстановить
+      x-tz: "§50, §55"
+      description: |
+        rename/parent/archive из §55. Архивирование и восстановление — через `status` (утверждено, ADR-0007).
+        Родитель не может быть самим тегом или его потомком → 422 `TAG_PARENT_INVALID`.
+        Переименование регенерирует tag embedding (§21).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagPatchRequest'
+            examples:
+              rename:
+                value:
+                  name: Защитная каска
+              archive:
+                value:
+                  status: archived
+      responses:
+        '200':
+          description: Обновленный тег.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+        '409':
+          $ref: '#/components/responses/TagAlreadyExists'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/TagValidationError'
+    delete:
+      tags: [tags]
+      operationId: deleteTag
+      summary: Удалить или архивировать тег
+      x-tz: "§50"
+      description: |
+        Если тег используется, он архивируется вместо удаления (§50) и возвращается 200 с `status=archived`.
+        Если не используется — удаляется физически, 204. Что считается использованием — утверждено (ADR-0007):
+        связи image_tags, дочерние теги или ссылка из tag_candidates.closest_tag_id.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '200':
+          description: Тег используется и архивирован.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '204':
+          description: Тег удален.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/tags/{tag}/aliases:
+    parameters:
+      - $ref: '#/components/parameters/TagId'
+    post:
+      tags: [aliases]
+      operationId: createTagAlias
+      summary: Добавить alias
+      x-tz: "§17, §50"
+      description: |
+        Нормализованный alias уникален глобально и не совпадает с normalized_name другого тега
+        (утверждено, ADR-0007) → иначе 409 `ALIAS_ALREADY_EXISTS` с `details.existing_tag_id`.
+        Регенерирует tag embedding (§21).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AliasCreateRequest'
+            examples:
+              helmet:
+                value:
+                  alias: helmet
+                  locale: en
+      responses:
+        '201':
+          description: Alias создан.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAlias'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+        '409':
+          description: '`ALIAS_ALREADY_EXISTS`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                conflict:
+                  value:
+                    error:
+                      code: ALIAS_ALREADY_EXISTS
+                      message: Alias already belongs to another tag
+                      details:
+                        existing_tag_id: 87
+                      trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/tags/{tag}/aliases/{alias}:
+    parameters:
+      - $ref: '#/components/parameters/TagId'
+      - name: alias
+        in: path
+        required: true
+        description: ID alias (а не текст alias) — утверждено (ADR-0007).
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+    delete:
+      tags: [aliases]
+      operationId: deleteTagAlias
+      summary: Удалить alias
+      x-tz: "§50"
+      description: Регенерирует tag embedding (§21).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '204':
+          description: Alias удален.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`TAG_NOT_FOUND` или `ALIAS_NOT_FOUND` (alias не принадлежит тегу).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/tag-candidates:
+    get:
+      tags: [tag-candidates]
+      operationId: listTagCandidates
+      summary: Очередь модерации кандидатов
+      x-tz: "§40, §50, §56"
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            $ref: './schemas/enums.json#/$defs/TagCandidateStatus'
+            default: pending
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: './schemas/enums.json#/$defs/TagType'
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - name: sort
+          in: query
+          required: false
+          x-adr: ADR-0002
+          schema:
+            type: string
+            enum: ['-occurrences_count', '-created_at', '-similarity']
+            default: '-occurrences_count'
+      responses:
+        '200':
+          description: Страница кандидатов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagCandidateList'
+              examples:
+                pending:
+                  value:
+                    data:
+                      - id: 5
+                        display_name: drilling platform
+                        normalized_name: drilling platform
+                        type: object
+                        status: pending
+                        occurrences_count: 37
+                        closest_tag:
+                          id: 87
+                          name: Буровая
+                          type: object
+                          status: active
+                        similarity: 0.71
+                        sample_images:
+                          - id: 152
+                            thumbnail_url: /api/media/images/152/thumbnail
+                            confidence: 0.88
+                        created_at: '2026-09-20T10:00:00Z'
+                        updated_at: '2026-09-25T13:51:12Z'
+                        resolved_at: null
+                        resolved_by: null
+                        resolved_tag_id: null
+                    meta:
+                      page: 1
+                      per_page: 50
+                      total: 1
+                      last_page: 1
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/tag-candidates/{candidate}/approve:
+    parameters:
+      - $ref: '#/components/parameters/CandidateId'
+    post:
+      tags: [tag-candidates]
+      operationId: approveTagCandidate
+      summary: Создать новый canonical tag из кандидата
+      x-tz: "§2, §40, §50"
+      description: |
+        Атомарно (утверждено, ADR-0008): создает тег (по умолчанию из display_name/type кандидата),
+        переводит кандидата в `created`, привязывает тег ко всем изображениям кандидата с `source=ai`,
+        confidence из tag_candidate_images, `locked=false`, пропуская suppressed пары. Регенерирует tag embedding.
+        Если тег с тем же normalized_name + type уже есть → 409 `TAG_ALREADY_EXISTS` (используйте merge).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateApproveRequest'
+            examples:
+              rename:
+                value:
+                  name: Буровая платформа
+                  type: object
+                  parent_id: null
+      responses:
+        '200':
+          description: Тег создан, изображения привязаны.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateResolution'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CandidateNotFound'
+        '409':
+          description: '`TAG_CANDIDATE_ALREADY_RESOLVED` или `TAG_ALREADY_EXISTS`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                resolved:
+                  $ref: '#/components/examples/ErrorCandidateResolved'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/TagValidationError'
+  /api/admin/tag-candidates/{candidate}/merge:
+    parameters:
+      - $ref: '#/components/parameters/CandidateId'
+    post:
+      tags: [tag-candidates]
+      operationId: mergeTagCandidate
+      summary: Объединить кандидата с существующим тегом
+      x-tz: "§40, §50"
+      description: |
+        Candidate → canonical tag; изображения кандидата получают этот тег (§40) по тем же правилам, что approve.
+        По умолчанию имя кандидата добавляется как alias целевого тега, чтобы следующее обнаружение сработало на
+        stage 2 и не создало кандидата снова (`create_alias`, утверждено ADR-0008). Архивный целевой тег → 409 `TAG_ARCHIVED`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateMergeRequest'
+            examples:
+              merge:
+                value:
+                  tag_id: 87
+                  create_alias: true
+      responses:
+        '200':
+          description: Кандидат объединен.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateResolution'
+              examples:
+                merged:
+                  value:
+                    candidate:
+                      id: 5
+                      display_name: drilling platform
+                      normalized_name: drilling platform
+                      type: object
+                      status: merged
+                      occurrences_count: 37
+                      closest_tag:
+                        id: 87
+                        name: Буровая
+                        type: object
+                        status: active
+                      similarity: 0.71
+                      sample_images: []
+                      created_at: '2026-09-20T10:00:00Z'
+                      updated_at: '2026-09-25T14:10:00Z'
+                      resolved_at: '2026-09-25T14:10:00Z'
+                      resolved_by: 1
+                      resolved_tag_id: 87
+                    tag:
+                      id: 87
+                      name: Буровая
+                      type: object
+                      status: active
+                    attached_images_count: 36
+                    alias_created: true
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`TAG_CANDIDATE_NOT_FOUND` или `TAG_NOT_FOUND`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: '`TAG_CANDIDATE_ALREADY_RESOLVED`, `TAG_ARCHIVED` или `ALIAS_ALREADY_EXISTS` (alias принадлежит другому тегу).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/tag-candidates/{candidate}/reject:
+    parameters:
+      - $ref: '#/components/parameters/CandidateId'
+    post:
+      tags: [tag-candidates]
+      operationId: rejectTagCandidate
+      summary: Отклонить кандидата
+      x-tz: "§40, §50"
+      description: |
+        Переводит в `rejected`. Повторное обнаружение того же normalized_name + type не возвращает кандидата
+        в очередь (утверждено, ADR-0008): увеличивается occurrences_count и сохраняется связь с изображением.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '200':
+          description: Кандидат отклонен.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateResolution'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CandidateNotFound'
+        '409':
+          description: '`TAG_CANDIDATE_ALREADY_RESOLVED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                resolved:
+                  $ref: '#/components/examples/ErrorCandidateResolved'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/search:
+    post:
+      tags: [search]
+      operationId: searchImages
+      summary: Поиск по тегам, семантический или гибридный
+      x-tz: "§42, §43, §44, §45"
+      description: |
+        Режимы §45 (поле `mode` и правила валидации — утверждено, ADR-0004):
+        - `tags` — только `tag_ids` (≥1), AI не вызывается; сортировка created_at desc, id desc.
+        - `semantic` — только `query`; сортировка по similarity desc, затем id asc.
+        - `hybrid` — `query` + `tag_ids` (≥1); теги — жесткий фильтр (§43), query — ранжирование.
+        Несколько tag_ids — изображение должно иметь все (AND); дочерние теги не раскрываются (утверждено).
+        Векторы ищутся только среди embeddings активной версии модели (§77, ADR-0009).
+        `semantic_score = 1 - cosine_distance` возвращается только при `debug=true` (§44).
+        AI недоступен → semantic/hybrid возвращают 503 `AI_SERVICE_UNAVAILABLE` (§46); `tags` продолжает работать.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              hybrid:
+                value:
+                  mode: hybrid
+                  query: рабочие в касках около промышленного оборудования
+                  tag_ids: [14, 87]
+                  page: 1
+                  per_page: 50
+              tags:
+                value:
+                  mode: tags
+                  tag_ids: [12]
+              semanticDebug:
+                value:
+                  mode: semantic
+                  query: мужчина в каске на промышленном объекте
+                  debug: true
+      responses:
+        '200':
+          description: Страница результатов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              examples:
+                semanticDebug:
+                  value:
+                    data:
+                      - id: 152
+                        batch_id: 42
+                        original_name: IMG_0001.jpg
+                        status: ready
+                        tags:
+                          - id: 14
+                            name: Каска
+                            type: object
+                            status: active
+                        urls:
+                          thumbnail: /api/media/images/152/thumbnail
+                          preview: /api/media/images/152/preview
+                          original: /api/media/images/152/original
+                        created_at: '2026-09-25T13:50:00Z'
+                        semantic_score: 0.873
+                    meta:
+                      page: 1
+                      per_page: 50
+                      total: 1
+                      last_page: 1
+                      mode: semantic
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/AiServiceUnavailable'
+  /api/media/images/{image}/{variant}:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+      - name: variant
+        in: path
+        required: true
+        schema:
+          $ref: './schemas/enums.json#/$defs/MediaVariant'
+    get:
+      tags: [media]
+      operationId: getImageMedia
+      summary: Файл изображения (thumbnail, preview, original)
+      x-tz: "§57"
+      description: |
+        Три пути §57 объединены шаблоном `{variant}`. Backend выполняет авторизацию по cookie сессии, поэтому
+        URL можно использовать напрямую в `<img src>` (утверждено, ADR-0001/ADR-0011). В Docker Laravel отвечает
+        заголовком `X-Accel-Redirect` на internal location nginx, тело отдает nginx (§57) — клиент видит обычный
+        ответ с файлом. thumbnail/preview — image/webp (§12); original — исходный MIME, `Content-Disposition: inline`
+        с санитизированным именем. Вариант еще не создан → 404 `MEDIA_NOT_AVAILABLE`.
+        Ошибки возвращаются JSON-ом стандартной формы.
+      responses:
+        '200':
+          description: Содержимое файла.
+          headers:
+            Cache-Control:
+              description: private, max-age=3600 (утверждено).
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+            Content-Disposition:
+              description: Только для original.
+              schema:
+                type: string
+          content:
+            image/webp:
+              schema:
+                type: string
+                contentMediaType: image/webp
+            image/jpeg:
+              schema:
+                type: string
+                contentMediaType: image/jpeg
+            image/png:
+              schema:
+                type: string
+                contentMediaType: image/png
+        '304':
+          description: Не изменилось (If-None-Match).
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`IMAGE_NOT_FOUND` или `MEDIA_NOT_AVAILABLE`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notReady:
+                  value:
+                    error:
+                      code: MEDIA_NOT_AVAILABLE
+                      message: Preview is not generated yet
+                      details:
+                        variant: preview
+                      trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+      description: |
+        Laravel Sanctum SPA cookie-сессия (утверждено, ADR-0001). Имя cookie задается SESSION_COOKIE;
+        клиент не читает ее значение (HttpOnly) и только отправляет с `credentials: include`.
+        Без сессии → 401 `UNAUTHENTICATED`; роль не admin → 403 `FORBIDDEN`.
+      x-adr: ADR-0001
+    xsrfToken:
+      type: apiKey
+      in: header
+      name: X-XSRF-TOKEN
+      description: |
+        Значение cookie `XSRF-TOKEN` (URL-decoded), обязательно для POST/PATCH/DELETE.
+        Неверный/просроченный токен → 419 `CSRF_TOKEN_MISMATCH`; клиент повторно вызывает /sanctum/csrf-cookie.
+      x-adr: ADR-0001
+  headers:
+    RequestId:
+      description: ID запроса (trace_id), совпадает с error.trace_id в ошибках (утверждено, ADR-0002).
+      schema:
+        type: string
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Номер страницы с 1. Страница за пределами — пустой data, не ошибка (утверждено).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      x-adr: ADR-0002
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    BatchId:
+      name: batch
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ImageId:
+      name: image
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TagId:
+      name: tag
+      in: path
+      required: true
+      description: ID тега.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    CandidateId:
+      name: candidate
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TagIdsFilter:
+      name: tag_ids[]
+      in: query
+      required: false
+      description: Изображение должно иметь все указанные теги (AND, утверждено ADR-0004). Формат Laravel `tag_ids[]=1&tag_ids[]=2`.
+      style: form
+      explode: true
+      schema:
+        type: array
+        maxItems: 20
+        uniqueItems: true
+        items:
+          type: integer
+          format: int64
+          minimum: 1
+  schemas:
+    Id:
+      type: integer
+      format: int64
+      minimum: 1
+    DateTime:
+      type: string
+      format: date-time
+    ErrorCode:
+      type: string
+      pattern: '^[A-Z][A-Z0-9_]*$'
+      description: |
+        Стабильный машиночитаемый код (§51). Каталог и HTTP-статусы — в contracts/README.md.
+        Из ТЗ: IMAGE_NOT_FOUND, IMAGE_ALREADY_EXISTS, AI_SERVICE_UNAVAILABLE. Остальные — утверждено.
+        Клиент обязан обрабатывать неизвестный код как общую ошибку.
+      examples: [IMAGE_NOT_FOUND]
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      x-tz: "§51"
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details, trace_id]
+          properties:
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+              description: Для людей и логов; frontend не парсит (§51).
+            details:
+              type: object
+              description: |
+                Детали по коду. Для `VALIDATION_ERROR` — `fields`: объект «имя поля → массив сообщений»
+                (утверждено, ADR-0002). Для `IMAGE_ALREADY_EXISTS` — `existing_image_id` (§27).
+            trace_id:
+              type: string
+              minLength: 1
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total, last_page]
+      x-adr: ADR-0002
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        last_page:
+          type: integer
+          minimum: 1
+          description: 1 при total = 0.
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: './schemas/enums.json#/$defs/UserRole'
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 1
+          maxLength: 255
+    Dashboard:
+      type: object
+      required: [images_count, tags_count, pending_candidates_count, processing_images_count, failed_images_count]
+      x-tz: "§52"
+      x-adr: ADR-0003
+      properties:
+        images_count:
+          type: integer
+          minimum: 0
+          description: Все не удаленные изображения.
+        tags_count:
+          type: integer
+          minimum: 0
+          description: Теги со статусом active.
+        pending_candidates_count:
+          type: integer
+          minimum: 0
+        processing_images_count:
+          type: integer
+          minimum: 0
+          description: Изображения в статусах uploaded, queued, processing.
+        failed_images_count:
+          type: integer
+          minimum: 0
+    BatchProgress:
+      type: object
+      required: [total, processed, failed]
+      x-tz: "§49"
+      description: |
+        Правила (утверждено, ADR-0005): total — число сохраненных изображений batch (дубликаты не считаются);
+        processed — изображения в финальном статусе (ready или failed); failed — изображения в статусе failed.
+        Инвариант: 0 ≤ failed ≤ processed ≤ total.
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        processed:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+    Batch:
+      type: object
+      required: [id, name, status, progress, created_at, updated_at, completed_at]
+      x-tz: "§14, §26, §49"
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: [string, 'null']
+          maxLength: 255
+        status:
+          $ref: './schemas/enums.json#/$defs/BatchStatus'
+        progress:
+          $ref: '#/components/schemas/BatchProgress'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+    BatchCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: [string, 'null']
+          maxLength: 255
+    BatchList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Batch'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    TagRef:
+      type: object
+      required: [id, name, type, status]
+      description: Краткое представление тега во вложенных ресурсах.
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        status:
+          $ref: './schemas/enums.json#/$defs/TagStatus'
+    ImageUrls:
+      type: object
+      required: [thumbnail, preview, original]
+      x-adr: ADR-0011
+      description: Относительные URL media endpoints (§57). null, если вариант еще не создан.
+      properties:
+        thumbnail:
+          type: [string, 'null']
+        preview:
+          type: [string, 'null']
+        original:
+          type: string
+    ImageSummary:
+      type: object
+      required: [id, batch_id, original_name, status, tags, urls, created_at]
+      x-tz: "§53"
+      description: Элемент grid (§53) — thumbnail, status, tags, created date.
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        batch_id:
+          $ref: '#/components/schemas/Id'
+        original_name:
+          type: string
+          maxLength: 1024
+          description: Санитизированное исходное имя файла (§63).
+        status:
+          $ref: './schemas/enums.json#/$defs/ImageStatus'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagRef'
+        urls:
+          $ref: '#/components/schemas/ImageUrls'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+    ImageTag:
+      type: object
+      required: [tag, source, confidence, locked, created_at, updated_at]
+      x-tz: "§18"
+      properties:
+        tag:
+          $ref: '#/components/schemas/TagRef'
+        source:
+          $ref: './schemas/enums.json#/$defs/ImageTagSource'
+        confidence:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        locked:
+          type: boolean
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+    ImageAnalysis:
+      type: object
+      required: [id, vision_model, vision_model_version, embedding_model, embedding_model_version, prompt_version, caption, concepts, ocr, processing_ms, created_at]
+      x-tz: "§22, §54"
+      description: Последний анализ (AI concepts на карточке, §54). raw_response не отдается (утверждено).
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        vision_model:
+          type: string
+        vision_model_version:
+          type: [string, 'null']
+        embedding_model:
+          type: string
+        embedding_model_version:
+          type: [string, 'null']
+        prompt_version:
+          type: string
+        caption:
+          type: [string, 'null']
+        concepts:
+          $ref: './schemas/concepts.json'
+        ocr:
+          type: array
+          items:
+            $ref: './schemas/image-analysis.json#/$defs/OcrItem'
+        processing_ms:
+          type: [integer, 'null']
+          minimum: 0
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+    ProcessingTask:
+      type: object
+      required: [type, status, attempts, max_attempts, error_code, error_message, started_at, finished_at]
+      x-tz: "§25"
+      properties:
+        type:
+          $ref: './schemas/enums.json#/$defs/ProcessingTaskType'
+        status:
+          $ref: './schemas/enums.json#/$defs/ProcessingTaskStatus'
+        attempts:
+          type: integer
+          minimum: 0
+        max_attempts:
+          type: integer
+          minimum: 1
+        error_code:
+          type: [string, 'null']
+          maxLength: 64
+        error_message:
+          type: [string, 'null']
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+    ImageDetail:
+      type: object
+      required: [id, batch_id, original_name, status, urls, created_at, updated_at, mime_type, extension, width, height, file_size, sha256, caption, ocr_text, error_code, error_message, image_tags, latest_analysis, processing_tasks]
+      x-tz: "§15, §54"
+      description: |
+        Карточка (§54): preview, original filename, dimensions, size, caption, OCR, tags, AI concepts, processing state.
+        storage_key/preview_key/thumbnail_key наружу не отдаются (§11, §57).
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        batch_id:
+          $ref: '#/components/schemas/Id'
+        original_name:
+          type: string
+          maxLength: 1024
+        status:
+          $ref: './schemas/enums.json#/$defs/ImageStatus'
+        urls:
+          $ref: '#/components/schemas/ImageUrls'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        mime_type:
+          type: string
+          maxLength: 100
+        extension:
+          type: string
+          maxLength: 16
+        width:
+          type: [integer, 'null']
+          minimum: 1
+          description: null до завершения этапа metadata (утверждено).
+        height:
+          type: [integer, 'null']
+          minimum: 1
+        file_size:
+          type: integer
+          minimum: 0
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        caption:
+          type: [string, 'null']
+        ocr_text:
+          type: [string, 'null']
+        error_code:
+          type: [string, 'null']
+          maxLength: 64
+          description: Код последней ошибки обработки (каталог — contracts/README.md).
+        error_message:
+          type: [string, 'null']
+        image_tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageTag'
+        latest_analysis:
+          oneOf:
+            - $ref: '#/components/schemas/ImageAnalysis'
+            - type: 'null'
+        processing_tasks:
+          type: array
+          description: Последняя задача каждого типа.
+          items:
+            $ref: '#/components/schemas/ProcessingTask'
+    ImageList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageSummary'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ImagePatchRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      x-adr: ADR-0006
+      properties:
+        original_name:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    ImageTagCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [tag_id]
+      properties:
+        tag_id:
+          $ref: '#/components/schemas/Id'
+    TagAlias:
+      type: object
+      required: [id, tag_id, alias, normalized_alias, locale, created_at, updated_at]
+      x-tz: "§17"
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        tag_id:
+          $ref: '#/components/schemas/Id'
+        alias:
+          type: string
+          maxLength: 255
+        normalized_alias:
+          type: string
+          maxLength: 255
+        locale:
+          type: [string, 'null']
+          maxLength: 10
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+    Tag:
+      type: object
+      required: [id, parent_id, name, slug, normalized_name, type, status, images_count, aliases, created_at, updated_at]
+      x-tz: "§16, §55"
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        parent_id:
+          type: [integer, 'null']
+          format: int64
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          maxLength: 255
+        normalized_name:
+          type: string
+          maxLength: 255
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        status:
+          $ref: './schemas/enums.json#/$defs/TagStatus'
+        images_count:
+          type: integer
+          minimum: 0
+          description: Число не удаленных изображений с этим тегом (§55).
+        aliases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagAlias'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+    TagCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, type]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '\S'
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        parent_id:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+    TagPatchRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '\S'
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        parent_id:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+        status:
+          $ref: './schemas/enums.json#/$defs/TagStatus'
+    TagList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    AliasCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [alias]
+      properties:
+        alias:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '\S'
+        locale:
+          type: [string, 'null']
+          maxLength: 10
+          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'
+    CandidateSampleImage:
+      type: object
+      required: [id, thumbnail_url, confidence]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        thumbnail_url:
+          type: [string, 'null']
+        confidence:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+    TagCandidate:
+      type: object
+      required: [id, display_name, normalized_name, type, status, occurrences_count, closest_tag, similarity, sample_images, created_at, updated_at, resolved_at, resolved_by, resolved_tag_id]
+      x-tz: "§23, §40, §56"
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        display_name:
+          type: string
+        normalized_name:
+          type: string
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        status:
+          $ref: './schemas/enums.json#/$defs/TagCandidateStatus'
+        occurrences_count:
+          type: integer
+          minimum: 0
+        closest_tag:
+          oneOf:
+            - $ref: '#/components/schemas/TagRef'
+            - type: 'null'
+        similarity:
+          type: [number, 'null']
+          minimum: -1
+          maximum: 1
+        sample_images:
+          type: array
+          maxItems: 8
+          description: До 8 изображений, по убыванию confidence (утверждено).
+          items:
+            $ref: '#/components/schemas/CandidateSampleImage'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        resolved_at:
+          type: [string, 'null']
+          format: date-time
+        resolved_by:
+          type: [integer, 'null']
+          format: int64
+          description: ID пользователя.
+        resolved_tag_id:
+          type: [integer, 'null']
+          format: int64
+          x-adr: ADR-0008
+          description: ID созданного или выбранного тега после approve/merge; null до решения или при reject.
+    TagCandidateList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagCandidate'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    CandidateApproveRequest:
+      type: object
+      additionalProperties: false
+      x-adr: ADR-0008
+      description: Все поля необязательны; по умолчанию name = display_name, type = type кандидата.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '\S'
+        type:
+          $ref: './schemas/enums.json#/$defs/TagType'
+        parent_id:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+    CandidateMergeRequest:
+      type: object
+      additionalProperties: false
+      required: [tag_id]
+      properties:
+        tag_id:
+          $ref: '#/components/schemas/Id'
+        create_alias:
+          type: boolean
+          default: true
+          x-adr: ADR-0008
+    CandidateResolution:
+      type: object
+      required: [candidate, tag, attached_images_count, alias_created]
+      x-adr: ADR-0008
+      properties:
+        candidate:
+          $ref: '#/components/schemas/TagCandidate'
+        tag:
+          description: Созданный/целевой тег; null для reject.
+          oneOf:
+            - $ref: '#/components/schemas/TagRef'
+            - type: 'null'
+        attached_images_count:
+          type: integer
+          minimum: 0
+          description: Сколько изображений получили тег; 0 для reject.
+        alias_created:
+          type: boolean
+    SearchRequestBase:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        debug:
+          type: boolean
+          default: false
+          description: Включает semantic_score в результатах (§44).
+    SearchQuery:
+      type: string
+      minLength: 1
+      maxLength: 1000
+      pattern: '\S'
+      description: Свободный текст; пробельная строка невалидна (утверждено).
+    SearchTagIds:
+      type: array
+      minItems: 1
+      maxItems: 20
+      uniqueItems: true
+      items:
+        $ref: '#/components/schemas/Id'
+    SearchRequest:
+      x-tz: "§42, §45"
+      x-adr: ADR-0004
+      oneOf:
+        - $ref: '#/components/schemas/SearchTagsRequest'
+        - $ref: '#/components/schemas/SearchSemanticRequest'
+        - $ref: '#/components/schemas/SearchHybridRequest'
+      discriminator:
+        propertyName: mode
+        mapping:
+          tags: '#/components/schemas/SearchTagsRequest'
+          semantic: '#/components/schemas/SearchSemanticRequest'
+          hybrid: '#/components/schemas/SearchHybridRequest'
+    SearchTagsRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequestBase'
+      type: object
+      required: [mode, tag_ids]
+      properties:
+        mode:
+          const: tags
+        tag_ids:
+          $ref: '#/components/schemas/SearchTagIds'
+        page: true
+        per_page: true
+        debug: true
+      additionalProperties: false
+    SearchSemanticRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequestBase'
+      type: object
+      required: [mode, query]
+      properties:
+        mode:
+          const: semantic
+        query:
+          $ref: '#/components/schemas/SearchQuery'
+        page: true
+        per_page: true
+        debug: true
+      additionalProperties: false
+    SearchHybridRequest:
+      allOf:
+        - $ref: '#/components/schemas/SearchRequestBase'
+      type: object
+      required: [mode, query, tag_ids]
+      properties:
+        mode:
+          const: hybrid
+        query:
+          $ref: '#/components/schemas/SearchQuery'
+        tag_ids:
+          $ref: '#/components/schemas/SearchTagIds'
+        page: true
+        per_page: true
+        debug: true
+      additionalProperties: false
+    SearchResultItem:
+      allOf:
+        - $ref: '#/components/schemas/ImageSummary'
+        - type: object
+          properties:
+            semantic_score:
+              type: number
+              minimum: -1
+              maximum: 1
+              description: Только при debug=true в режимах semantic/hybrid (§44).
+    SearchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/PaginationMeta'
+            - type: object
+              required: [mode]
+              properties:
+                mode:
+                  $ref: './schemas/enums.json#/$defs/SearchMode'
+  responses:
+    Unauthenticated:
+      description: Нет действующей сессии (`UNAUTHENTICATED`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthenticated:
+              value:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Unauthenticated
+                  details: {}
+                  trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    Forbidden:
+      description: Пользователь не admin (`FORBIDDEN`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    CsrfTokenMismatch:
+      description: Неверный или отсутствующий X-XSRF-TOKEN (`CSRF_TOKEN_MISMATCH`, HTTP 419 Laravel).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Невалидный запрос (`VALIDATION_ERROR`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: The given data was invalid
+                  details:
+                    fields:
+                      query: [The query field is required.]
+                  trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    TagValidationError:
+      description: '`VALIDATION_ERROR` или `TAG_PARENT_INVALID` (цикл, сам тег, архивный родитель).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Превышен лимит попыток (`TOO_MANY_REQUESTS`).
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BatchNotFound:
+      description: '`BATCH_NOT_FOUND`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ImageNotFound:
+      description: '`IMAGE_NOT_FOUND` (§51), включая soft-deleted.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: IMAGE_NOT_FOUND
+                  message: Image not found
+                  details: {}
+                  trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    TagNotFound:
+      description: '`TAG_NOT_FOUND`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    CandidateNotFound:
+      description: '`TAG_CANDIDATE_NOT_FOUND`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TagAlreadyExists:
+      description: '`TAG_ALREADY_EXISTS` — normalized_name + type занят (§16) или совпадает с alias (ADR-0007).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            exists:
+              value:
+                error:
+                  code: TAG_ALREADY_EXISTS
+                  message: Tag already exists
+                  details:
+                    existing_tag_id: 14
+                  trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    TagArchived:
+      description: '`TAG_ARCHIVED` — архивный тег нельзя назначить.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FileTooLarge:
+      description: '`FILE_TOO_LARGE` — превышен настраиваемый лимит (§63).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: '`UNSUPPORTED_MEDIA_TYPE` — содержимое не является допустимым изображением (§63).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AiServiceUnavailable:
+      description: |
+        `AI_SERVICE_UNAVAILABLE` (§46) — AI недоступен или не готов; либо `EMBEDDING_VERSION_MISMATCH` —
+        модель текстовых embeddings не совпадает с активной версией image embeddings (утверждено, ADR-0009).
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            aiDown:
+              $ref: '#/components/examples/ErrorAiUnavailable'
+  examples:
+    UserAdmin:
+      value:
+        id: 1
+        name: Administrator
+        email: admin@example.com
+        role: admin
+    BatchProcessing:
+      summary: Пример §49
+      value:
+        id: 42
+        name: null
+        status: processing
+        progress:
+          total: 500
+          processed: 317
+          failed: 2
+        created_at: '2026-09-25T13:43:55Z'
+        updated_at: '2026-09-25T14:05:10Z'
+        completed_at: null
+    ImageUploaded:
+      value:
+        id: 153
+        batch_id: 42
+        original_name: IMG_0002.jpg
+        status: queued
+        tags: []
+        urls:
+          thumbnail: null
+          preview: null
+          original: /api/media/images/153/original
+        created_at: '2026-09-25T13:50:02Z'
+    ImageDetailReady:
+      value:
+        id: 152
+        batch_id: 42
+        original_name: IMG_0001.jpg
+        status: ready
+        urls:
+          thumbnail: /api/media/images/152/thumbnail
+          preview: /api/media/images/152/preview
+          original: /api/media/images/152/original
+        created_at: '2026-09-25T13:50:00Z'
+        updated_at: '2026-09-25T13:51:12Z'
+        mime_type: image/jpeg
+        extension: jpg
+        width: 4032
+        height: 3024
+        file_size: 3481122
+        sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        caption: Two engineers wearing helmets near industrial equipment.
+        ocr_text: ЛУКОЙЛ
+        error_code: null
+        error_message: null
+        image_tags:
+          - tag:
+              id: 7
+              name: Инженер
+              type: person
+              status: active
+            source: ai
+            confidence: 0.96
+            locked: false
+            created_at: '2026-09-25T13:51:12Z'
+            updated_at: '2026-09-25T13:51:12Z'
+          - tag:
+              id: 14
+              name: Каска
+              type: object
+              status: active
+            source: manual
+            confidence: null
+            locked: true
+            created_at: '2026-09-25T14:00:00Z'
+            updated_at: '2026-09-25T14:00:00Z'
+        latest_analysis:
+          id: 301
+          vision_model: Qwen/Qwen3-VL-4B-Instruct
+          vision_model_version: null
+          embedding_model: google/siglip2-so400m-patch14-384
+          embedding_model_version: null
+          prompt_version: image-analysis-v1
+          caption: Two engineers wearing helmets near industrial equipment.
+          concepts:
+            - type: person
+              label: engineer
+              confidence: 0.96
+            - type: object
+              label: protective helmet
+              confidence: 0.97
+          ocr:
+            - text: ЛУКОЙЛ
+              confidence: 0.91
+          processing_ms: 4812
+          created_at: '2026-09-25T13:51:10Z'
+        processing_tasks:
+          - type: ai_analysis
+            status: succeeded
+            attempts: 1
+            max_attempts: 3
+            error_code: null
+            error_message: null
+            started_at: '2026-09-25T13:51:05Z'
+            finished_at: '2026-09-25T13:51:10Z'
+    TagHelmet:
+      value:
+        id: 14
+        parent_id: null
+        name: Каска
+        slug: kaska
+        normalized_name: каска
+        type: object
+        status: active
+        images_count: 128
+        aliases:
+          - id: 3
+            tag_id: 14
+            alias: helmet
+            normalized_alias: helmet
+            locale: en
+            created_at: '2026-09-25T12:00:00Z'
+            updated_at: '2026-09-25T12:00:00Z'
+        created_at: '2026-09-25T12:00:00Z'
+        updated_at: '2026-09-25T12:00:00Z'
+    CandidateDrillingPlatform:
+      value:
+        id: 5
+        display_name: drilling platform
+        normalized_name: drilling platform
+        type: object
+        status: pending
+        occurrences_count: 37
+        closest_tag:
+          id: 87
+          name: Буровая
+          type: object
+          status: active
+        similarity: 0.71
+        sample_images:
+          - id: 152
+            thumbnail_url: /api/media/images/152/thumbnail
+            confidence: 0.88
+        created_at: '2026-09-20T10:00:00Z'
+        updated_at: '2026-09-25T13:51:12Z'
+        resolved_at: null
+        resolved_by: null
+    ErrorImageAlreadyExists:
+      summary: Пример §27 (+ trace_id §51)
+      value:
+        error:
+          code: IMAGE_ALREADY_EXISTS
+          message: Image already exists
+          details:
+            existing_image_id: 152
+          trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    ErrorCandidateResolved:
+      value:
+        error:
+          code: TAG_CANDIDATE_ALREADY_RESOLVED
+          message: Candidate is already resolved
+          details:
+            status: merged
+          trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    ErrorAiUnavailable:
+      value:
+        error:
+          code: AI_SERVICE_UNAVAILABLE
+          message: AI service is unavailable
+          details: {}
+          trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f

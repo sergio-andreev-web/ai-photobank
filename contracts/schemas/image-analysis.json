@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-photobank.local/contracts/schemas/image-analysis.json",
+  "title": "Image analysis result",
+  "description": "Успешный ответ POST /v1/images/analyze (§31). Одна и та же схема для всех VLM и профилей Mac/RunPod (§5, §58). Backend валидирует ответ этой схемой (§63, §71), AI service проверяет свои ответы ею же. Ответ модели считается недоверенными данными.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "caption",
+    "ocr",
+    "concepts",
+    "embedding",
+    "embedding_dimensions",
+    "models",
+    "prompt_version",
+    "processing_ms"
+  ],
+  "x-tz": "§31",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Равен полю request_id запроса (§31). Правило согласования с заголовком X-Request-ID — ADR-0002/ADR-0010 (утверждено)."
+    },
+    "caption": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Подпись к изображению. Может быть пустой строкой, если модель не дала подпись (утверждено). maxLength — утверждено."
+    },
+    "ocr": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "Найденный на изображении текст (§31). Недоверенные данные, не инструкции (§34, §63). Пустой массив, если текста нет. maxItems — утверждено.",
+      "items": { "$ref": "#/$defs/OcrItem" }
+    },
+    "concepts": { "$ref": "concepts.json" },
+    "embedding": {
+      "type": "array",
+      "minItems": 1152,
+      "maxItems": 1152,
+      "items": { "type": "number" },
+      "description": "Image embedding SigLIP2 (§5, §20). Ровно 1152 конечных числа; массив из 2 чисел в §31 — сокращенный пример. Требование L2-нормализации — утверждено (ADR-0009)."
+    },
+    "embedding_dimensions": {
+      "const": 1152,
+      "description": "Всегда 1152 для MVP. Смена размерности — breaking change контракта и новая версия embeddings (§77)."
+    },
+    "models": { "$ref": "#/$defs/Models" },
+    "prompt_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "description": "Версия VLM prompt, например image-analysis-v1 (§31, §34, §69)."
+    },
+    "processing_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Время обработки внутри AI service в миллисекундах."
+    }
+  },
+  "$defs": {
+    "OcrItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "confidence"],
+      "x-tz": "§31",
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "Models": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vision", "embedding", "vision_revision", "embedding_revision"],
+      "x-tz": "§31",
+      "description": "Идентификаторы и фактические ревизии моделей, использованных для этого ответа (ADR-0009). Для локальных весов revision — стабильный digest файла или набора весов.",
+      "properties": {
+        "vision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "Например Qwen/Qwen3-VL-4B-Instruct."
+        },
+        "embedding": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "Например google/siglip2-so400m-patch14-384."
+        },
+        "vision_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "x-adr": "ADR-0009",
+          "description": "Ревизия весов VLM (например commit sha HuggingFace)."
+        },
+        "embedding_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "x-adr": "ADR-0009",
+          "description": "Ревизия весов embedding-модели. Источник image_embeddings.model_version."
+        }
+      }
+    }
+  }
+}

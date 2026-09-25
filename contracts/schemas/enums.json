@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-photobank.local/contracts/schemas/enums.json",
+  "title": "AI Photobank shared enums",
+  "description": "Общие enum для public API, AI API и БД. x-tz указывает раздел ТЗ, x-adr — принятое архитектурное решение.",
+  "$defs": {
+    "UserRole": {
+      "type": "string",
+      "enum": ["admin"],
+      "x-tz": "§13"
+    },
+    "BatchStatus": {
+      "type": "string",
+      "enum": ["created", "uploading", "processing", "completed", "completed_with_errors", "failed"],
+      "x-tz": "§14",
+      "description": "Переходы описаны в contracts/state-machines.md (утверждено, ADR-0005)."
+    },
+    "ImageStatus": {
+      "type": "string",
+      "enum": ["uploaded", "queued", "processing", "ready", "failed"],
+      "x-tz": "§15"
+    },
+    "TagType": {
+      "type": "string",
+      "enum": ["object", "person", "activity", "scene", "location", "season", "weather", "brand", "event", "color", "concept", "other"],
+      "x-tz": "§16"
+    },
+    "TagStatus": {
+      "type": "string",
+      "enum": ["active", "archived"],
+      "x-tz": "§16"
+    },
+    "ImageTagSource": {
+      "type": "string",
+      "enum": ["ai", "manual", "import"],
+      "x-tz": "§18"
+    },
+    "TagCandidateStatus": {
+      "type": "string",
+      "enum": ["pending", "created", "merged", "rejected"],
+      "x-tz": "§23"
+    },
+    "ProcessingTaskType": {
+      "type": "string",
+      "enum": ["metadata", "variants", "ai_analysis", "tag_resolution", "finalize"],
+      "x-tz": "§25"
+    },
+    "ProcessingTaskStatus": {
+      "type": "string",
+      "enum": ["queued", "processing", "succeeded", "failed"],
+      "x-tz": "§25"
+    },
+    "SearchMode": {
+      "type": "string",
+      "enum": ["tags", "semantic", "hybrid"],
+      "x-tz": "§45",
+      "description": "Значения из §45. То, что поле называется `mode` и является обязательным, — утверждено (ADR-0004)."
+    },
+    "AiDevice": {
+      "type": "string",
+      "enum": ["cuda", "mps", "cpu"],
+      "x-tz": "§30, §60",
+      "description": "Фактическое устройство inference. Значение `auto` допустимо только в конфигурации (§60) и в ответах не возвращается."
+    },
+    "MediaVariant": {
+      "type": "string",
+      "enum": ["thumbnail", "preview", "original"],
+      "x-tz": "§57"
+    }
+  }
+}
