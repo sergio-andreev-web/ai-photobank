@@ -177,6 +177,17 @@
       "instructions": "ADR-0010 требует ошибку конфигурации при старте AI service в production, если AI_SERVICE_API_KEY пустой. Сейчас security.py при пустом ключе отключает проверку для любого окружения. Исправь только services/ai/**: сохрани возможность пустого ключа в development, запрети её на startup при AI_ENVIRONMENT=production, добавь детерминированные тесты обоих режимов. Сверь поведение /health и /ready с контрактом. Не меняй contracts/** или infra/**."
     },
     {
+      "id": "ai-vlm-robustness",
+      "title": "Устойчивость реальных моделей на MPS и обрезанный вывод VLM",
+      "module": "ai",
+      "kind": "complex_technical",
+      "depends_on": [
+        "ai-models",
+        "ai-production-key"
+      ],
+      "instructions": "Две ошибки найдены при локальном прогоне Qwen3-VL-4B и SigLIP2 на Mac (MPS, transformers 5.17). (1) Transformers 5.x грузит веса пулом потоков (core_model_loading, ThreadPoolExecutor); на MPS это периодически роняет процесс segfault'ом при копировании тензоров. При DEVICE=mps выставляй HF_DEACTIVATE_ASYNC_LOAD=1 до загрузки моделей, не перетирая явно заданное значение. (2) Если вывод VLM обрезан по AI_VLM_MAX_NEW_TOKENS, parse_vision_output молча возвращает пустой анализ: _extract_json_object берёт вложенный объект concept вместо корневого (2 из 21 реальных фото). Принимай только корневой объект с полями анализа; при обрезанном выводе извлекай caption и полностью сформированные concepts из начала ответа; если пригодного нет — VisionOutputInvalid (внутренний повтор, затем 502 MODEL_OUTPUT_INVALID по ADR-0010). Пустые caption и concepts одновременно не должны уходить успешным ответом. Добавь детерминированные тесты на обрезанный вывод, вложенные объекты и пустой анализ. Не меняй contracts/** и prompt_version; зависимости не добавляй."
+    },
+    {
       "id": "infrastructure-base",
       "title": "Базовый Compose, env и Makefile",
       "module": "infra",
