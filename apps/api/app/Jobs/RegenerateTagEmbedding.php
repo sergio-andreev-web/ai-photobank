@@ -6,6 +6,7 @@ use App\Contracts\Ai\Exceptions\AiException;
 use App\Contracts\Ai\Exceptions\InvalidAiResponseException;
 use App\Services\Tagging\TagEmbeddingRegenerator;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -19,7 +20,7 @@ use Illuminate\Queue\SerializesModels;
  * Transient AI failures (§46, §47) are retried with the §47 delays; a
  * non-retryable AI error or contract violation fails at once (ADR-0010).
  */
-class RegenerateTagEmbedding implements ShouldQueue
+class RegenerateTagEmbedding implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -29,6 +30,11 @@ class RegenerateTagEmbedding implements ShouldQueue
     public int $tries = 4;
 
     public int $timeout;
+
+    public function uniqueId(): string
+    {
+        return (string) $this->tagId;
+    }
 
     public function __construct(public readonly int $tagId)
     {
