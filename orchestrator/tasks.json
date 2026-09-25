@@ -7,7 +7,11 @@
       "module": "contracts",
       "kind": "architecture",
       "depends_on": [],
-      "required_outputs": ["contracts/public-api.openapi.yaml", "contracts/ai-api.openapi.yaml", "contracts/schemas/image-analysis.json"],
+      "required_outputs": [
+        "contracts/public-api.openapi.yaml",
+        "contracts/ai-api.openapi.yaml",
+        "contracts/schemas/image-analysis.json"
+      ],
       "instructions": "Создай проекты OpenAPI и JSON Schema из однозначных требований ТЗ. Для пробелов из docs/development-plan.md подготовь варианты решений в ADR и перечисли вопросы координатору; не объявляй свои предположения утвержденным контрактом. Не реализуй сервисы."
     },
     {
@@ -15,7 +19,9 @@
       "title": "Примеры и фикстуры по утвержденным контрактам",
       "module": "contracts",
       "kind": "simple_contract",
-      "depends_on": ["contracts-v1"],
+      "depends_on": [
+        "contracts-v1"
+      ],
       "instructions": "Добавь положительные и ошибочные примеры и детерминированные фикстуры для готовых OpenAPI и JSON Schema. Валидируй примеры по схемам. Не меняй поля, enum и поведение API; при противоречии остановись и передай вопрос владельцу контракта."
     },
     {
@@ -23,7 +29,9 @@
       "title": "Каркас Laravel и интерфейсы модулей",
       "module": "backend",
       "kind": "standard",
-      "depends_on": ["contract-fixtures"],
+      "depends_on": [
+        "contracts-v1"
+      ],
       "instructions": "Создай каркас Laravel, конфигурацию, базовые интерфейсы хранилища и AI-клиента по утвержденным контрактам. Подготовь тестовую среду без GPU. Не реализуй доменные правила, поиск или очередь."
     },
     {
@@ -31,7 +39,9 @@
       "title": "Простые миграции и модели Laravel",
       "module": "backend",
       "kind": "migration_simple",
-      "depends_on": ["backend-bootstrap"],
+      "depends_on": [
+        "backend-bootstrap"
+      ],
       "instructions": "Создай только простые таблицы и модели пользователей и batch upload строго по утвержденной схеме: поля, FK, unique, индексы, rollback. Не добавляй pgvector, taxonomy, жизненный цикл image или бизнес-логику. Если утвержденная схема отсутствует или сложнее этого объема, остановись и уточни границу задачи."
     },
     {
@@ -39,7 +49,9 @@
       "title": "Доменные миграции, pgvector и индексы",
       "module": "backend",
       "kind": "schema_complex",
-      "depends_on": ["backend-schema-base"],
+      "depends_on": [
+        "backend-schema-base"
+      ],
       "instructions": "Реализуй оставшиеся миграции и модели по контракту: images, variants, analyses, embeddings, taxonomy, processing и audit. Проверь связи, unique, soft delete, версии embeddings, pgvector/HNSW и откат миграций. Не реализуй API или доменные правила."
     },
     {
@@ -47,7 +59,9 @@
       "title": "Авторизация, загрузка и media API",
       "module": "backend",
       "kind": "standard_high",
-      "depends_on": ["backend-schema-domain"],
+      "depends_on": [
+        "backend-schema-domain"
+      ],
       "instructions": "Реализуй публичный HTTP API для auth, batches, upload, originals/variants и CRUD изображений строго по OpenAPI. Сохраняй оригинал неизменным, storage keys относительными; проверь валидацию, авторизацию, дубликаты и ошибки. Очередь и доменные правила обработки остаются следующими задачами."
     },
     {
@@ -55,7 +69,9 @@
       "title": "Очередь, состояния обработки, retry и reprocess",
       "module": "backend",
       "kind": "critical_domain",
-      "depends_on": ["backend-media-api"],
+      "depends_on": [
+        "backend-media-api"
+      ],
       "instructions": "Реализуй фоновые этапы и FakeAiClient по контрактам. Сохрани идемпотентность, историю image_analyses, корректные переходы состояний, отказ AI, retry и reprocess при конкуренции. Добавь детерминированные тесты инвариантов без GPU. Не вводи новых API или enum."
     },
     {
@@ -63,7 +79,9 @@
       "title": "TagResolver, кандидаты и ручные решения",
       "module": "backend",
       "kind": "critical_domain",
-      "depends_on": ["backend-processing"],
+      "depends_on": [
+        "backend-processing"
+      ],
       "instructions": "Реализуй сопоставление concepts с canonical tags, aliases, tag_candidates, moderation, ручные теги и suppression строго по контрактам. AI не создает canonical tags. Ручные решения переживают reprocess. Проверь конфликты и повторное выполнение тестами."
     },
     {
@@ -71,7 +89,9 @@
       "title": "Точный, смысловой и гибридный поиск",
       "module": "backend",
       "kind": "critical_domain",
-      "depends_on": ["backend-taxonomy"],
+      "depends_on": [
+        "backend-taxonomy"
+      ],
       "instructions": "Реализуй tag, semantic и hybrid search по контрактам. Явно выбранные теги остаются жестким фильтром, поиск по тегам работает без AI, версии embeddings не смешиваются. Проверь ранжирование, пустые результаты, отказ AI и индексы тестами."
     },
     {
@@ -79,7 +99,9 @@
       "title": "Каркас Nuxt и базовые экраны",
       "module": "frontend",
       "kind": "frontend_simple",
-      "depends_on": ["contract-fixtures"],
+      "depends_on": [
+        "contracts-v1"
+      ],
       "instructions": "Создай каркас Nuxt, layout, базовые страницы и простые компоненты по ТЗ и mock public API. Без самостоятельного API, сложного состояния batch upload и бизнес-правил moderation/search."
     },
     {
@@ -87,7 +109,9 @@
       "title": "Потоки загрузки, модерации и поиска",
       "module": "frontend",
       "kind": "frontend_flow",
-      "depends_on": ["admin-frontend-base"],
+      "depends_on": [
+        "admin-frontend-base"
+      ],
       "instructions": "Реализуй взаимодействия batch upload/progress, image detail, moderation и search против mock public API. Проверь загрузку, ошибки, повторные запросы и состояние интерфейса. Nuxt обращается только к публичному Laravel API."
     },
     {
@@ -95,7 +119,9 @@
       "title": "FastAPI контракт и mock модели",
       "module": "ai",
       "kind": "ai_mock",
-      "depends_on": ["contract-fixtures"],
+      "depends_on": [
+        "contracts-v1"
+      ],
       "instructions": "Реализуй AI API, Pydantic схемы, preprocessing, health/readiness и детерминированные mock модели. Проверь совместимость запросов и ответов с контрактом; CI не требует GPU."
     },
     {
@@ -103,7 +129,9 @@
       "title": "SigLIP2 и Qwen3-VL за готовым интерфейсом",
       "module": "ai",
       "kind": "complex_technical",
-      "depends_on": ["ai-mock"],
+      "depends_on": [
+        "ai-mock"
+      ],
       "instructions": "Подключи реальные модели за готовыми интерфейсами, MPS/CUDA профили, кеш весов и model tests. Контролируй память, таймауты и ошибки. Не меняй application-level ответ без изменения контракта."
     },
     {
@@ -111,7 +139,9 @@
       "title": "Базовый Compose, env и Makefile",
       "module": "infra",
       "kind": "infra_simple",
-      "depends_on": ["contract-fixtures"],
+      "depends_on": [
+        "contracts-v1"
+      ],
       "instructions": "Собери Compose, env template и команды Makefile по готовым интерфейсам, включая mock/CPU AI и базовые health checks. Dockerfile сервисов принадлежат владельцам сервисов. Не делай RunPod deployment в этой задаче."
     },
     {
@@ -119,7 +149,10 @@
       "title": "Mac MPS и RunPod deployment",
       "module": "infra",
       "kind": "infra_deploy",
-      "depends_on": ["infrastructure-base", "ai-models"],
+      "depends_on": [
+        "infrastructure-base",
+        "ai-models"
+      ],
       "instructions": "Добавь Mac MPS и RunPod CUDA инструкции, model cache volume, сервисный API key и deployment проверки. Не меняй application logic."
     },
     {
@@ -127,7 +160,12 @@
       "title": "Контрактные и сквозные проверки MVP",
       "module": "qa",
       "kind": "integration",
-      "depends_on": ["backend-search", "admin-frontend-flows", "ai-mock", "infrastructure-base"],
+      "depends_on": [
+        "backend-search",
+        "admin-frontend-flows",
+        "ai-mock",
+        "infrastructure-base"
+      ],
       "instructions": "Создай и прогони контрактные и E2E проверки сценария §75 с mock AI, отказом AI, retry, suppression и поиском. Отчитайся о несовместимостях владельцам. Не меняй чужие модули."
     }
   ]
