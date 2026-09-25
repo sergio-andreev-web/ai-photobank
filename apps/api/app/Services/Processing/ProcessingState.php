@@ -69,6 +69,8 @@ final class ProcessingState
 
     public const string ERROR_AI_RESPONSE_INVALID = 'AI_RESPONSE_INVALID';
 
+    public const string ERROR_AI_OUTPUT_INVALID = 'AI_OUTPUT_INVALID';
+
     public const string ERROR_TAG_RESOLUTION_FAILED = 'TAG_RESOLUTION_FAILED';
 
     public const string ERROR_INTERNAL = 'INTERNAL_ERROR';

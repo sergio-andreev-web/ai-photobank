@@ -370,6 +370,14 @@ final class ProcessingPipeline
                 false,
             ],
 
+            // ADR-0010 (contracts 1.2.0): the AI could not produce schema-valid output. Retried
+            // like any 5xx, but recorded under its own code once attempts run out.
+            $e instanceof AiException && $e->errorCode === 'MODEL_OUTPUT_INVALID' => [
+                ProcessingState::ERROR_AI_OUTPUT_INVALID,
+                sprintf('AI service error %s (HTTP %d)', $e->errorCode, $e->httpStatus),
+                $e->retryable,
+            ],
+
             // 5xx, 429, timeout, connection refused (§46, §47) vs. other 4xx.
             $e instanceof AiException => [
                 $e->retryable ? ProcessingState::ERROR_AI_SERVICE_UNAVAILABLE : ProcessingState::ERROR_AI_REQUEST_REJECTED,
