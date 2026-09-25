@@ -167,6 +167,20 @@ class ProcessingPipelineTest extends TestCase
         $this->assertSame('ready', $image->refresh()->status);
     }
 
+    public function test_exhausted_model_output_invalid_retries_fail_with_ai_output_invalid(): void
+    {
+        $this->ai->failAnalyzeWith(...array_fill(0, 4, AiException::fromErrorCode('MODEL_OUTPUT_INVALID', 'bad json', 502)));
+        $image = $this->createUploadedImage();
+
+        $this->runQueuedJobs();
+
+        $task = $this->task($image, 'ai_analysis');
+        $this->assertSame(['failed', 4, 'AI_OUTPUT_INVALID'], [$task->status, $task->attempts, $task->error_code]);
+        $this->assertSame([10, 30, 120], $this->retryDelays());
+        $image->refresh();
+        $this->assertSame(['failed', 'AI_OUTPUT_INVALID'], [$image->status, $image->error_code]);
+    }
+
     public function test_invalid_2xx_ai_response_fails_without_retry(): void
     {
         $this->ai->failAnalyzeWith(new InvalidAiResponseException(['/embedding: must have 1152..1152 items, got 2']));
