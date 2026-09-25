@@ -66,6 +66,11 @@ services:
       DB_USERNAME: "${DB_USERNAME}"
       DB_PASSWORD: "${DB_PASSWORD}"
       REDIS_HOST: redis
+      # Compose's rabbitmq service is the only broker in this stack, so the
+      # queue connection is fixed here, not left to the app's own .env
+      # default (config/queue.php 'database') — see apps/api/config/queue.php.
+      QUEUE_CONNECTION: rabbitmq
+      APP_KEY: "${APP_KEY}"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: "${RABBITMQ_USER}"
       RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
@@ -74,6 +79,10 @@ services:
       AI_BASE_URL: "${AI_BASE_URL}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
       AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
+      # ADR-0009: only embeddings of this model_key + model_version become
+      # active for semantic search (apps/api/config — see .env.example).
+      EMBEDDING_ACTIVE_MODEL_KEY: "${EMBEDDING_ACTIVE_MODEL_KEY}"
+      EMBEDDING_ACTIVE_MODEL_VERSION: "${EMBEDDING_ACTIVE_MODEL_VERSION}"
       TAG_AUTO_ATTACH_THRESHOLD: "${TAG_AUTO_ATTACH_THRESHOLD}"
       TAG_CANDIDATE_THRESHOLD: "${TAG_CANDIDATE_THRESHOLD}"
     depends_on:
@@ -83,8 +92,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    # No source bind mount here: the built image already has vendor/
+    # installed, and mounting ./apps/api over /app on a clean checkout (no
+    # vendor/ on the host) would erase it, breaking the container. For local
+    # source editing, add docker-compose.dev.yml on top of this file.
     volumes:
-      - ./apps/api:/app
       - photobank_storage:/app/storage
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/up || exit 1"]
@@ -109,6 +121,8 @@ services:
       DB_USERNAME: "${DB_USERNAME}"
       DB_PASSWORD: "${DB_PASSWORD}"
       REDIS_HOST: redis
+      QUEUE_CONNECTION: rabbitmq
+      APP_KEY: "${APP_KEY}"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: "${RABBITMQ_USER}"
       RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
@@ -117,16 +131,27 @@ services:
       AI_BASE_URL: "${AI_BASE_URL}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
       AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
+      EMBEDDING_ACTIVE_MODEL_KEY: "${EMBEDDING_ACTIVE_MODEL_KEY}"
+      EMBEDDING_ACTIVE_MODEL_VERSION: "${EMBEDDING_ACTIVE_MODEL_VERSION}"
       TAG_AUTO_ATTACH_THRESHOLD: "${TAG_AUTO_ATTACH_THRESHOLD}"
       TAG_CANDIDATE_THRESHOLD: "${TAG_CANDIDATE_THRESHOLD}"
-    command: php artisan queue:work rabbitmq --sleep=3 --tries=3 --max-time=3600
+    # Must consume all three logical queues (config/photobank.php) — a plain
+    # `queue:work rabbitmq` only drains its connection default
+    # (images.processing) and would strand images.ai/images.reprocess jobs.
+    # --timeout must stay greater than AI_REQUEST_TIMEOUT (an AI-stage job
+    # blocks on a single HTTP call for up to that long): default
+    # AI_REQUEST_TIMEOUT=300s, so QUEUE_WORKER_TIMEOUT defaults to 360s.
+    command: >
+      php artisan queue:work rabbitmq
+      --queue=images.reprocess,images.ai,images.processing
+      --sleep=3 --tries=3 --max-time=3600
+      --timeout=${QUEUE_WORKER_TIMEOUT:-360}
     depends_on:
       - postgres
       - redis
       - rabbitmq
       - api
     volumes:
-      - ./apps/api:/app
       - photobank_storage:/app/storage
     networks:
       - photobank
@@ -142,8 +167,6 @@ services:
       - api
     ports:
       - "3000:3000"
-    volumes:
-      - ./apps/admin:/app
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
       interval: 30s
@@ -184,8 +207,13 @@ services:
     container_name: photobank-ai-cpu
     environment:
       DEVICE: cpu
+      # This base file is for development and contract testing (production AI runs on
+      # RunPod with a key), so an empty AI_SERVICE_API_KEY must stay allowed here:
+      # the image defaults to AI_ENVIRONMENT=production, which refuses it (ADR-0010).
+      AI_ENVIRONMENT: development
       VISION_MODEL: "${VISION_MODEL}"
       EMBEDDING_MODEL: "${EMBEDDING_MODEL}"
+      EMBEDDING_MODEL_REVISION: "${EMBEDDING_MODEL_REVISION}"
       HF_HOME: /models
       PROMPT_VERSION: "${PROMPT_VERSION}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"

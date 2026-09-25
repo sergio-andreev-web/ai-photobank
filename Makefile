@@ -1,4 +1,4 @@
-.PHONY: help setup up down migrate seed test lint ai-mac ai-mac-cpu _ai-mac-run ai-test ai-health logs reset \
+.PHONY: help setup up up-dev up-ai down migrate seed test lint ai-mac ai-mac-cpu _ai-mac-run ai-test ai-health logs reset \
 	prod-config prod-up prod-down prod-logs prod-health backup restore
 
 help:
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "Running:"
 	@echo "  make up          Start all services"
+	@echo "  make up-dev      Start all services with source bind-mounted (docker-compose.dev.yml)"
 	@echo "  make down        Stop all services"
 	@echo "  make logs        View service logs (follow mode)"
 	@echo ""
@@ -60,11 +61,18 @@ setup: .env
 .env:
 	@echo "Creating .env from .env.example..."
 	cp .env.example .env
-	@echo "✓ .env created. Edit it if needed, then run: make setup"
+	@sed -i.bak "s|^APP_KEY=$$|APP_KEY=base64:$$(openssl rand -base64 32)|" .env && rm -f .env.bak
+	@echo "✓ .env created with a fresh APP_KEY. Edit it if needed, then run: make setup"
 
 # Start all services
 up:
 	docker-compose up -d
+
+# Start all services with ./apps/api and ./apps/admin bind-mounted for local
+# editing (docker-compose.dev.yml) — see infra/README.md "Editing source
+# without a rebuild".
+up-dev:
+	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Start with AI CPU profile for testing
 up-ai:

@@ -1,0 +1,41 @@
+# Opt-in dev overlay: bind-mount app source into the api/api-worker/admin
+# containers for local editing without a rebuild.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# The base docker-compose.yml intentionally does NOT do this: on a clean
+# checkout there is no host vendor/ (apps/api) or .output/ (apps/admin), so
+# bind-mounting the source directory over /app would erase what the image
+# built, breaking the container. This overlay adds the mount back for
+# developers who want live-editing, while excluding those built paths via
+# anonymous volumes so the image's own vendor/.output keep serving instead of
+# being shadowed by the (now-empty) host directory.
+#
+# Caveats:
+# - apps/api: PHP source edits are picked up on the next request/job as
+#   usual for Laravel; you still need `composer install` (e.g. via
+#   `docker compose exec api composer install`) after changing dependencies.
+# - apps/admin: the image's CMD runs the built `.output` server, not `nuxt
+#   dev` — this overlay does not give hot module reload. For that, run
+#   `npm run dev` natively on the host instead (see apps/admin/README.md);
+#   this overlay is only useful here for iterating on files that don't need
+#   a dev server (e.g. inspecting the built output, running one-off npm
+#   scripts via `docker compose exec admin ...`).
+
+services:
+  api:
+    volumes:
+      - ./apps/api:/app
+      - /app/vendor
+      - photobank_storage:/app/storage
+
+  api-worker:
+    volumes:
+      - ./apps/api:/app
+      - /app/vendor
+      - photobank_storage:/app/storage
+
+  admin:
+    volumes:
+      - ./apps/admin:/app
+      - /app/node_modules
+      - /app/.output
