@@ -17,6 +17,7 @@
 | `backend-processing` | Claude **Opus 5.5**, high | Codex **Sol**, high | Идемпотентность, конкурентные задачи, retry и reprocess |
 | `backend-taxonomy` | Claude **Opus 5.5**, high | Codex **Sol**, high | Canonical tags, кандидаты, ручные решения и suppression |
 | `backend-search` | Claude **Opus 5.5**, high | Codex **Sol**, high | Жесткие фильтры, hybrid ranking и версии embeddings |
+| `backend-reindex` | Codex **Sol**, high | Claude **Sonnet 5**, high | Идемпотентная постановка пересчёта на существующих механизмах |
 | `admin-frontend-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Каркас и простые компоненты по mock API |
 | `admin-frontend-flows` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Загрузка, модерация и поиск со связанным состоянием |
 | `admin-dockerfile` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Образ Nuxt для prod и согласование с Compose |
@@ -28,6 +29,7 @@
 | `ai-production-key` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Точечная проверка конфигурации и тесты запуска |
 | `ci-tests` | Codex **Sol**, high | Claude **Sonnet 5**, high | Сервисы CI, PostgreSQL с pgvector, кеш зависимостей и честные падения |
 | `compose-runtime` | Codex **Sol**, high | Claude **Sonnet 5**, high | Очереди воркера, окружение и запуск стека с чистого checkout |
+| `infra-compose-v2` | Codex **Luna**, medium | Claude **Haiku 4.5** | Механическая замена команд без изменения поведения |
 | `integration-qa` | Claude **Opus 5.5**, high | Codex **Sol**, high | Сквозная приемка нескольких сервисов |
 
 Для `Haiku 4.5` оркестратор не передает `--effort`: эта модель не поддерживает соответствующий параметр. `Fable 5.1` доступен только по явному `--model` для длительного исследования или задачи, где Opus на высокой сложности не справился. Для Codex разрешены только `gpt-6-luna` и `gpt-6-sol`; это проверяется даже при ручном выборе. Ollama пока выключен и разрешен только для узких видов задач после явной настройки и проверки локальной модели.
