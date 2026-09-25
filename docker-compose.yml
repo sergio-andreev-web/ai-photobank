@@ -199,7 +199,9 @@ services:
       - api
       - admin
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      # 127.0.0.1, not localhost: Alpine resolves localhost to ::1 first, and nginx
+      # listens on IPv4 only, so the probe would never reach it.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
