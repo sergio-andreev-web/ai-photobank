@@ -292,7 +292,12 @@ jobs:
           # Same order as `make setup`: dependencies and api, migrations, then the rest.
           docker compose up -d --wait --wait-timeout 180 postgres redis rabbitmq api
           docker compose exec -T api php artisan migrate --force
-          docker compose up -d --wait --wait-timeout 180
+          docker compose up -d --wait --wait-timeout 180 admin nginx
+          # The worker has no healthcheck (it serves no HTTP), so --wait cannot gate it:
+          # start it separately and require it to still be running a few seconds later.
+          docker compose up -d api-worker
+          sleep 10
+          test "$(docker compose ps api-worker --format '{{.State}}')" = running
 
       # nginx's own /health is a static stub (always 200 once nginx is up);
       # api/admin health is already verified by `--wait` above via their own
