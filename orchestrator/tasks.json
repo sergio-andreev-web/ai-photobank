@@ -145,12 +145,23 @@
       "instructions": "Собери Compose, env template и команды Makefile по готовым интерфейсам, включая mock/CPU AI и базовые health checks. Dockerfile сервисов принадлежат владельцам сервисов. Не делай RunPod deployment в этой задаче."
     },
     {
+      "id": "infrastructure-web",
+      "title": "Основа публичного облачного развёртывания",
+      "module": "infra",
+      "kind": "infra_deploy",
+      "depends_on": [
+        "infrastructure-base"
+      ],
+      "preferred_provider": "claude",
+      "instructions": "Подготовь переносимый production-профиль для публичного сайта на облачном хостинге: HTTPS/TLS, один origin для Nuxt + /api + /sanctum, защищённый /_protected/ media, лимит upload 50 MiB, секреты через env/secret store, постоянные тома БД и фото, backup/restore и health/readiness. AI может быть отдельным RunPod по AI_BASE_URL. Проверь Compose config и конфигурацию reverse proxy; если Dockerfile сервисов ещё не готовы, запиши точные зависимости. Не развёртывай на реальном хосте, не добавляй секреты и не редактируй apps/**, services/** или contracts/**. Не делай RunPod deployment в этой задаче."
+    },
+    {
       "id": "infrastructure-runpod",
       "title": "Mac MPS и RunPod deployment",
       "module": "infra",
       "kind": "infra_deploy",
       "depends_on": [
-        "infrastructure-base",
+        "infrastructure-web",
         "ai-models"
       ],
       "instructions": "Добавь Mac MPS и RunPod CUDA инструкции, model cache volume, сервисный API key и deployment проверки. Не меняй application logic."
