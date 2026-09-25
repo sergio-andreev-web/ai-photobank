@@ -1,0 +1,117 @@
+<?php
+
+namespace App\Services\Ai;
+
+use App\Contracts\Ai\AiClientInterface;
+use App\Contracts\Ai\Data\AiHealthResult;
+use App\Contracts\Ai\Data\ImageAnalysisResult;
+use App\Contracts\Ai\Data\TextEmbeddingsResult;
+use App\Contracts\Ai\Exceptions\AiException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
+
+/**
+ * AiClientInterface driver for contracts/ai-api.openapi.yaml. One request in,
+ * one response out — no retries here. Retry policy (§47) belongs to the
+ * processing-task orchestration that calls this client, not to the client.
+ */
+final class HttpAiClient implements AiClientInterface
+{
+    public function __construct(
+        private readonly string $baseUrl,
+        private readonly ?string $apiKey,
+        private readonly int $timeoutSeconds,
+    ) {
+    }
+
+    public function analyzeImage(string $imageContents, string $requestId): ImageAnalysisResult
+    {
+        $response = $this->send($requestId, fn (PendingRequest $client): Response => $client
+            ->attach('image', $imageContents, 'image')
+            ->post($this->endpoint('/v1/images/analyze'), [
+                'request_id' => $requestId,
+            ]));
+
+        return ImageAnalysisResult::fromArray($this->decodeOrFail($response, $requestId));
+    }
+
+    public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult
+    {
+        $response = $this->send($requestId, fn (PendingRequest $client): Response => $client
+            ->asJson()
+            ->post($this->endpoint('/v1/embeddings/text'), [
+                'texts' => array_values($texts),
+            ]));
+
+        return TextEmbeddingsResult::fromArray($this->decodeOrFail($response, $requestId));
+    }
+
+    public function health(): AiHealthResult
+    {
+        $requestId = (string) str()->uuid();
+        $response = $this->send($requestId, fn (PendingRequest $client): Response => $client
+            ->get($this->endpoint('/health')));
+
+        return AiHealthResult::fromArray($this->decodeOrFail($response, $requestId));
+    }
+
+    /**
+     * @param  \Closure(PendingRequest): Response  $request
+     *
+     * @throws AiException When the AI service is unreachable (§46).
+     */
+    private function send(string $requestId, \Closure $request): Response
+    {
+        try {
+            return $request($this->client($requestId));
+        } catch (ConnectionException $exception) {
+            throw AiException::unavailable(
+                message: 'Could not reach the AI service: '.$exception->getMessage(),
+                requestId: $requestId,
+            );
+        }
+    }
+
+    private function client(string $requestId): PendingRequest
+    {
+        $client = Http::baseUrl($this->baseUrl)
+            ->timeout($this->timeoutSeconds)
+            ->withHeaders(['X-Request-ID' => $requestId]);
+
+        if ($this->apiKey !== null && $this->apiKey !== '') {
+            $client = $client->withToken($this->apiKey);
+        }
+
+        return $client;
+    }
+
+    private function endpoint(string $path): string
+    {
+        return rtrim($this->baseUrl, '/').$path;
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws AiException
+     */
+    private function decodeOrFail(Response $response, string $requestId): array
+    {
+        if ($response->successful()) {
+            return $response->json();
+        }
+
+        $body = $response->json();
+        $error = is_array($body) ? ($body['error'] ?? null) : null;
+
+        throw AiException::fromErrorCode(
+            code: is_array($error) ? ($error['code'] ?? 'INTERNAL_ERROR') : 'INTERNAL_ERROR',
+            message: is_array($error) ? ($error['message'] ?? 'AI service returned an error') : 'AI service returned an unparseable error body',
+            httpStatus: $response->status(),
+            details: is_array($error) ? ($error['details'] ?? []) : [],
+            requestId: is_array($error) ? ($error['request_id'] ?? $requestId) : $requestId,
+        );
+    }
+}
