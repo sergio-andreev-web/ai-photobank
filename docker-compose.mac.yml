@@ -1,0 +1,13 @@
+# Override compose for macOS development with native AI service
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.mac.yml up
+
+services:
+  api:
+    environment:
+      AI_BASE_URL: http://host.docker.internal:8001
+
+  admin:
+    environment:
+      NUXT_PUBLIC_API_BASE: "http://localhost"
+
+  # ai-cpu stays disabled by its `ai` profile in the base Compose file.

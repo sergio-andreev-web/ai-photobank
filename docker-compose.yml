@@ -1,0 +1,215 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17-v0.8.0
+    container_name: photobank-postgres
+    environment:
+      POSTGRES_DB: "${DB_DATABASE}"
+      POSTGRES_USER: "${DB_USERNAME}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - photobank
+
+  redis:
+    image: redis:7-alpine
+    container_name: photobank-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - photobank
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: photobank-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - photobank
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: photobank-api
+    environment:
+      APP_ENV: "${APP_ENV}"
+      APP_URL: "${APP_URL}"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: "${DB_DATABASE}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
+      PHOTO_STORAGE_DISK: "${PHOTO_STORAGE_DISK}"
+      PHOTO_STORAGE_ROOT: "${PHOTO_STORAGE_ROOT}"
+      AI_BASE_URL: "${AI_BASE_URL}"
+      AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
+      AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
+      TAG_AUTO_ATTACH_THRESHOLD: "${TAG_AUTO_ATTACH_THRESHOLD}"
+      TAG_CANDIDATE_THRESHOLD: "${TAG_CANDIDATE_THRESHOLD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+      - photobank_storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - photobank
+
+  api-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: photobank-api-worker
+    environment:
+      APP_ENV: "${APP_ENV}"
+      APP_URL: "${APP_URL}"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: "${DB_DATABASE}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
+      PHOTO_STORAGE_DISK: "${PHOTO_STORAGE_DISK}"
+      PHOTO_STORAGE_ROOT: "${PHOTO_STORAGE_ROOT}"
+      AI_BASE_URL: "${AI_BASE_URL}"
+      AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
+      AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
+      TAG_AUTO_ATTACH_THRESHOLD: "${TAG_AUTO_ATTACH_THRESHOLD}"
+      TAG_CANDIDATE_THRESHOLD: "${TAG_CANDIDATE_THRESHOLD}"
+    command: php artisan queue:work rabbitmq --sleep=3 --tries=3 --max-time=3600
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - api
+    volumes:
+      - ./apps/api:/app
+      - photobank_storage:/app/storage
+    networks:
+      - photobank
+
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+    container_name: photobank-admin
+    environment:
+      NUXT_PUBLIC_API_BASE: "${APP_URL}"
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/admin:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - photobank
+
+  nginx:
+    image: nginx:alpine
+    container_name: photobank-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - photobank_storage:/var/www/photobank/storage:ro
+    depends_on:
+      - api
+      - admin
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - photobank
+
+  ai-cpu:
+    build:
+      context: ./services/ai
+      dockerfile: Dockerfile
+      args:
+        DEVICE: cpu
+    container_name: photobank-ai-cpu
+    environment:
+      DEVICE: cpu
+      VISION_MODEL: "${VISION_MODEL}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL}"
+      HF_HOME: /models
+      PROMPT_VERSION: "${PROMPT_VERSION}"
+    ports:
+      - "8001:8000"
+    volumes:
+      - ai_models_cache:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - ai
+    networks:
+      - photobank
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  photobank_storage:
+  ai_models_cache:
+
+networks:
+  photobank:
+    driver: bridge
