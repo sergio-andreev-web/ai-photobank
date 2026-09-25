@@ -1,18 +1,19 @@
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-3xl font-bold text-gray-900">Upload Images</h1>
-      <p class="mt-2 text-gray-600">Create a batch and upload multiple images at once.</p>
+    <div class="page-heading">
+      <span class="subtle-label">ADD TO YOUR LIBRARY</span>
+      <h1>Upload Images</h1>
+      <p>Create a batch and upload multiple images at once.</p>
     </div>
 
     <ErrorAlert v-if="createError" :message="createError" @dismiss="createError = null" />
 
     <!-- Create Batch Form -->
-    <div v-if="!currentBatch" class="rounded-lg bg-white p-6 shadow">
-      <h2 class="text-lg font-semibold text-gray-900">New Batch</h2>
+    <div v-if="!currentBatch" class="surface-card p-7">
+      <h2 class="section-title">New Batch</h2>
       <form class="mt-4 space-y-4" @submit.prevent="createBatch">
         <UFormField label="Batch Name (optional)" name="name">
-          <UInput v-model="batchName" placeholder="e.g., Site visit - September 2026" />
+          <UInput v-model="batchName" placeholder="e.g., Site visit - September 2026" class="w-full max-w-md" />
         </UFormField>
 
         <UButton type="submit" :loading="creating"> Create Batch </UButton>
@@ -20,7 +21,7 @@
     </div>
 
     <!-- Upload Area -->
-    <div v-else class="rounded-lg bg-white p-6 shadow">
+    <div v-else class="surface-card p-7">
       <div class="mb-4 flex items-center justify-between">
         <div>
           <h2 class="text-lg font-semibold text-gray-900">
@@ -51,13 +52,15 @@
       <!-- File Drop Zone -->
       <div
         v-if="acceptingUploads"
-        class="rounded-lg border-2 border-dashed p-8 text-center transition-colors"
+        class="rounded-xl border-2 border-dashed p-10 text-center transition-colors"
         :class="dragover ? 'border-blue-500 bg-blue-50' : 'border-gray-300'"
         @dragover.prevent="dragover = true"
         @dragleave="dragover = false"
         @drop.prevent="handleDrop"
       >
-        <p class="text-gray-600">Drag and drop images here or click to select</p>
+        <UIcon name="i-heroicons-cloud-arrow-up" class="mb-3 text-4xl text-blue-500" />
+        <p class="font-medium text-slate-700">Drag and drop images here or click to select</p>
+        <p class="mt-1 text-xs text-slate-500">JPEG, PNG or WebP</p>
         <input
           ref="fileInput"
           type="file"
@@ -110,7 +113,7 @@
       <!-- Complete batch -->
       <div v-if="currentBatch.status === 'created' || currentBatch.status === 'uploading'" class="mt-6">
         <UButton
-          :disabled="uploadingCount > 0"
+          :disabled="uploadingCount > 0 || uploadedTotal === 0"
           :loading="completing"
           @click="handleComplete"
         >
@@ -194,18 +197,18 @@ function statusLabel(upload: UploadItem): string {
   }
 }
 
-function statusColor(upload: UploadItem): string {
+function statusColor(upload: UploadItem): 'success' | 'warning' | 'error' | 'info' | 'neutral' {
   switch (upload.state) {
     case 'uploaded':
-      return 'green'
+      return 'success'
     case 'duplicate':
-      return 'amber'
+      return 'warning'
     case 'error':
-      return 'red'
+      return 'error'
     case 'uploading':
-      return 'blue'
+      return 'info'
     default:
-      return 'gray'
+      return 'neutral'
   }
 }
 

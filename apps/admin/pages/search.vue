@@ -1,27 +1,30 @@
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-3xl font-bold text-gray-900">Search Images</h1>
-      <p class="mt-2 text-gray-600">Search by tags, semantic meaning, or both combined.</p>
+    <div class="page-heading">
+      <span class="subtle-label">FIND YOUR ASSETS</span>
+      <h1>Search Images</h1>
+      <p>Search by tags, semantic meaning, or both combined.</p>
     </div>
 
     <!-- Search Form -->
-    <div class="rounded-lg bg-white p-6 shadow">
-      <form class="space-y-4" @submit.prevent="handleSearch()">
+    <div class="surface-card p-6">
+      <form class="max-w-2xl space-y-5" @submit.prevent="handleSearch()">
         <UFormField label="Search Mode" name="mode">
-          <USelect v-model="mode" :items="modeOptions" />
+          <USelect v-model="mode" :items="modeOptions" class="w-full" />
         </UFormField>
 
         <UFormField v-if="mode !== 'tags'" label="Query" name="query">
-          <UInput v-model="query" placeholder="e.g., workers in hard hats near industrial equipment" />
+          <UInput v-model="query" placeholder="e.g., workers in hard hats near industrial equipment" class="w-full" />
         </UFormField>
 
         <UFormField v-if="mode !== 'semantic'" :label="tagsLabel" name="tags">
           <USelectMenu
             v-model="selectedTags"
             :items="tagOptions"
+            value-key="value"
             multiple
             placeholder="Select tags (all must match)"
+            class="w-full"
             @update:search-term="onTagSearch"
           />
         </UFormField>
@@ -48,14 +51,14 @@
     <!-- Results -->
     <div v-if="searched && searching" class="text-center text-gray-600">Searching...</div>
 
-    <div v-else-if="searched && !searchError && results.length === 0" class="rounded-lg bg-white p-12 text-center shadow">
+    <div v-else-if="searched && !searchError && results.length === 0" class="surface-card p-12 text-center">
       <p class="text-gray-600">No results found. Try a different query or search mode.</p>
     </div>
 
-    <div v-else-if="results.length > 0" class="rounded-lg bg-white p-6 shadow">
+    <div v-else-if="results.length > 0" class="surface-card p-6">
       <h2 class="mb-4 text-lg font-semibold text-gray-900">Results ({{ pagination?.total || 0 }})</h2>
 
-      <div class="grid gap-4 md:grid-cols-4" data-testid="search-results">
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="search-results">
         <NuxtLink
           v-for="result in results"
           :key="result.id"
@@ -69,7 +72,7 @@
               :alt="result.original_name"
               class="h-full w-full object-cover"
             />
-            <div v-else class="text-4xl">📷</div>
+            <div v-else class="text-4xl text-slate-300"><UIcon name="i-heroicons-photo" /></div>
           </div>
           <div class="p-3">
             <p class="truncate text-sm font-medium text-gray-900">{{ result.original_name }}</p>

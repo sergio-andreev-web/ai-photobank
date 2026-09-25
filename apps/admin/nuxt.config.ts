@@ -3,6 +3,8 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-09-25',
   devtools: { enabled: false },
   modules: ['@nuxt/ui', '@pinia/nuxt'],
+  css: ['~/assets/css/main.css'],
+  colorMode: { preference: 'light', fallback: 'light', storageKey: 'photobank-admin-color-mode' },
   // Admin-only SPA behind a Sanctum session cookie: no SEO/first-paint need for SSR,
   // and SSR would try to call the relative /api base URL from the Node process itself,
   // which has no browser origin to resolve against (auth middleware would always redirect).

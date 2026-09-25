@@ -12,8 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@pinia/nuxt": "^1.0.2",
     "@nuxt/ui": "^3.0.0",
+    "@pinia/nuxt": "^1.0.2",
     "axios": "^1.7.0",
     "nuxt": "^4.0.0",
     "pinia": "^4.0.3",
@@ -21,12 +21,14 @@
     "vue": "^3.5.0"
   },
   "devDependencies": {
-    "jsdom": "^26.1.0",
     "@nuxt/eslint-config": "^0.5.0",
     "@playwright/test": "^1.47.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0",
-    "vitest": "^2.0.0"
+    "vitest": "^2.0.0",
+    "vue-tsc": "^3.3.11"
   }
 }

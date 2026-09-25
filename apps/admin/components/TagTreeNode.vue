@@ -4,6 +4,7 @@
       <button
         v-if="tag.children?.length"
         class="text-gray-600 hover:text-gray-900"
+        :aria-label="expanded ? `Collapse ${tag.name}` : `Expand ${tag.name}`"
         @click="expanded = !expanded"
       >
         <span v-if="expanded">▼</span>
@@ -19,16 +20,18 @@
       <div class="flex items-center gap-2">
         <UButton
           size="sm"
-          color="gray"
+          color="neutral"
           variant="ghost"
           icon="i-heroicons-pencil-square"
+          :aria-label="`Edit ${tag.name}`"
           @click="$emit('edit', tag)"
         />
         <UButton
           size="sm"
-          color="red"
+          color="error"
           variant="ghost"
           icon="i-heroicons-trash"
+          :aria-label="`Delete ${tag.name}`"
           @click="$emit('delete', tag)"
         />
       </div>

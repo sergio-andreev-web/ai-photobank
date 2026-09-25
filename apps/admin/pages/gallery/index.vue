@@ -1,22 +1,23 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="page-heading flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900">Gallery</h1>
-        <p class="mt-2 text-gray-600">Browse and manage your images.</p>
+        <span class="subtle-label">IMAGE LIBRARY</span>
+        <h1>Gallery</h1>
+        <p>Browse and manage your images.</p>
       </div>
-      <UButton to="/uploader" icon="i-heroicons-arrow-up-tray"> Upload Images </UButton>
+      <UButton to="/uploader" icon="i-heroicons-arrow-up-tray" size="lg">Upload Images</UButton>
     </div>
 
     <!-- Filters -->
-    <div class="rounded-lg bg-white p-4 shadow">
+    <div class="surface-card p-5">
       <div class="flex flex-wrap gap-4">
         <UFormField label="Status" class="flex-1 min-w-[200px]">
-          <USelect v-model="filters.status" :items="statusOptions" />
+          <USelect v-model="filters.status" :items="statusOptions" class="w-full" />
         </UFormField>
 
         <UFormField label="Batch" class="flex-1 min-w-[200px]">
-          <USelect v-model="filters.batchId" :items="batchOptions" />
+          <USelect v-model="filters.batchId" :items="batchOptions" class="w-full" />
         </UFormField>
       </div>
     </div>
@@ -26,29 +27,29 @@
     <!-- Image Grid -->
     <div v-if="loading" class="text-center text-gray-600">Loading images...</div>
 
-    <div v-else-if="images.length === 0" class="rounded-lg bg-white p-12 text-center shadow">
+    <div v-else-if="images.length === 0" class="surface-card p-12 text-center">
       <p class="text-gray-600">No images found. Start by uploading a batch.</p>
       <UButton to="/uploader" class="mt-4"> Create First Batch </UButton>
     </div>
 
-    <div v-else class="grid gap-4 md:grid-cols-4">
+    <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       <NuxtLink
         v-for="image in images"
         :key="image.id"
         :to="`/gallery/${image.id}`"
-        class="group block overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+        class="surface-card group block overflow-hidden transition-shadow hover:shadow-lg"
       >
-        <div class="aspect-square overflow-hidden bg-gray-200">
+        <div class="aspect-[4/3] overflow-hidden bg-slate-100">
           <img
             v-if="image.urls.thumbnail"
             :src="image.urls.thumbnail"
             :alt="image.original_name"
             class="h-full w-full object-cover"
           />
-          <div v-else class="flex h-full w-full items-center justify-center bg-gray-100 text-gray-400">📷</div>
+          <div v-else class="flex h-full w-full items-center justify-center bg-slate-100 text-4xl text-slate-300"><UIcon name="i-heroicons-photo" /></div>
         </div>
         <div class="p-4">
-          <p class="truncate text-sm font-medium text-gray-900">{{ image.original_name }}</p>
+          <p class="truncate text-sm font-semibold text-gray-900">{{ image.original_name }}</p>
           <UBadge :color="statusColor(image.status)" class="mt-1">{{ image.status }}</UBadge>
         </div>
       </NuxtLink>
@@ -102,15 +103,15 @@ const batchOptions = computed(() => [
   ...batches.value.map((b) => ({ label: b.name || `Batch #${b.id}`, value: b.id })),
 ])
 
-function statusColor(status: ImageStatus): string {
-  const colors: Record<ImageStatus, string> = {
-    uploaded: 'gray',
-    queued: 'amber',
-    processing: 'blue',
-    ready: 'green',
-    failed: 'red',
-  }
-  return colors[status] || 'gray'
+function statusColor(status: ImageStatus) {
+  const colors = {
+    uploaded: 'neutral',
+    queued: 'warning',
+    processing: 'info',
+    ready: 'success',
+    failed: 'error',
+  } as const
+  return colors[status]
 }
 
 const imagesApi = useImages()

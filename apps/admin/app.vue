@@ -1,7 +1,9 @@
 <template>
-  <div class="min-h-screen bg-gray-50" :data-app-ready="hydrated">
-    <NuxtPage />
-  </div>
+  <UApp :data-app-ready="hydrated">
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
+  </UApp>
 </template>
 
 <script setup lang="ts">
