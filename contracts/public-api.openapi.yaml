@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.2.0
+  version: 1.2.1
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -2506,6 +2506,7 @@ components:
         type: object
         status: pending
         occurrences_count: 37
+        resolved_tag_id: null
         closest_tag:
           id: 87
           name: Буровая
