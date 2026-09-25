@@ -19,6 +19,7 @@
 | `backend-search` | Claude **Opus 5.5**, high | Codex **Sol**, high | Жесткие фильтры, hybrid ranking и версии embeddings |
 | `admin-frontend-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Каркас и простые компоненты по mock API |
 | `admin-frontend-flows` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Загрузка, модерация и поиск со связанным состоянием |
+| `admin-dockerfile` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Образ Nuxt для prod и согласование с Compose |
 | `ai-mock` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Межсервисный контракт и preprocessing |
 | `ai-models` | Claude **Opus 5.5**, high | Codex **Sol**, high | Реальные модели, память, MPS/CUDA и отказы |
 | `infrastructure-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Compose и команды по готовым интерфейсам |

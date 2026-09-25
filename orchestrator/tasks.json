@@ -115,6 +115,17 @@
       "instructions": "Реализуй взаимодействия batch upload/progress, image detail, moderation и search против mock public API. Проверь загрузку, ошибки, повторные запросы и состояние интерфейса. Nuxt обращается только к публичному Laravel API."
     },
     {
+      "id": "admin-dockerfile",
+      "title": "Dockerfile панели администратора",
+      "module": "frontend",
+      "kind": "standard",
+      "depends_on": [
+        "admin-frontend-flows",
+        "infrastructure-web"
+      ],
+      "instructions": "Создай apps/admin/Dockerfile и apps/admin/.dockerignore для сервиса admin из docker-compose.yml и docker-compose.prod.yml. Multi-stage: npm ci и nuxt build на Node 22, затем минимальный runtime-образ, который запускает .output/server/index.mjs на порту 3000 (HOST 0.0.0.0) и содержит curl для существующего healthcheck compose. NUXT_PUBLIC_API_BASE приходит из окружения во время запуска; секреты и .env в образ не попадают. Учти, что docker-compose.yml монтирует ./apps/admin в /app, а prod-профиль сбрасывает volumes: образ должен работать в prod, а нужное поведение dev-профиля опиши для владельца infra. Не меняй infra/**, docker-compose*.yml и другие модули. Проверь сборку и запуск образа, насколько позволяет среда."
+    },
+    {
       "id": "ai-mock",
       "title": "FastAPI контракт и mock модели",
       "module": "ai",
