@@ -1,9 +1,10 @@
 """Model abstractions per docs/technical-specification.md §59.
 
 The FastAPI layer must never call Transformers directly; it only talks to
-these interfaces. Real SigLIP2/Qwen3-VL implementations are a follow-up task
-(services/ai owner, "ai-mock" task brief) — this module only defines the
-contract mock and future real providers must satisfy.
+these interfaces. Implementations: mock.py (deterministic, CI) and
+vision.py/embedding.py over transformers_backend.py (SigLIP2, Qwen3-VL).
+Implementations may also define close() to release weights on shutdown.
+Failures are raised as app/models/errors.py exceptions.
 """
 from __future__ import annotations
 

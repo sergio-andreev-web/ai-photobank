@@ -31,6 +31,17 @@ def mps_available() -> bool:
         return False
 
 
+def cuda_bf16_supported() -> bool:
+    try:
+        import torch
+    except ImportError:
+        return False
+    try:
+        return bool(torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+    except Exception:
+        return False
+
+
 def resolve_device(
     configured: str,
     *,
@@ -50,3 +61,36 @@ def resolve_device(
             return AiDevice.MPS
         return AiDevice.CPU
     raise ValueError(f"Unknown device configuration: {configured!r}")
+
+
+def ensure_device_available(
+    device: AiDevice,
+    *,
+    cuda_available_fn=cuda_available,
+    mps_available_fn=mps_available,
+) -> None:
+    """§61 step 2 for real models: an explicitly requested accelerator must exist.
+
+    Never silently fall back from cuda/mps to cpu — a misconfigured GPU host
+    would otherwise report ready while running 50x slower.
+    """
+    if device is AiDevice.CUDA and not cuda_available_fn():
+        raise RuntimeError("DEVICE=cuda requested but CUDA is not available")
+    if device is AiDevice.MPS and not mps_available_fn():
+        raise RuntimeError("DEVICE=mps requested but MPS is not available")
+
+
+def resolve_dtype(configured: str, device: AiDevice, *, cuda_bf16_fn=cuda_bf16_supported) -> str:
+    """DTYPE (§60) -> torch dtype name.
+
+    `auto`: cuda -> bfloat16 when supported, else float16; mps -> bfloat16
+    (Qwen3 overflows in float16; needs macOS 14+, override with DTYPE=float16
+    on older systems); cpu -> float32.
+    """
+    if configured != "auto":
+        return configured
+    if device is AiDevice.CUDA:
+        return "bfloat16" if cuda_bf16_fn() else "float16"
+    if device is AiDevice.MPS:
+        return "bfloat16"
+    return "float32"

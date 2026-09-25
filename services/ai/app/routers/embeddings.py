@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from ..concurrency import InferenceLimiter
 from ..config import Settings
+from ..inference import translate_model_errors
 from ..models.registry import ModelRegistry
 from ..schemas.embeddings import TextEmbeddingsRequest, TextEmbeddingsResponse
 from ..schemas.errors import InternalError, ModelNotReadyError
@@ -28,7 +29,8 @@ def create_text_embeddings(
         raise ModelNotReadyError(request_id=request_id)
 
     with limiter.slot(request_id=request_id):
-        embeddings = registry.embedding_model.text_embeddings(body.texts)
+        with translate_model_errors(request_id=request_id, prompt_version=settings.prompt_version):
+            embeddings = registry.embedding_model.text_embeddings(body.texts)
 
     payload = {
         "model": settings.embedding_model,
