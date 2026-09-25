@@ -24,6 +24,7 @@
 | `admin-dockerfile` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Образ Nuxt для prod и согласование с Compose |
 | `ai-mock` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Межсервисный контракт и preprocessing |
 | `ai-models` | Claude **Opus 5.5**, high | Codex **Sol**, high | Реальные модели, память, MPS/CUDA и отказы |
+| `ai-vlm-robustness` | Claude **Opus 5.5**, high | Codex **Sol**, high | Нативная загрузка на MPS и разбор обрезанного вывода модели |
 | `infrastructure-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Compose и команды по готовым интерфейсам |
 | `infrastructure-web` | Claude **Sonnet 5**, high | Codex **Sol**, high | Публичный HTTPS, хранение и восстановление в облаке |
 | `infrastructure-runpod` | Codex **Sol**, high | Claude **Sonnet 5**, high | GPU deployment, секреты и health checks |
