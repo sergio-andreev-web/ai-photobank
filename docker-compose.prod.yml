@@ -1,0 +1,112 @@
+# Public cloud production overlay.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml <command>
+#
+# Adds to the base Compose file (infrastructure-base): HTTPS/TLS termination,
+# a single public origin for Nuxt + /api + /sanctum, no host-exposed database
+# ports, immutable images (no source bind mounts), and backup/restore
+# tooling. AI stays a separate RunPod host reached via AI_BASE_URL — the
+# ai-cpu profile is not part of this overlay.
+#
+# Requires apps/api/Dockerfile and apps/admin/Dockerfile to exist (owned by
+# the backend/frontend agents) and a TLS cert/key placed under
+# NGINX_CERTS_DIR before `make prod-up`. See infra/README.md.
+
+services:
+  postgres:
+    restart: unless-stopped
+    # No host port binding: only reachable from other containers on the
+    # photobank network, never from the public internet. `!reset` is needed
+    # because Compose merges list fields like `ports` by key instead of
+    # replacing them — a plain `ports: []` would not remove the base ports.
+    ports: !reset []
+
+  redis:
+    restart: unless-stopped
+    ports: !reset []
+
+  rabbitmq:
+    restart: unless-stopped
+    # Keep the management UI off the public network; use an SSH tunnel or
+    # `docker compose exec` for ad-hoc inspection instead.
+    ports: !reset []
+
+  api:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: "${APP_KEY}"
+      APP_URL: "${APP_URL}"
+      SESSION_DOMAIN: "${SESSION_DOMAIN}"
+      SESSION_SECURE_COOKIE: "${SESSION_SECURE_COOKIE}"
+      SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS}"
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES}"
+      PHOTO_MAX_UPLOAD_BYTES: "${PHOTO_MAX_UPLOAD_BYTES}"
+    # `!override` replaces (rather than merges) the base dev bind-mount
+    # (`./apps/api:/app`): Compose merges `volumes` by target path and would
+    # otherwise keep it alongside this list, masking the built image with a
+    # host directory that does not exist on a production host.
+    volumes: !override
+      - photobank_storage:/app/storage
+
+  api-worker:
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: "${APP_KEY}"
+      APP_URL: "${APP_URL}"
+      PHOTO_MAX_UPLOAD_BYTES: "${PHOTO_MAX_UPLOAD_BYTES}"
+    volumes: !override
+      - photobank_storage:/app/storage
+
+  admin:
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: "/api"
+    # Only reachable through nginx, not published on the host directly.
+    ports: !reset []
+    volumes: !reset []
+
+  nginx:
+    restart: unless-stopped
+    environment:
+      NGINX_SERVER_NAME: "${NGINX_SERVER_NAME}"
+      NGINX_SSL_CERT_PATH: "${NGINX_SSL_CERT_PATH}"
+      NGINX_SSL_KEY_PATH: "${NGINX_SSL_KEY_PATH}"
+      NGINX_CLIENT_MAX_BODY_SIZE: "${NGINX_CLIENT_MAX_BODY_SIZE}"
+      NGINX_ENVSUBST_FILTER: "^NGINX_"
+    # `!override`: drop the base's `conf.d` mount (the plain-HTTP dev vhost)
+    # entirely, otherwise it would coexist with the rendered production
+    # vhost and both declare `default_server` on port 80.
+    volumes: !override
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/templates/production.conf.template:/etc/nginx/templates/production.conf.template:ro
+      - "${NGINX_CERTS_DIR:-./certs}:/etc/nginx/certs:ro"
+      - photobank_storage:/var/www/photobank/storage:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+
+  # One-off maintenance container for `make backup` / `make restore`
+  # (infra/scripts/backup.sh, infra/scripts/restore.sh). Never started by
+  # `up`; only invoked via `docker compose run`.
+  backup-tools:
+    image: postgres:17-alpine
+    profiles: ["backup"]
+    environment:
+      PGPASSWORD: "${DB_PASSWORD}"
+      DB_HOST: postgres
+      DB_DATABASE: "${DB_DATABASE}"
+      DB_USERNAME: "${DB_USERNAME}"
+    volumes:
+      - photobank_storage:/data/photos
+      - "${BACKUP_DIR:-./backups}:/backups"
+    networks:
+      - photobank
+
+volumes:
+  postgres_data:
+  photobank_storage:

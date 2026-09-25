@@ -1,4 +1,5 @@
-.PHONY: help setup up down migrate seed test lint ai-mac ai-test logs reset
+.PHONY: help setup up down migrate seed test lint ai-mac ai-test logs reset \
+	prod-config prod-up prod-down prod-logs prod-health backup restore
 
 help:
 	@echo "AI Photobank — Development Commands"
@@ -25,6 +26,15 @@ help:
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make reset       Reset all containers and volumes (data loss!)"
+	@echo ""
+	@echo "Public cloud production profile (docker-compose.prod.yml):"
+	@echo "  make prod-config Validate the merged production Compose config"
+	@echo "  make prod-up     Start the production profile (needs .env + TLS cert)"
+	@echo "  make prod-down   Stop the production profile"
+	@echo "  make prod-logs   Follow production service logs"
+	@echo "  make prod-health Check nginx/api/admin health over HTTPS"
+	@echo "  make backup      Snapshot the database and photo storage"
+	@echo "  make restore SNAPSHOT=<ts>  Restore a snapshot (destructive)"
 
 # First-time setup: compose up, migrations, seed
 setup: .env
@@ -161,6 +171,40 @@ health:
 	@curl -s http://localhost:3000 > /dev/null && echo "✓ Admin UI is up" || echo "❌ Admin UI is down"
 	@curl -s http://localhost:8001/health || echo "❌ AI service health check failed"
 	@docker-compose exec -T postgres pg_isready -U $${DB_USERNAME} > /dev/null && echo "✓ PostgreSQL is up" || echo "❌ PostgreSQL is down"
+
+# --- Public cloud production profile ---------------------------------------
+# Requires apps/api/Dockerfile and apps/admin/Dockerfile (owned by the
+# backend/frontend agents), a populated .env (secrets via your host's
+# secret store) and a TLS cert/key under NGINX_CERTS_DIR. See infra/README.md.
+
+PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
+
+prod-config:
+	$(PROD_COMPOSE) config
+
+prod-up:
+	$(PROD_COMPOSE) up -d
+
+prod-down:
+	$(PROD_COMPOSE) down
+
+prod-logs:
+	$(PROD_COMPOSE) logs -f
+
+# Edge health check (nginx's own /health, see infra/README.md). This only
+# confirms nginx itself answers over TLS; there is no public API health path
+# in contracts/public-api.openapi.yaml yet, so end-to-end readiness (DB,
+# queue, storage) must be checked container-side with `make prod-logs` or
+# `docker compose ... exec api php artisan ...` until one exists.
+prod-health:
+	@echo "Checking production edge health..."
+	@curl -sf https://$${NGINX_SERVER_NAME:-localhost}/health > /dev/null && echo "✓ nginx is up" || echo "❌ nginx health check failed"
+
+backup:
+	./infra/scripts/backup.sh
+
+restore:
+	./infra/scripts/restore.sh $(SNAPSHOT)
 
 # Clean build cache
 clean-build:

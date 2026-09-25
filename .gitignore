@@ -1,3 +1,9 @@
 .orchestrator/
 __pycache__/
 *.pyc
+
+# Local env, TLS certs and backup snapshots for docker-compose.prod.yml —
+# never commit secrets or private keys.
+.env
+/certs/
+/backups/

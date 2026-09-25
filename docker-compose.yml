@@ -87,7 +87,7 @@ services:
       - ./apps/api:/app
       - photobank_storage:/app/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/up || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -137,7 +137,7 @@ services:
       dockerfile: Dockerfile
     container_name: photobank-admin
     environment:
-      NUXT_PUBLIC_API_BASE: "${APP_URL}"
+      NUXT_PUBLIC_API_BASE: "/api"
     depends_on:
       - api
     ports:
@@ -145,7 +145,7 @@ services:
     volumes:
       - ./apps/admin:/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -193,7 +193,7 @@ services:
     volumes:
       - ai_models_cache:/models
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
