@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "INFERENCE_FAILED",
+    "message": "Internal inference error",
+    "details": {},
+    "request_id": "0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42"
+  }
+}

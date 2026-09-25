@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid service API key",
+    "details": {},
+    "request_id": null
+  }
+}

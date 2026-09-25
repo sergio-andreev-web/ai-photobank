@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-photobank.local/contracts/schemas/error-response.json",
+  "title": "Error Response (Public API)",
+  "description": "Standard error response format for public API (§51, ADR-0002)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "details", "trace_id"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "Stable machine-readable error code (§51). See contracts/README.md for catalog and HTTP statuses."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable message; frontend does not parse this (§51)."
+        },
+        "details": {
+          "type": "object",
+          "description": "Error details (format depends on code). For VALIDATION_ERROR: fields object (field name → array of messages). For IMAGE_ALREADY_EXISTS: existing_image_id."
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Request trace ID for debugging (§64)"
+        }
+      }
+    }
+  }
+}

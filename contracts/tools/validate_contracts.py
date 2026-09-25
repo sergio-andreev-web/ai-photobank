@@ -406,6 +406,21 @@ EXAMPLE_FILE_SCHEMAS = {
     "ai/analyze-response.json": "image-analysis.json",
     "ai/text-embeddings-request.json": "text-embeddings.json#/$defs/TextEmbeddingsRequest",
     "ai/text-embeddings-response.json": "text-embeddings.json#/$defs/TextEmbeddingsResponse",
+    "ai/errors/invalid-request.json": "ai-error.json",
+    "ai/errors/unauthorized.json": "ai-error.json",
+    "ai/errors/image-too-large.json": "ai-error.json",
+    "ai/errors/unsupported-media-type.json": "ai-error.json",
+    "ai/errors/image-decode-failed.json": "ai-error.json",
+    "ai/errors/model-not-ready.json": "ai-error.json",
+    "ai/errors/model-output-invalid.json": "ai-error.json",
+    "ai/errors/service-busy.json": "ai-error.json",
+    "ai/errors/inference-failed.json": "ai-error.json",
+    "public-api/errors/unauthenticated.json": "error-response.json",
+    "public-api/errors/validation-error.json": "error-response.json",
+    "public-api/errors/image-not-found.json": "error-response.json",
+    "public-api/errors/image-already-exists.json": "error-response.json",
+    "public-api/errors/ai-service-unavailable.json": "error-response.json",
+    "public-api/errors/internal-error.json": "error-response.json",
 }
 
 
