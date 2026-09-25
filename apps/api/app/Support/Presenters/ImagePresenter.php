@@ -38,7 +38,8 @@ final class ImagePresenter
     public static function detail(Image $image): array
     {
         /** @var ImageAnalysis|null $latestAnalysis */
-        $latestAnalysis = $image->analyses->sortByDesc('created_at')->first();
+        // History rows can share a timestamp (reprocess within the same second); the higher id wins.
+        $latestAnalysis = $image->analyses->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
 
         return [
             'id' => $image->id,
