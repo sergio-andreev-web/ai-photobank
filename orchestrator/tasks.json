@@ -105,6 +105,16 @@
       "instructions": "Добавь artisan-команды переиндексации по ADR-0009 для активной версии (EMBEDDING_ACTIVE_MODEL_KEY и EMBEDDING_ACTIVE_MODEL_VERSION). photobank:reindex-tags ставит пересчёт embedding для тегов без embedding активной версии (существующие теги и исчерпавшие повторы) через имеющийся механизм пересчёта тегов. photobank:reindex-images ставит reprocess для изображений в статусе ready без активного embedding активной версии через имеющийся механизм reprocess: история analyses и embeddings сохраняется, старые строки деактивируются, ручные теги и suppression переживают. Обе команды идемпотентны (повторный запуск не создаёт дублей задач), работают батчами, поддерживают --dry-run и ограничение объёма и печатают итог. Не меняй публичный API и contracts/**; тесты с FakeAiClient без GPU."
     },
     {
+      "id": "backend-admin-bootstrap",
+      "title": "Создание первого администратора",
+      "module": "backend",
+      "kind": "standard",
+      "depends_on": [
+        "backend-media-api"
+      ],
+      "instructions": "Добавь artisan-команду photobank:create-admin для создания администратора в любом окружении: email аргументом, имя опцией, пароль — из переменной окружения PHOTOBANK_ADMIN_PASSWORD или скрытым вводом (не аргументом, чтобы не попадал в историю shell); проверка email и минимальной длины пароля, пароль хранится хэшем. Для существующего email команда отказывает, а с флагом --update-password меняет пароль. DatabaseSeeder создаёт пользователя с известным паролем только в окружениях local и testing. Опиши использование в apps/api/README.md. Не меняй публичный API и contracts/**; добавь тесты."
+    },
+    {
       "id": "admin-frontend-base",
       "title": "Каркас Nuxt и базовые экраны",
       "module": "frontend",

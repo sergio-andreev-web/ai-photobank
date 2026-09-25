@@ -18,6 +18,7 @@
 | `backend-taxonomy` | Claude **Opus 5.5**, high | Codex **Sol**, high | Canonical tags, кандидаты, ручные решения и suppression |
 | `backend-search` | Claude **Opus 5.5**, high | Codex **Sol**, high | Жесткие фильтры, hybrid ranking и версии embeddings |
 | `backend-reindex` | Codex **Sol**, high | Claude **Sonnet 5**, high | Идемпотентная постановка пересчёта на существующих механизмах |
+| `backend-admin-bootstrap` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Команда и сидер без изменения API |
 | `admin-frontend-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Каркас и простые компоненты по mock API |
 | `admin-frontend-flows` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Загрузка, модерация и поиск со связанным состоянием |
 | `admin-dockerfile` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Образ Nuxt для prod и согласование с Compose |
