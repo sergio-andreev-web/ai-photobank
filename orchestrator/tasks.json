@@ -178,6 +178,19 @@
       "instructions": "Добавь Mac MPS и RunPod CUDA инструкции, model cache volume, сервисный API key и deployment проверки. Не меняй application logic."
     },
     {
+      "id": "ci-tests",
+      "title": "Тесты модулей в CI",
+      "module": "infra",
+      "kind": "infra_deploy",
+      "depends_on": [
+        "infrastructure-runpod",
+        "backend-media-api",
+        "ai-production-key",
+        "admin-frontend-flows"
+      ],
+      "instructions": "Сделай так, чтобы .github/workflows/ci.yml на каждом push и pull request запускал тесты модулей: backend — PHP 8.4 с pdo_pgsql, composer install по composer.lock, PHPUnit на SQLite (настройки phpunit.xml) и отдельно на PostgreSQL из service-контейнера pgvector/pgvector:0.8.0-pg17 (DB_CONNECTION=pgsql); AI — Python 3.13, pip install -r services/ai/requirements-dev.txt, pytest без маркера model; admin — Node, npm ci, vitest run, nuxt build и Playwright e2e на chromium. Падение теста должно ронять job: не ставь continue-on-error на проверки; существующий job Integration Test сделай честным или явно пометь информационным. Кешируй зависимости. Не меняй apps/**, services/** и contracts/**; если модулю не хватает конфигурации для CI, запиши точную зависимость для владельца. Проверь синтаксис workflow и команды jobs локально, насколько позволяет среда."
+    },
+    {
       "id": "integration-qa",
       "title": "Контрактные и сквозные проверки MVP",
       "module": "qa",
