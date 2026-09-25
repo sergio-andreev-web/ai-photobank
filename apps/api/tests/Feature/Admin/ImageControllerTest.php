@@ -4,8 +4,10 @@ namespace Tests\Feature\Admin;
 
 use App\Models\Batch;
 use App\Models\Image;
+use App\Models\ImageAnalysis;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\Concerns\InteractsAsAdmin;
 use Tests\TestCase;
 
@@ -29,6 +31,37 @@ class ImageControllerTest extends TestCase
             'status' => 'uploaded',
             'created_by' => $user->id,
         ], $attributes));
+    }
+
+    public function test_latest_analysis_prefers_the_newer_row_when_timestamps_tie(): void
+    {
+        $user = $this->loginAsAdmin();
+        $image = $this->makeImage($user, ['status' => 'ready']);
+        $analyze = fn (string $caption): ImageAnalysis => ImageAnalysis::create([
+            'image_id' => $image->id,
+            'vision_model' => 'Qwen/Qwen3-VL-4B-Instruct',
+            'vision_model_version' => 'rev-1',
+            'embedding_model' => 'google/siglip2-so400m-patch14-384',
+            'embedding_model_version' => 'rev-1',
+            'prompt_version' => 'image-analysis-v1',
+            'caption' => $caption,
+            'concepts' => [],
+            'ocr' => [],
+            'raw_response' => [],
+            'processing_ms' => 1,
+        ]);
+
+        // Reprocess within the same second leaves both history rows with one timestamp.
+        Carbon::setTestNow('2026-09-25 12:00:00');
+        $analyze('before reprocess');
+        $newer = $analyze('after reprocess');
+        Carbon::setTestNow();
+
+        $response = $this->getJson("/api/admin/images/{$image->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('latest_analysis.id', $newer->id);
+        $response->assertJsonPath('latest_analysis.caption', 'after reprocess');
     }
 
     public function test_images_require_authentication(): void
