@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -57,6 +58,15 @@ class Tag extends Model
     public function embeddings(): HasMany
     {
         return $this->hasMany(TagEmbedding::class);
+    }
+
+    /**
+     * `images_count` = not deleted images with this tag (§55); Image soft deletes
+     * are excluded by the related model's scope.
+     */
+    public function scopeWithImagesCount(Builder $query): Builder
+    {
+        return $query->withCount('images');
     }
 
     public function candidates(): HasMany

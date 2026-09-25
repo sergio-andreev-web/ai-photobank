@@ -84,7 +84,7 @@ final class ImagePresenter
     /**
      * @return array<string, mixed>
      */
-    private static function imageTag(ImageTag $imageTag): array
+    public static function imageTag(ImageTag $imageTag): array
     {
         return [
             'tag' => TagPresenter::ref($imageTag->tag),

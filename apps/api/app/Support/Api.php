@@ -28,4 +28,13 @@ final class Api
             'last_page' => max(1, (int) ceil($total / $perPage)),
         ];
     }
+
+    /**
+     * `%value%` for `LIKE ? ESCAPE '!'` — the same escape clause works on
+     * PostgreSQL and sqlite, which has no default LIKE escape character.
+     */
+    public static function likeContains(string $value): string
+    {
+        return '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value).'%';
+    }
 }

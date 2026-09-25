@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Admin\BatchController;
 use App\Http\Controllers\Admin\ImageController;
+use App\Http\Controllers\Admin\ImageTagController;
+use App\Http\Controllers\Admin\TagCandidateController;
+use App\Http\Controllers\Admin\TagController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\MediaController;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +48,27 @@ Route::prefix('api')->group(function () {
             Route::delete('/images/{image}', [ImageController::class, 'destroy'])->whereNumber('image');
             Route::post('/images/{image}/reprocess', [ImageController::class, 'reprocess'])->whereNumber('image');
             Route::post('/images/{image}/retry', [ImageController::class, 'retry'])->whereNumber('image');
+
+            Route::post('/images/{image}/tags', [ImageTagController::class, 'store'])->whereNumber('image');
+            Route::delete('/images/{image}/tags/{tag}', [ImageTagController::class, 'destroy'])
+                ->whereNumber(['image', 'tag']);
+
+            Route::get('/tags', [TagController::class, 'index']);
+            Route::post('/tags', [TagController::class, 'store']);
+            Route::get('/tags/{tag}', [TagController::class, 'show'])->whereNumber('tag');
+            Route::patch('/tags/{tag}', [TagController::class, 'update'])->whereNumber('tag');
+            Route::delete('/tags/{tag}', [TagController::class, 'destroy'])->whereNumber('tag');
+            Route::post('/tags/{tag}/aliases', [TagController::class, 'storeAlias'])->whereNumber('tag');
+            Route::delete('/tags/{tag}/aliases/{alias}', [TagController::class, 'destroyAlias'])
+                ->whereNumber(['tag', 'alias']);
+
+            Route::get('/tag-candidates', [TagCandidateController::class, 'index']);
+            Route::post('/tag-candidates/{candidate}/approve', [TagCandidateController::class, 'approve'])
+                ->whereNumber('candidate');
+            Route::post('/tag-candidates/{candidate}/merge', [TagCandidateController::class, 'merge'])
+                ->whereNumber('candidate');
+            Route::post('/tag-candidates/{candidate}/reject', [TagCandidateController::class, 'reject'])
+                ->whereNumber('candidate');
         });
 
         Route::get('/media/images/{image}/{variant}', [MediaController::class, 'show'])

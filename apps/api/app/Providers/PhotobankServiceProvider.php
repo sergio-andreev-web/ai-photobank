@@ -8,7 +8,7 @@ use App\Contracts\Tagging\TagResolverInterface;
 use App\Services\Ai\FakeAiClient;
 use App\Services\Ai\HttpAiClient;
 use App\Services\Storage\LocalPhotoStorage;
-use App\Services\Tagging\NullTagResolver;
+use App\Services\Tagging\TagResolver;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
@@ -17,7 +17,7 @@ use InvalidArgumentException;
  * Binds the module-level interfaces from ТЗ §7 and §11: AiClientInterface
  * (config('ai.driver')) and PhotoStorageInterface (the "photobank" disk),
  * plus the backend-internal TagResolverInterface used by the tag_resolution
- * processing stage (placeholder until the backend-taxonomy task).
+ * processing stage (ТЗ §36).
  */
 class PhotobankServiceProvider extends ServiceProvider
 {
@@ -39,6 +39,6 @@ class PhotobankServiceProvider extends ServiceProvider
             Storage::disk('photobank'),
         ));
 
-        $this->app->bind(TagResolverInterface::class, NullTagResolver::class);
+        $this->app->bind(TagResolverInterface::class, TagResolver::class);
     }
 }

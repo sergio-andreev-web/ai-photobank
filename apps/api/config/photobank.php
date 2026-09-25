@@ -90,4 +90,24 @@ return [
         'preview' => ['max_width' => 1600, 'max_height' => 1600, 'quality' => 85],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | TagResolver (ТЗ §36, §37)
+    |--------------------------------------------------------------------------
+    |
+    | Stage 3 thresholds on cosine similarity (1 - cosine distance, ADR-0009)
+    | between a concept's text embedding and tag_embeddings. Starting values
+    | from §37, to be tuned on a validation dataset:
+    |   >= auto_attach            → assign the canonical tag;
+    |   >= candidate, < auto      → tag_candidate with closest_tag;
+    |   <  candidate              → new tag_candidate.
+    |
+    */
+
+    'tagging' => [
+        'auto_attach_threshold' => (float) env('TAG_AUTO_ATTACH_THRESHOLD', 0.82),
+        'candidate_threshold' => (float) env('TAG_CANDIDATE_THRESHOLD', 0.68),
+        'semantic_top_k' => 5,
+    ],
+
 ];
