@@ -1,3 +1,25 @@
+# AI Photobank API
+
+## Create an administrator
+
+After configuring the database and running migrations, create an administrator in any environment:
+
+```sh
+php artisan photobank:create-admin admin@example.com --name="Administrator"
+```
+
+The command prompts for a password with hidden input. Alternatively, provide `PHOTOBANK_ADMIN_PASSWORD` through your deployment secret manager before running the command. The password must be at least eight characters long. Do not pass it as a command argument. If `--name` is omitted, the email is used as the name.
+
+An existing email is rejected. To change an existing administrator's password, run:
+
+```sh
+php artisan photobank:create-admin admin@example.com --update-password
+```
+
+The same hidden prompt or environment variable supplies the new password. This flag changes only the password; it does not create a missing user or change the administrator's name.
+
+`php artisan db:seed` creates `admin@example.com` with password `password123` only in `local` and `testing`. Change this password before using a seeded local account with valuable data. The seeder does not create this account in other environments.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

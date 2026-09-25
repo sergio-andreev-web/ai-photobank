@@ -3,14 +3,76 @@
 use App\Jobs\RegenerateTagEmbedding;
 use App\Models\Image;
 use App\Models\Tag;
+use App\Models\User;
 use App\Services\Processing\ProcessingPipeline;
 use App\Services\Processing\ProcessingState;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('photobank:create-admin {email} {--name=} {--update-password}', function (): int {
+    $email = $this->argument('email');
+    $name = $this->option('name');
+    $validator = Validator::make(['email' => $email, 'name' => $name], [
+        'email' => ['required', 'email:rfc', 'max:255'],
+        'name' => ['nullable', 'string', 'max:255'],
+    ]);
+    if ($validator->fails()) {
+        $this->error($validator->errors()->first());
+
+        return 1;
+    }
+
+    $user = User::query()->where('email', $email)->first();
+    if ($user && ! $this->option('update-password')) {
+        $this->error('A user with this email already exists. Use --update-password to change its password.');
+
+        return 1;
+    }
+    if (! $user && $this->option('update-password')) {
+        $this->error('No user with this email exists. Omit --update-password to create one.');
+
+        return 1;
+    }
+    if ($user && $user->role !== 'admin') {
+        $this->error('The existing user is not an administrator.');
+
+        return 1;
+    }
+
+    $password = getenv('PHOTOBANK_ADMIN_PASSWORD');
+    if ($password === false) {
+        $password = $this->secret('Admin password');
+    }
+    $passwordValidator = Validator::make(['password' => $password], [
+        'password' => ['required', 'string', 'min:8'],
+    ]);
+    if ($passwordValidator->fails()) {
+        $this->error('Admin password must be at least 8 characters long.');
+
+        return 1;
+    }
+
+    if ($user) {
+        $user->update(['password' => Hash::make($password)]);
+        $this->info('Administrator password updated.');
+    } else {
+        User::query()->create([
+            'name' => $name ?: $email,
+            'email' => $email,
+            'role' => 'admin',
+            'password' => Hash::make($password),
+        ]);
+        $this->info('Administrator created.');
+    }
+
+    return 0;
+})->purpose('Create an administrator or update an existing administrator password');
 
 Artisan::command('photobank:reindex-tags {--dry-run} {--limit=0} {--batch=100}', function (): int {
     $limit = $this->option('limit');
