@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import MutableMapping
 
 from ..config import Settings
 from ..device import resolve_dtype
@@ -14,6 +16,19 @@ from .weights import resolve_weights
 
 logger = logging.getLogger("ai_service.providers")
 
+# Transformers 5.x copies weights to the device from a thread pool
+# (core_model_loading); on MPS that intermittently segfaults the process.
+# The variable is read at load time, so it must be set before from_pretrained.
+ASYNC_LOAD_ENV = "HF_DEACTIVATE_ASYNC_LOAD"
+
+
+def configure_weight_loading(device: AiDevice, environ: MutableMapping[str, str] = os.environ) -> None:
+    """Force sequential weight loading on MPS unless the operator chose explicitly."""
+    if device is not AiDevice.MPS or environ.get(ASYNC_LOAD_ENV, "").strip():
+        return
+    environ[ASYNC_LOAD_ENV] = "1"
+    logger.info("ai_service.sequential_weight_loading", extra={"device": device.value})
+
 
 def close_model(model: object | None) -> None:
     close = getattr(model, "close", None)
@@ -22,6 +37,7 @@ def close_model(model: object | None) -> None:
 
 
 def build_transformers_models(settings: Settings, device: AiDevice, prompt: str) -> tuple[VisionModel, EmbeddingModel]:
+    configure_weight_loading(device)
     from .transformers_backend import TransformersEmbeddingEncoder, TransformersVisionGenerator
 
     dtype = resolve_dtype(settings.dtype, device)
