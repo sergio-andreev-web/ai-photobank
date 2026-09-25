@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.0.0` |
+| Версия | `1.1.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -66,6 +66,8 @@ Inline-примеры в OpenAPI покрывают критические оп�
 | `TOO_MANY_REQUESTS` | 429 | решение ADR (ADR-0001) |
 | `VALIDATION_ERROR` (`details.fields`) | 422 | решение ADR (ADR-0002) |
 | `INTERNAL_ERROR` | 500 | решение ADR (ADR-0002) |
+| `NOT_FOUND` | 404 | решение ADR (ADR-0002) |
+| `METHOD_NOT_ALLOWED` (заголовок `Allow`) | 405 | решение ADR (ADR-0002) |
 | `BATCH_NOT_FOUND` | 404 | решение ADR |
 | `BATCH_NOT_ACCEPTING_UPLOADS` | 409 | решение ADR (ADR-0005) |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | решение ADR (ADR-0005) |
@@ -82,6 +84,10 @@ Inline-примеры в OpenAPI покрывают критические оп�
 | `TAG_CANDIDATE_NOT_FOUND` | 404 | решение ADR |
 | `TAG_CANDIDATE_ALREADY_RESOLVED` | 409 | решение ADR (ADR-0008) |
 | `EMBEDDING_VERSION_MISMATCH` | 503 | решение ADR (ADR-0009) |
+
+`NOT_FOUND` и `METHOD_NOT_ALLOWED` — общие ответы на запрос к несуществующему пути public API и к методу, который
+маршрут не поддерживает. Отсутствующий ресурс существующего маршрута по-прежнему возвращает свой код
+(`IMAGE_NOT_FOUND`, `BATCH_NOT_FOUND` и т. д.).
 
 Коды ошибок обработки изображения (`images.error_code`, `processing_tasks.error_code`, отдаются в `ImageDetail`),
 все решение ADR: `METADATA_EXTRACTION_FAILED`, `VARIANT_GENERATION_FAILED`, `AI_SERVICE_UNAVAILABLE`,
@@ -107,7 +113,8 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    совместимость. Breaking change требует явного уведомления **всех** потребителей до слияния.
 3. Затем владельцы модулей синхронизируют реализации. Агент модуля не меняет `contracts/**` сам и не маскирует
    недостающий контракт собственным временным API (см. `.agents`).
-4. Текущая базовая версия MVP — `1.0.0`; последующие изменения проходят через ADR и правила выше.
+4. Базовая версия MVP — `1.0.0`; последующие изменения проходят через ADR и правила выше.
+   `1.1.0` — общие коды `NOT_FOUND` и `METHOD_NOT_ALLOWED` (ADR-0002).
 
 ## Проверка
 

@@ -421,6 +421,8 @@ EXAMPLE_FILE_SCHEMAS = {
     "public-api/errors/image-already-exists.json": "error-response.json",
     "public-api/errors/ai-service-unavailable.json": "error-response.json",
     "public-api/errors/internal-error.json": "error-response.json",
+    "public-api/errors/not-found.json": "error-response.json",
+    "public-api/errors/method-not-allowed.json": "error-response.json",
 }
 
 
