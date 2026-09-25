@@ -28,7 +28,9 @@ examples/
         ├── image-not-found.json           # 404: Изображение не найдено
         ├── image-already-exists.json      # 409: Дубликат по хешу
         ├── ai-service-unavailable.json    # 503: AI service недоступен
-        └── internal-error.json            # 500: Внутренняя ошибка сервера
+        ├── internal-error.json            # 500: Внутренняя ошибка сервера
+        ├── not-found.json                 # 404: Несуществующий путь API
+        └── method-not-allowed.json        # 405: Метод не поддерживается маршрутом
 ```
 
 ## Валидация примеров
