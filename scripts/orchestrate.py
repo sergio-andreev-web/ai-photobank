@@ -81,7 +81,7 @@ def load_config() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
 
 def route(policy: dict[str, Any], task: dict[str, Any], provider: str | None = None) -> dict[str, str]:
     rule = policy["routes"][task["kind"]]
-    selected = provider or rule["default_provider"]
+    selected = provider or task.get("preferred_provider") or rule["default_provider"]
     if selected == "ollama":
         local = policy["ollama"]
         if not local["enabled"] or not local["model"]:
@@ -194,9 +194,11 @@ def agent_command(run: dict[str, Any], summary: Path) -> list[str]:
             command += ["--config", f'model_reasoning_effort="{effort}"']
         return command + ["-"]
     if provider == "claude":
-        return ["claude", "--print", "--model", model, "--effort", effort,
-                "--output-format", "stream-json", "--permission-mode", "acceptEdits",
-                "--permission-prompts", "none", run["prompt"]]
+        command = ["claude", "--print", "--model", model, "--output-format", "stream-json",
+                   "--permission-mode", "acceptEdits", "--permission-prompts", "none"]
+        if effort:
+            command += ["--effort", effort]
+        return command + [run["prompt"]]
     raise OrchestratorError(f"Unsupported provider {provider}")
 
 

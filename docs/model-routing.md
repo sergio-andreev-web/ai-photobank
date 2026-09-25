@@ -1,43 +1,38 @@
-# Рекомендации по моделям для разработки AI Photobank
+# Модели для задач AI Photobank
 
-**Дата:** 2026-09-25. Это рекомендации координатору при выдаче задач, а не жесткая зависимость проекта от поставщика модели. Проверяйте доступность модели в конкретном Codex, Claude Code или локальном раннере. Файл `.agents` задает общие правила работы независимо от выбранной модели.
+**Пересмотрено:** 2026-09-25. Исполняемая матрица находится в [policy.json](../orchestrator/policy.json), а задания и зависимости — в [tasks.json](../orchestrator/tasks.json). Модель выбирает оркестратор при запуске задачи; файлы `.agents` и `CLAUDE.md` сами ее не переключают.
 
-## Принцип выбора
+## Принцип
 
-Выбирайте модель по **неопределенности и риску задачи**, а не по названию каталога. Простую миграцию по утвержденной схеме можно поручить быстрой модели. Та же миграция с изменением связей, soft delete, pgvector index и обратной совместимостью требует более сильной модели или отдельного ревью. Чем слабее модель, тем уже задание, точнее входной контракт и проверяемее результат.
+Оцениваем сложность **конкретного среза**, а не название модуля. Узкий каркас или миграция по утвержденной схеме подходит Luna/Haiku. Реализация с несколькими зависимостями и проверяемым поведением — Sol/Sonnet. Доменные инварианты, неоднозначные архитектурные решения и сквозная интеграция — Astra/Opus. При нехватке контракта исполнитель останавливает зависимую работу и формулирует вопрос; более сильная модель не получает права изобретать договоренности.
 
-Ниже `Luna/Haiku` — быстрый исполнитель для узкого задания; `Sol/Sonnet` — основной исполнитель; `Astra/Opus` — для сложной интеграции и ревью. `Fable` имеет смысл оставлять для действительно тяжелого межмодульного анализа, если обычное ревью не справляется. Имена отражают состояние доступных линеек на дату документа и не означают, что модель гарантированно доступна в вашем тарифе/раннере.
-
-| Работа | Codex: исполнитель | Claude: исполнитель | Когда усилить или проверить |
+| Задача | По умолчанию | Альтернативный провайдер | Основание |
 | --- | --- | --- | --- |
-| Утверждение public/AI OpenAPI, общих enum и изменений API | GPT-6 Sol, high | Claude Sonnet 5 | GPT-6 Astra / Claude Opus 5.5 для спорных решений; Fable 5.1 при особо сложном конфликте |
-| Механическое заполнение схем, примеров и mock fixtures по уже согласованному контракту | GPT-6 Luna, medium | Claude Sonnet 5; Haiku 4.5 для совсем узких правок | Sol/Sonnet проверяет валидность схем и согласованность примеров |
-| Простые миграции БД строго по утвержденной таблице | GPT-6 Luna, medium | Claude Sonnet 5; Haiku 4.5 для одной простой таблицы | Sol/Sonnet проверяет FK, unique, индексы и rollback; сложные vector/soft-delete миграции — сразу Sol/Sonnet |
-| Backend auth, upload, storage, variants, CRUD | GPT-6 Sol, medium | Claude Sonnet 5 | Sol high / Opus для безопасности, конкурентной загрузки и дедупликации |
-| Весь `backend-core` одним заданием: API, очереди, taxonomy, поиск | GPT-6 Sol, high | Claude Opus 5.5, high | Если разделить на узкие задачи с отдельной приемкой, большую часть можно вернуть Sonnet 5 |
-| Очереди, idempotency, retry, reprocess, AI client | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus для ревью гонок и неясных переходов состояний |
-| Taxonomy, TagResolver, moderation и защита ручных тегов | GPT-6 Sol, high | Claude Sonnet 5 | Второе ревью Astra/Opus на пограничных случаях и сохранении инвариантов |
-| pgvector, версии embeddings, hybrid search | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus для решений о версиях/индексах и проблем качества поиска |
-| Каркас Nuxt, простые компоненты, таблицы и формы по mock API | GPT-6 Luna, medium | Claude Sonnet 5 | Sol/Sonnet для состояния загрузчика, авторизации и complex UX |
-| Сквозные frontend flows: batch upload, moderation, search | GPT-6 Sol, medium | Claude Sonnet 5 | Sol high/Opus при гонках состояния и нестабильном API |
-| FastAPI contract, Pydantic схемы, mock models, unit tests | GPT-6 Luna, medium или Sol, low | Claude Sonnet 5 | Sol/Sonnet проверяет межсервисный контракт и безопасность входа |
-| Реальные SigLIP2/Qwen, MPS/CUDA, память и inference | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus только при сложной отладке или пересмотре модельного подхода |
-| Compose, Makefile, env templates по готовым интерфейсам | GPT-6 Luna, medium | Claude Sonnet 5 | Sol/Sonnet проверяет запуск с чистого состояния |
-| Mac/RunPod deployment, секреты, volumes, health checks | GPT-6 Sol, medium/high | Claude Sonnet 5 или Opus 5.5 | Opus/Astra для проблем безопасности и трудно воспроизводимой интеграции |
-| Фикстуры, тестовые данные, простые contract tests | GPT-6 Luna, medium | Claude Sonnet 5; Haiku 4.5 для узких генераций | Sol/Sonnet проверяет, что тесты ловят реальные несовместимости |
-| Сквозная интеграция и приемка по готовым сценариям | GPT-6 Sol, high | Claude Sonnet 5 | Astra/Opus для расследования сложных сбоев; Fable 5.1 при долгом межмодульном анализе |
+| `contracts-v1` | Codex **GPT-6 Astra**, high | Claude **Opus 5.5**, high | Общие API, enum, состояния и ADR влияют на все модули |
+| `contract-fixtures` | Claude **Haiku 4.5** | Codex **Luna**, medium | Примеры по уже утвержденным схемам |
+| `backend-bootstrap` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Каркас и интерфейсы без доменных правил |
+| `backend-schema-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Простые таблицы по точной схеме |
+| `backend-schema-domain` | Claude **Sonnet 5**, high | Codex **Sol**, high | Связи, soft delete, pgvector и индексы |
+| `backend-media-api` | Codex **Sol**, high | Claude **Sonnet 5**, high | Авторизация, хранение, валидация и дубликаты |
+| `backend-processing` | Claude **Opus 5.5**, high | Codex **Astra**, high | Идемпотентность, конкурентные задачи, retry и reprocess |
+| `backend-taxonomy` | Codex **Astra**, high | Claude **Opus 5.5**, high | Canonical tags, кандидаты, ручные решения и suppression |
+| `backend-search` | Claude **Opus 5.5**, high | Codex **Astra**, high | Жесткие фильтры, hybrid ranking и версии embeddings |
+| `admin-frontend-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Каркас и простые компоненты по mock API |
+| `admin-frontend-flows` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Загрузка, модерация и поиск со связанным состоянием |
+| `ai-mock` | Claude **Sonnet 5**, medium | Codex **Sol**, medium | Межсервисный контракт и preprocessing |
+| `ai-models` | Claude **Opus 5.5**, high | Codex **Sol**, high | Реальные модели, память, MPS/CUDA и отказы |
+| `infrastructure-base` | Codex **Luna**, medium | Claude **Haiku 4.5** | Compose и команды по готовым интерфейсам |
+| `infrastructure-runpod` | Codex **Sol**, high | Claude **Sonnet 5**, high | GPU deployment, секреты и health checks |
+| `integration-qa` | Codex **Astra**, high | Claude **Opus 5.5**, high | Сквозная приемка нескольких сервисов |
 
-## Как выдавать задания
+Для `Haiku 4.5` оркестратор не передает `--effort`: эта модель не поддерживает соответствующий параметр. `Fable 5.1` оставляем для ручной эскалации длительного исследования или задачи, где Opus на высокой сложности не справился; автоматического маршрута на Fable нет. Ollama пока выключен и разрешен только для узких видов задач после явной настройки и проверки локальной модели.
 
-1. Указать пакет из `docs/agent-tasks/`, точные файлы или подмодуль, версию контракта и критерии приемки.
-2. Выбрать модель в инструменте запуска **до** передачи задания. Для дешевого исполнителя ограничить задачу одним ясным результатом и задать обязательные проверки.
-3. Если задача выходит за контракт или требует решения другой команды, вернуть ее координатору. Не повышать модель ради права самостоятельно менять договоренности.
-4. Для важных инвариантов использовать отдельный review другим агентом или более сильной моделью. Успех подтверждают тесты и соответствие контракту, а не имя модели.
+По умолчанию у отдельных задач может быть `preferred_provider`, поэтому одна категория сложности может запускаться разными провайдерами. Флаг `--provider` при запуске явно переопределяет предпочтение, сохраняя уровень модели этой категории. Команда `doctor` проверяет наличие CLI, а доступность ID в конкретном аккаунте выяснится при пробном запуске; оркестратор не подменяет модель молча.
 
-`AGENTS.md`, `CLAUDE.md` и `.agents` сами по себе **не переключают модель** в Codex, Claude Code или произвольном локальном раннере. Они сообщают правила и рекомендуемый уровень. Модель задает запускающий человек/оркестратор через настройки или параметры своего инструмента. Локальная модель пригодна для узкой задачи только при наличии нужного контекста, инструментов и проверки результата.
+Внутри одного пакета задачи одного владельца выполняются последовательно и принимаются отдельно. Разные владельцы могут работать параллельно после приемки общих контрактов. Результат подтверждают контрактные проверки, тесты и review; название модели само по себе не является приемкой.
 
-## Источники рекомендаций по линейкам
+## Источники
 
-- [OpenAI: model selection](https://developers.openai.com/api/docs/guides/model-selection) — Luna для узких задач, Sol для повседневной разработки, Astra для сложной работы.
-- [OpenAI: models](https://developers.openai.com/api/docs/models) — актуальные имена GPT-6 Astra/Sol/Luna.
-- [Anthropic: models overview](https://platform.claude.com/docs/en/models/overview) — текущие линейки Haiku, Sonnet, Opus, Fable и их назначение.
+- [OpenAI Docs: Model selection](https://developers.openai.com/api/docs/guides/model-selection) — Astra для сложных задач, Sol для повседневного кодинга, Luna для узкой работы.
+- [Anthropic: Choosing the right model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) — Opus для сложной агентной разработки, Sonnet для повседневного кодинга, Haiku для прямолинейных задач; Fable как эскалация.
+- [Anthropic: Models overview](https://platform.claude.com/docs/en/models/overview) — ID моделей и поддержка effort.
