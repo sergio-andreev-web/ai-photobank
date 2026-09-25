@@ -1548,29 +1548,9 @@ components:
         Клиент обязан обрабатывать неизвестный код как общую ошибку.
       examples: [IMAGE_NOT_FOUND]
     ErrorResponse:
-      type: object
-      additionalProperties: false
-      required: [error]
+      $ref: './schemas/error-response.json'
       x-tz: "§51"
-      properties:
-        error:
-          type: object
-          additionalProperties: false
-          required: [code, message, details, trace_id]
-          properties:
-            code:
-              $ref: '#/components/schemas/ErrorCode'
-            message:
-              type: string
-              description: Для людей и логов; frontend не парсит (§51).
-            details:
-              type: object
-              description: |
-                Детали по коду. Для `VALIDATION_ERROR` — `fields`: объект «имя поля → массив сообщений»
-                (утверждено, ADR-0002). Для `IMAGE_ALREADY_EXISTS` — `existing_image_id` (§27).
-            trace_id:
-              type: string
-              minLength: 1
+      x-adr: "ADR-0002"
     PaginationMeta:
       type: object
       required: [page, per_page, total, last_page]

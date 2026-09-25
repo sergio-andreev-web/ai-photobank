@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": {
+      "fields": {
+        "email": ["required"],
+        "password": ["min length is 6"]
+      }
+    },
+    "trace_id": "7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f"
+  }
+}

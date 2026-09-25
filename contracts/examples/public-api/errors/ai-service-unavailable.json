@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "AI_SERVICE_UNAVAILABLE",
+    "message": "AI service is currently unavailable",
+    "details": {},
+    "trace_id": "7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f"
+  }
+}

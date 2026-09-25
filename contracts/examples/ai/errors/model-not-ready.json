@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "MODEL_NOT_READY",
+    "message": "Models are loading",
+    "details": {
+      "stage": "loading_models"
+    },
+    "request_id": null
+  }
+}
