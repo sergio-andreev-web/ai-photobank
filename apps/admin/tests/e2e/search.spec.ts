@@ -51,6 +51,36 @@ test.describe('search', () => {
     await expect(page.getByText('IMG_0001.jpg')).toBeVisible()
   })
 
+  test('tags-only search sends the selected tag ids as integers', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, {
+        data: [{ id: 14, parent_id: null, name: 'Каска', slug: 'kaska', normalized_name: 'каска', type: 'object', status: 'active', images_count: 3, aliases: [], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }],
+        meta: { page: 1, per_page: 20, total: 1, last_page: 1 },
+      })
+    )
+    let requestBody: { tag_ids?: unknown } | undefined
+    await page.route('**/api/search', (route) => {
+      requestBody = route.request().postDataJSON()
+      return json(route, 200, {
+        data: [RESULT_IMAGE],
+        meta: { page: 1, per_page: 24, total: 1, last_page: 1, mode: 'tags' },
+      })
+    })
+
+    await gotoReady(page, '/search')
+    await page.getByRole('combobox', { name: 'Search Mode' }).click()
+    await page.getByRole('option', { name: 'Tags only' }).click()
+    await page.getByText('Select tags (all must match)').click()
+    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+
+    // The contract requires integer ids; the select must not submit its option objects.
+    await expect.poll(() => requestBody?.tag_ids).toEqual([14])
+    await expect(page.getByText('IMG_0001.jpg')).toBeVisible()
+  })
+
   test('tags-only search requires at least one tag before submitting', async ({ page }) => {
     await loginAsAdmin(page)
     await page.route('**/api/admin/tags?*', (route) =>

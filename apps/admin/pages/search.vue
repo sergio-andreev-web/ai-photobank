@@ -20,6 +20,7 @@
           <USelectMenu
             v-model="selectedTags"
             :items="tagOptions"
+            value-key="value"
             multiple
             placeholder="Select tags (all must match)"
             @update:search-term="onTagSearch"
