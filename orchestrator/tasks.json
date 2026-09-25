@@ -202,6 +202,18 @@
       "instructions": "Сделай так, чтобы .github/workflows/ci.yml на каждом push и pull request запускал тесты модулей: backend — PHP 8.4 с pdo_pgsql, composer install по composer.lock, PHPUnit на SQLite (настройки phpunit.xml) и отдельно на PostgreSQL из service-контейнера pgvector/pgvector:0.8.0-pg17 (DB_CONNECTION=pgsql); AI — Python 3.13, pip install -r services/ai/requirements-dev.txt, pytest без маркера model; admin — Node, npm ci, vitest run, nuxt build и Playwright e2e на chromium. Падение теста должно ронять job: не ставь continue-on-error на проверки; существующий job Integration Test сделай честным или явно пометь информационным. Кешируй зависимости. Не меняй apps/**, services/** и contracts/**; если модулю не хватает конфигурации для CI, запиши точную зависимость для владельца. Проверь синтаксис workflow и команды jobs локально, насколько позволяет среда."
     },
     {
+      "id": "compose-runtime",
+      "title": "Рабочий стек Compose: очереди и образы сервисов",
+      "module": "infra",
+      "kind": "infra_deploy",
+      "depends_on": [
+        "ci-tests",
+        "admin-dockerfile",
+        "backend-processing"
+      ],
+      "instructions": "Сделай так, чтобы стек по docker-compose.yml и с production-overlay поднимался с чистого checkout. (1) api и api-worker: QUEUE_CONNECTION=rabbitmq; прокинь EMBEDDING_ACTIVE_MODEL_KEY и EMBEDDING_ACTIVE_MODEL_VERSION (и опиши их в корневом .env.example); worker слушает --queue=images.reprocess,images.ai,images.processing, его --timeout больше AI_REQUEST_TIMEOUT (см. apps/api/config/queue.php, config/photobank.php и apps/api/.env.example). (2) Монтирование ./apps/api и ./apps/admin в /app перекрывает собранные в образах vendor и .output: убери его из базового файла или вынеси в отдельный dev-override, сохранив том хранилища фото. (3) Job Integration Smoke в .github/workflows/ci.yml должен реально собирать и поднимать стек, когда есть apps/api/Dockerfile и apps/admin/Dockerfile, и проверять health через nginx; сверь upstream nginx (api:8000, admin:3000) и healthcheck сервисов. Не меняй apps/**, services/** и contracts/**; требования к образам сервисов запиши для их владельцев."
+    },
+    {
       "id": "integration-qa",
       "title": "Контрактные и сквозные проверки MVP",
       "module": "qa",
