@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import math
 import os
 import re
+import select
 import shutil
 import subprocess
 import sys
@@ -79,11 +81,19 @@ def load_config() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     return policy, tasks
 
 
-def route(policy: dict[str, Any], task: dict[str, Any], provider: str | None = None) -> dict[str, str]:
+def route(policy: dict[str, Any], task: dict[str, Any], provider: str | None = None,
+          model: str | None = None) -> dict[str, str]:
     rule = policy["routes"][task["kind"]]
+    if model and not provider:
+        matches = [name for name, models in policy["allowed_models"].items() if model in models]
+        if len(matches) != 1:
+            raise OrchestratorError(f"Model {model} is not allowed")
+        provider = matches[0]
     selected = provider or task.get("preferred_provider") or rule["default_provider"]
     if selected == "ollama":
         local = policy["ollama"]
+        if model and model != local["model"]:
+            raise OrchestratorError("Ollama accepts only the configured local model")
         if not local["enabled"] or not local["model"]:
             raise OrchestratorError("Ollama is disabled; set enabled and model in policy.json")
         if task["kind"] not in local["allowed_kinds"]:
@@ -91,7 +101,188 @@ def route(policy: dict[str, Any], task: dict[str, Any], provider: str | None = N
         return {"provider": "ollama", "model": local["model"], "effort": ""}
     if selected not in policy["providers"] or selected not in rule:
         raise OrchestratorError(f"Provider {selected} cannot run {task['kind']}")
-    return {"provider": selected, **rule[selected]}
+    configured = rule[selected]
+    chosen_model = model or configured["model"]
+    if chosen_model not in policy["allowed_models"][selected]:
+        raise OrchestratorError(f"Model {chosen_model} is not allowed for {selected}")
+    effort = "" if chosen_model == "claude-haiku-4-5" else configured["effort"]
+    return {"provider": selected, "model": chosen_model, "effort": effort}
+
+
+def _percent(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise OrchestratorError(f"Invalid usage percent for {label}")
+    if not 0 <= value <= 100:
+        raise OrchestratorError(f"Usage percent outside 0..100 for {label}")
+    return float(value)
+
+
+def _usage_snapshot(provider: str, used: dict[str, Any], source: str,
+                    short_window: str, weekly_window: str) -> dict[str, Any]:
+    windows = {name: {"used_percent": _percent(value, f"{provider}.{name}"),
+                      "remaining_percent": 100 - _percent(value, f"{provider}.{name}")}
+               for name, value in used.items()}
+    if not windows:
+        raise OrchestratorError(f"No usage windows reported by {provider}")
+    if short_window not in windows or weekly_window not in windows:
+        raise OrchestratorError(f"Missing short or weekly usage window for {provider}")
+    return {"provider": provider, "source": source, "checked_at": datetime.now(timezone.utc).isoformat(),
+            "windows": windows, "remaining_percent": windows[short_window]["remaining_percent"],
+            "weekly_remaining_percent": windows[weekly_window]["remaining_percent"]}
+
+
+def _codex_rpc_response(process: subprocess.Popen[str], request: dict[str, Any],
+                        timeout: float = 20) -> dict[str, Any]:
+    assert process.stdin is not None and process.stdout is not None
+    process.stdin.write(json.dumps(request) + "\n")
+    process.stdin.flush()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not select.select([process.stdout], [], [], max(0, deadline - time.monotonic()))[0]:
+            break
+        line = process.stdout.readline()
+        if not line:
+            break
+        try:
+            response = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if response.get("id") == request["id"]:
+            if "error" in response:
+                raise OrchestratorError(f"Codex usage request failed: {response['error']}")
+            return response.get("result") or {}
+    raise OrchestratorError("Codex usage request timed out or returned no response")
+
+
+def codex_usage() -> dict[str, Any]:
+    """Read subscription windows through the installed Codex CLI app-server protocol."""
+    try:
+        process = subprocess.Popen(["codex", "app-server", "--stdio"], cwd=ROOT, stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+    except OSError as error:
+        raise OrchestratorError(f"Cannot start Codex usage check: {error}") from error
+    try:
+        _codex_rpc_response(process, {"id": 1, "method": "initialize",
+                                      "params": {"clientInfo": {"name": "ai-photobank-orchestrator", "version": "1"}}})
+        data = _codex_rpc_response(process, {"id": 2, "method": "account/rateLimits/read",
+                                             "params": {"includeResetCredits": False}})
+        return parse_codex_usage(data)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def parse_codex_usage(data: dict[str, Any]) -> dict[str, Any]:
+    if data.get("ordinaryUsageAllowed") is not True:
+        raise OrchestratorError("Codex ordinary subscription usage is blocked or unavailable")
+    limits = (data.get("rateLimitsByLimitId") or {}).get("codex") or data.get("rateLimits") or {}
+    used = {name: window["usedPercent"] for name in ("primary", "secondary")
+            if isinstance(window := limits.get(name), dict) and window.get("usedPercent") is not None}
+    if set(used) != {"primary", "secondary"}:
+        raise OrchestratorError("Codex did not report both subscription usage windows")
+    return _usage_snapshot("codex", used, "codex app-server account/rateLimits/read",
+                           "primary", "secondary")
+
+
+def claude_usage() -> dict[str, Any]:
+    """Read the local /usage command without asking a model to generate an answer."""
+    try:
+        result = subprocess.run(["claude", "--print", "--output-format", "json", "--max-turns", "1",
+                                 "--no-session-persistence", "/usage"],
+                                cwd=ROOT, capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise OrchestratorError(f"Cannot read Claude usage: {error}") from error
+    if result.returncode:
+        raise OrchestratorError(f"Claude usage command failed (exit {result.returncode})")
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise OrchestratorError("Claude usage command returned invalid JSON") from error
+    return parse_claude_usage(data)
+
+
+def parse_claude_usage(data: dict[str, Any]) -> dict[str, Any]:
+    if data.get("local_command") != "usage" or data.get("num_turns") != 0 or data.get("is_error"):
+        raise OrchestratorError("Claude did not return a local /usage result")
+    message = data.get("result") or ""
+    patterns = {"session": r"Current session:\s*([0-9]+(?:\.[0-9]+)?)% used",
+                "week": r"Current week \(all models\):\s*([0-9]+(?:\.[0-9]+)?)% used"}
+    used = {}
+    for name, pattern in patterns.items():
+        match = re.search(pattern, message)
+        if not match:
+            raise OrchestratorError(f"Claude /usage did not report {name} subscription percentage")
+        used[name] = float(match.group(1))
+    snapshot = _usage_snapshot("claude", used, "claude -p /usage", "session", "week")
+    fable = re.search(r"Current week \(Fable\):\s*([0-9]+(?:\.[0-9]+)?)% used", message)
+    if fable:
+        snapshot["fable_remaining_percent"] = 100 - _percent(float(fable.group(1)), "claude.fable")
+    return snapshot
+
+
+def read_usage(providers: list[str]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    snapshots: dict[str, dict[str, Any]] = {}
+    errors: dict[str, str] = {}
+    probes = {"codex": codex_usage, "claude": claude_usage}
+    for provider in providers:
+        if provider not in probes:
+            continue
+        try:
+            snapshots[provider] = probes[provider]()
+        except OrchestratorError as error:
+            errors[provider] = str(error)
+    return snapshots, errors
+
+
+def choose_route(policy: dict[str, Any], task: dict[str, Any], provider: str | None,
+                 model: str | None, usage: dict[str, dict[str, Any]],
+                 errors: dict[str, str]) -> tuple[dict[str, str], str]:
+    if provider or model:
+        selected = route(policy, task, provider, model)
+        if selected["provider"] in errors:
+            raise OrchestratorError(f"Usage unavailable for {selected['provider']}: {errors[selected['provider']]}")
+        if selected["provider"] in usage:
+            snapshot = usage[selected["provider"]]
+            if snapshot["remaining_percent"] <= 0 or snapshot["weekly_remaining_percent"] <= 0:
+                raise OrchestratorError(f"No 5-hour or weekly subscription usage remains for {selected['provider']}")
+        if selected["model"] == "claude-fable-5-1":
+            fable = usage.get("claude", {}).get("fable_remaining_percent")
+            if fable is None or fable <= 0:
+                raise OrchestratorError("Claude Fable subscription usage is unavailable or exhausted")
+        return selected, "explicit model/provider selection"
+    preferred = task.get("preferred_provider") or policy["routes"][task["kind"]]["default_provider"]
+    minimum = policy["usage_routing"]["minimum_remaining_percent"]
+    available = {name: snapshot["remaining_percent"] for name, snapshot in usage.items()
+                 if name in policy["providers"] and snapshot["remaining_percent"] >= minimum
+                 and snapshot["weekly_remaining_percent"] >= minimum}
+    if not available:
+        raise OrchestratorError(f"No provider has verified usage above {minimum}%: {errors}")
+    best = max(available, key=available.get)
+    if preferred in available and available[best] - available[preferred] < policy["usage_routing"]["switch_margin_percent"]:
+        best = preferred
+    selected = route(policy, task, best)
+    reason = f"5-hour subscription headroom: {best} {available[best]:g}% remaining"
+    return selected, reason
+
+
+def select_for_task(policy: dict[str, Any], task: dict[str, Any], provider: str | None,
+                    model: str | None, skip_usage_check: bool = False
+                    ) -> tuple[dict[str, str], str, dict[str, dict[str, Any]], dict[str, str]]:
+    requested = route(policy, task, provider, model) if provider or model else None
+    if skip_usage_check:
+        if requested is None:
+            raise OrchestratorError("--skip-usage-check requires --provider or --model")
+        return requested, "explicit selection; usage check skipped", {}, {}
+    if requested and requested["provider"] == "ollama":
+        return requested, "explicit local provider", {}, {}
+    providers = [requested["provider"]] if requested else policy["providers"]
+    usage, errors = read_usage(providers)
+    selected, reason = choose_route(policy, task, provider, model, usage, errors)
+    return selected, reason, usage, errors
 
 
 @contextmanager
@@ -231,12 +422,13 @@ def execute(run_id: str) -> None:
         state["tasks"][run["task_id"]]["status"] = status
 
 
-def dispatch(task_id: str, provider: str | None) -> dict[str, Any]:
+def dispatch(task_id: str, provider: str | None, model: str | None = None,
+             skip_usage_check: bool = False) -> dict[str, Any]:
     policy, tasks = load_config()
     if task_id not in tasks:
         raise OrchestratorError(f"Unknown task {task_id}")
     task = tasks[task_id]
-    selected = route(policy, task, provider)
+    selected, reason, usage, errors = select_for_task(policy, task, provider, model, skip_usage_check)
     if not shutil.which("codex" if selected["provider"] == "ollama" else selected["provider"]):
         raise OrchestratorError(f"CLI for {selected['provider']} is not installed")
     with state_lock() as state:
@@ -252,7 +444,8 @@ def dispatch(task_id: str, provider: str | None) -> dict[str, Any]:
         run = {"task_id": task_id, "module": task["module"], "provider": selected["provider"],
                "model": selected["model"], "effort": selected["effort"], "branch": branch,
                "base": base, "worktree": str(worktree), "prompt": build_prompt(task, policy),
-               "status": "running", "started_at": datetime.now(timezone.utc).isoformat()}
+               "status": "running", "started_at": datetime.now(timezone.utc).isoformat(),
+               "selection_reason": reason, "usage_at_dispatch": usage, "usage_errors": errors}
         state["runs"][run_id] = run
         state["tasks"][task_id] = {"status": "running", "module": task["module"], "run_id": run_id}
         run_dir = RUNTIME / "runs" / run_id
@@ -265,7 +458,8 @@ def dispatch(task_id: str, provider: str | None) -> dict[str, Any]:
     with state_lock() as state:
         state["runs"][run_id]["pid"] = process.pid
     return {"run_id": run_id, "task": task_id, "provider": selected["provider"], "model": selected["model"],
-            "branch": branch, "worktree": str(worktree), "pid": process.pid}
+            "branch": branch, "worktree": str(worktree), "pid": process.pid,
+            "selection_reason": reason, "usage": usage, "usage_errors": errors}
 
 
 def accept(task_id: str) -> dict[str, str]:
@@ -299,6 +493,8 @@ def status_rows(tasks: dict[str, dict[str, Any]], state: dict[str, Any]) -> list
             run_id = entry["run_id"]
             run = state["runs"][run_id]
             row.update({"run_id": run_id, "provider": run["provider"], "model": run["model"],
+                        "selection_reason": run.get("selection_reason"),
+                        "usage_at_dispatch": run.get("usage_at_dispatch", {}),
                         "branch": run["branch"], "worktree": run["worktree"],
                         "log": str(RUNTIME / "runs" / run_id / "agent.log"),
                         "started_at": run["started_at"], "finished_at": run.get("finished_at"),
@@ -375,9 +571,14 @@ def main() -> int:
     plan = commands.add_parser("plan", help="Show one task without starting an agent")
     plan.add_argument("task_id")
     plan.add_argument("--provider", choices=["codex", "claude", "ollama"])
+    plan.add_argument("--model", help="Explicit model from policy.json allowed_models")
+    plan.add_argument("--skip-usage-check", action="store_true", help="Use only with explicit provider/model")
     run = commands.add_parser("run", help="Start one task in an isolated worktree")
     run.add_argument("task_id")
     run.add_argument("--provider", choices=["codex", "claude", "ollama"])
+    run.add_argument("--model", help="Explicit model from policy.json allowed_models")
+    run.add_argument("--skip-usage-check", action="store_true", help="Use only with explicit provider/model")
+    commands.add_parser("usage", help="Read current subscription usage from both CLIs")
     commands.add_parser("status", help="Show dispatched task states")
     logs = commands.add_parser("logs", help="Show an agent's recent events")
     logs.add_argument("task_or_run_id")
@@ -401,13 +602,32 @@ def main() -> int:
                     "ollama_enabled": policy["ollama"]["enabled"]}
             print(json.dumps(info, ensure_ascii=False, indent=2))
         elif args.command == "run":
-            print(json.dumps(dispatch(args.task_id, args.provider), ensure_ascii=False, indent=2))
+            print(json.dumps(dispatch(args.task_id, args.provider, args.model, args.skip_usage_check),
+                             ensure_ascii=False, indent=2))
+        elif args.command == "usage":
+            snapshots, errors = read_usage(policy["providers"])
+            print(json.dumps({"usage": snapshots, "errors": errors}, ensure_ascii=False, indent=2))
+            if not snapshots:
+                return 2
         elif args.command == "accept":
             print(json.dumps(accept(args.task_id), ensure_ascii=False, indent=2))
         elif args.command == "logs":
             if args.lines < 1:
                 raise OrchestratorError("--lines must be positive")
             show_logs(args.task_or_run_id, tasks, args.follow, args.raw, args.lines)
+        elif args.command == "plan":
+            if args.task_id not in tasks:
+                raise OrchestratorError(f"Unknown task {args.task_id}")
+            task = tasks[args.task_id]
+            selected, reason, usage, errors = select_for_task(
+                policy, task, args.provider, args.model, args.skip_usage_check)
+            with state_lock() as state:
+                blockers = readiness(task, policy, state)
+            print(json.dumps({"task": task, "route": selected, "selection_reason": reason,
+                              "usage": usage, "usage_errors": errors,
+                              "brief": policy["modules"][task["module"]]["brief"],
+                              "owned_paths": policy["modules"][task["module"]]["owned_paths"],
+                              "blockers": blockers}, ensure_ascii=False, indent=2))
         else:
             with state_lock() as state:
                 if args.command == "status":
@@ -420,14 +640,6 @@ def main() -> int:
                                      "status": task_state(state, task["id"]), "blockers": readiness(task, policy, state),
                                      "provider": selected["provider"], "model": selected["model"]})
                     print(json.dumps(rows, ensure_ascii=False, indent=2))
-                elif args.command == "plan":
-                    if args.task_id not in tasks:
-                        raise OrchestratorError(f"Unknown task {args.task_id}")
-                    task = tasks[args.task_id]
-                    print(json.dumps({"task": task, "route": route(policy, task, args.provider),
-                                      "brief": policy["modules"][task["module"]]["brief"],
-                                      "owned_paths": policy["modules"][task["module"]]["owned_paths"],
-                                      "blockers": readiness(task, policy, state)}, ensure_ascii=False, indent=2))
         return 0
     except (OrchestratorError, KeyError, ValueError) as error:
         print(f"orchestrator: {error}", file=sys.stderr)

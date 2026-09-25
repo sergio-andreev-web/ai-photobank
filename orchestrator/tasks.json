@@ -63,7 +63,6 @@
       "title": "TagResolver, кандидаты и ручные решения",
       "module": "backend",
       "kind": "critical_domain",
-      "preferred_provider": "codex",
       "depends_on": ["backend-processing"],
       "instructions": "Реализуй сопоставление concepts с canonical tags, aliases, tag_candidates, moderation, ручные теги и suppression строго по контрактам. AI не создает canonical tags. Ручные решения переживают reprocess. Проверь конфликты и повторное выполнение тестами."
     },

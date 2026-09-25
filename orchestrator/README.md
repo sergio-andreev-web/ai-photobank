@@ -4,7 +4,7 @@
 
 ## Почему правила, а не «AI-начальник»
 
-Модель назначается по сложности конкретного среза. Например, простые миграции `backend-schema-base` получает GPT-6 Luna, схемы с pgvector `backend-schema-domain` — Claude Sonnet 5, а доменные правила `backend-processing`, `backend-taxonomy` и `backend-search` — Claude Opus 5.5 или GPT-6 Astra. Для отдельных задач `preferred_provider` выбирает провайдера по умолчанию; флаг `--provider` может его переопределить. Модель внутри выбранного провайдера задает политика. Полная таблица находится в [`docs/model-routing.md`](../docs/model-routing.md).
+Модель назначается по сложности конкретного среза. Например, простые миграции `backend-schema-base` получает GPT-6 Luna, схемы с pgvector `backend-schema-domain` — Claude Sonnet 5, а доменные правила `backend-processing`, `backend-taxonomy` и `backend-search` — Claude Opus 5.5 по умолчанию. При выборе Codex для них используется GPT-6 Sol. Полная таблица находится в [`docs/model-routing.md`](../docs/model-routing.md).
 
 ## Подготовка
 
@@ -12,21 +12,27 @@
 
 ```bash
 python3 scripts/orchestrate.py doctor
+python3 scripts/orchestrate.py usage
 python3 scripts/orchestrate.py list
 python3 scripts/orchestrate.py plan contracts-v1
+python3 scripts/orchestrate.py plan backend-processing --provider codex --model gpt-6-sol
 ```
 
-`plan` не тратит токены. Пока `contracts-v1` не принят, зависимые задачи помечаются как blocked. После него отдельно принимаются контрактные примеры `contract-fixtures`, затем могут параллельно стартовать первые задачи backend, frontend, AI и инфраструктуры.
+`plan` не запускает агента и показывает фактически выбранную модель, проценты подписок, причину выбора и блокирующие зависимости. `list` показывает модели из политики без проверки текущих подписок; для актуального решения по одной задаче используйте `plan TASK`. Пока `contracts-v1` не принят, зависимые задачи помечаются как blocked. После него отдельно принимаются контрактные примеры `contract-fixtures`, затем могут параллельно стартовать первые задачи backend, frontend, AI и инфраструктуры.
+
+`usage` читает Codex через локальный CLI app-server `account/rateLimits/read`, Claude — через локальную команду `claude -p '/usage'`. **Для маршрутизации сравниваются пятчасовые остатки** (`primary` и `Current session`); недельные лимиты служат отдельной проверкой доступности. Источники не используют API-баланс или токены из логов вместо лимита подписки. При недоступности одного источника автоматический выбор использует другой и сообщает об ошибке; если оба недоступны, запуск блокируется. Если разница пятчасовых остатков меньше 10 процентных пунктов, сохраняется предпочтительный провайдер задачи. Порог и разница настраиваются в `policy.json`.
 
 ## Запуск и приемка
 
 ```bash
 python3 scripts/orchestrate.py run contracts-v1
+python3 scripts/orchestrate.py run backend-processing --provider claude --model claude-opus-5-5
+python3 scripts/orchestrate.py run backend-processing --provider codex --model gpt-6-sol
 python3 scripts/orchestrate.py status
 python3 scripts/orchestrate.py logs contracts-v1 --follow
 ```
 
-`run` запускает процесс в фоне и сразу возвращает `run_id`, ветку и путь worktree. Следующие независимые задачи можно запускать так же; два задания с одной зоной владения одновременно не стартуют. `status` показывает стадию (`queued`, `running`, `needs_review`, `failed`, `scope_violation`, `accepted`), модель, ветку, worktree и путь лога. `logs TASK --follow` показывает действия агента по мере выполнения; `--raw` выводит полные JSONL события. Можно передать `run_id` вместо имени задачи. Диспетчер записывает prompt, лог и состояние в `.orchestrator/runs/<run_id>/` — эта папка игнорируется Git и может содержать чувствительную информацию.
+`run` без флагов проверяет оба остатка и запускает процесс в фоне на выбранном провайдере. `--provider` выбирает Codex или Claude вручную; `--model` выбирает точную модель из `allowed_models` в политике и может использоваться без `--provider`. Модели Codex ограничены GPT-6 Luna и Sol. Явный выбор тоже проверяет остаток выбранной подписки; при сбое проверки можно сознательно добавить `--skip-usage-check` вместе с явным выбором. `run` возвращает `run_id`, модель, причину выбора, снимок лимитов, ветку и worktree. Следующие независимые задачи можно запускать так же; два задания с одной зоной владения одновременно не стартуют. `status` показывает стадию (`queued`, `running`, `needs_review`, `failed`, `scope_violation`, `accepted`), модель, ветку, worktree и путь лога. `logs TASK --follow` показывает действия агента по мере выполнения; `--raw` выводит полные JSONL события. Можно передать `run_id` вместо имени задачи. Диспетчер записывает prompt, лог и состояние в `.orchestrator/runs/<run_id>/` — эта папка игнорируется Git и может содержать чувствительную информацию.
 
 После `needs_review` человек смотрит diff в worktree, проверяет тесты и соответствие контракту, затем коммитит изменения в ветке агента и сливает ее в основной checkout. Только после этого:
 
@@ -44,7 +50,7 @@ python3 scripts/orchestrate.py accept contracts-v1
 - **Claude:** `claude --print --output-format stream-json` с выбранной моделью, без интерактивных approval prompts; команды, требующие подтверждения, могут быть отклонены и должны попасть в отчет агента.
 - **Ollama:** выключен по умолчанию. После проверки локальной coding-модели укажите ее ID и `enabled: true` в `policy.json`; запуск идет через Codex CLI `--oss --local-provider ollama`. Ollama разрешен только для перечисленных узких `allowed_kinds`.
 
-Маршрутизация задается в `policy.json`, а объяснение выбора моделей — в [`docs/model-routing.md`](../docs/model-routing.md). Если модель недоступна в вашем аккаунте, диспетчер не подменяет ее молча: используйте другой провайдер или измените политику осознанно.
+Маршрутизация задается в `policy.json`, а объяснение выбора моделей — в [`docs/model-routing.md`](../docs/model-routing.md). Если модель недоступна в вашем аккаунте, диспетчер не подменяет ее молча: используйте другой провайдер или измените политику осознанно. Источники процентов — локальные команды текущих авторизованных аккаунтов; если формат их ответа изменится, проверка остановится с явной ошибкой.
 
 ## Добавление задачи
 
