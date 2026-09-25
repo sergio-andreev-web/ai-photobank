@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Версия | `0.1.0-draft` |
-| Статус | **Черновик, не утвержден.** Реализации пакетов 01–04 не стартуют по элементам со статусом `proposed`, пока координатор не примет решения из [docs/adr](../docs/adr/README.md). |
+| Версия | `1.0.0` |
+| Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
 
@@ -33,11 +33,9 @@ Inline-примеры в OpenAPI покрывают критические оп�
 
 ## Маркировка требований
 
-- `x-tz: "§N"` — операция, поле или значение взяты из ТЗ.
-- `x-decision-status: proposed` + `x-adr: ADR-NNNN` — предложение контрактного этапа для пробела в ТЗ.
-  Это **не утвержденный контракт**: координатор принимает или меняет решение в ADR, после чего маркер снимается.
-- `x-proposed-constraints` — перечень ограничений узла, которые предложены, а не взяты из ТЗ.
-- Если маркера нет, но поведение описано в `description` словом «proposed», действует то же правило.
+- `x-tz: "§N"` — источник в ТЗ.
+- `x-adr: ADR-NNNN` — источник в утвержденном архитектурном решении.
+- `x-constraints` — утвержденные ограничения схемы.
 
 ## Общие правила
 
@@ -59,34 +57,34 @@ Inline-примеры в OpenAPI покрывают критические оп�
 | Код | HTTP | Источник |
 | --- | --- | --- |
 | `IMAGE_NOT_FOUND` | 404 | ТЗ §51 |
-| `IMAGE_ALREADY_EXISTS` (`details.existing_image_id`) | 409 | код и details — ТЗ §27; HTTP-статус — proposed |
+| `IMAGE_ALREADY_EXISTS` (`details.existing_image_id`) | 409 | код и details — ТЗ §27; HTTP-статус — решение ADR |
 | `AI_SERVICE_UNAVAILABLE` | 503 | ТЗ §46 |
-| `UNAUTHENTICATED` | 401 | proposed (ADR-0001) |
-| `FORBIDDEN` | 403 | proposed (ADR-0001) |
-| `CSRF_TOKEN_MISMATCH` | 419 | proposed (ADR-0001) |
-| `INVALID_CREDENTIALS` | 422 | proposed (ADR-0001) |
-| `TOO_MANY_REQUESTS` | 429 | proposed (ADR-0001) |
-| `VALIDATION_ERROR` (`details.fields`) | 422 | proposed (ADR-0002) |
-| `INTERNAL_ERROR` | 500 | proposed (ADR-0002) |
-| `BATCH_NOT_FOUND` | 404 | proposed |
-| `BATCH_NOT_ACCEPTING_UPLOADS` | 409 | proposed (ADR-0005) |
-| `UNSUPPORTED_MEDIA_TYPE` | 415 | proposed (ADR-0005) |
-| `FILE_TOO_LARGE` | 413 | proposed (ADR-0005) |
-| `IMAGE_NOT_RETRYABLE` | 409 | proposed (ADR-0003) |
-| `IMAGE_TAG_NOT_FOUND` | 404 | proposed (ADR-0006) |
-| `MEDIA_NOT_AVAILABLE` | 404 | proposed (ADR-0011) |
-| `TAG_NOT_FOUND` | 404 | proposed |
-| `TAG_ALREADY_EXISTS` (`details.existing_tag_id`) | 409 | proposed (ADR-0007) |
-| `TAG_ARCHIVED` | 409 | proposed (ADR-0007) |
-| `TAG_PARENT_INVALID` | 422 | proposed (ADR-0007) |
-| `ALIAS_NOT_FOUND` | 404 | proposed |
-| `ALIAS_ALREADY_EXISTS` (`details.existing_tag_id`) | 409 | proposed (ADR-0007) |
-| `TAG_CANDIDATE_NOT_FOUND` | 404 | proposed |
-| `TAG_CANDIDATE_ALREADY_RESOLVED` | 409 | proposed (ADR-0008) |
-| `EMBEDDING_VERSION_MISMATCH` | 503 | proposed (ADR-0009) |
+| `UNAUTHENTICATED` | 401 | решение ADR (ADR-0001) |
+| `FORBIDDEN` | 403 | решение ADR (ADR-0001) |
+| `CSRF_TOKEN_MISMATCH` | 419 | решение ADR (ADR-0001) |
+| `INVALID_CREDENTIALS` | 422 | решение ADR (ADR-0001) |
+| `TOO_MANY_REQUESTS` | 429 | решение ADR (ADR-0001) |
+| `VALIDATION_ERROR` (`details.fields`) | 422 | решение ADR (ADR-0002) |
+| `INTERNAL_ERROR` | 500 | решение ADR (ADR-0002) |
+| `BATCH_NOT_FOUND` | 404 | решение ADR |
+| `BATCH_NOT_ACCEPTING_UPLOADS` | 409 | решение ADR (ADR-0005) |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | решение ADR (ADR-0005) |
+| `FILE_TOO_LARGE` | 413 | решение ADR (ADR-0005) |
+| `IMAGE_NOT_RETRYABLE` | 409 | решение ADR (ADR-0003) |
+| `IMAGE_TAG_NOT_FOUND` | 404 | решение ADR (ADR-0006) |
+| `MEDIA_NOT_AVAILABLE` | 404 | решение ADR (ADR-0011) |
+| `TAG_NOT_FOUND` | 404 | решение ADR |
+| `TAG_ALREADY_EXISTS` (`details.existing_tag_id`) | 409 | решение ADR (ADR-0007) |
+| `TAG_ARCHIVED` | 409 | решение ADR (ADR-0007) |
+| `TAG_PARENT_INVALID` | 422 | решение ADR (ADR-0007) |
+| `ALIAS_NOT_FOUND` | 404 | решение ADR |
+| `ALIAS_ALREADY_EXISTS` (`details.existing_tag_id`) | 409 | решение ADR (ADR-0007) |
+| `TAG_CANDIDATE_NOT_FOUND` | 404 | решение ADR |
+| `TAG_CANDIDATE_ALREADY_RESOLVED` | 409 | решение ADR (ADR-0008) |
+| `EMBEDDING_VERSION_MISMATCH` | 503 | решение ADR (ADR-0009) |
 
 Коды ошибок обработки изображения (`images.error_code`, `processing_tasks.error_code`, отдаются в `ImageDetail`),
-все proposed: `METADATA_EXTRACTION_FAILED`, `VARIANT_GENERATION_FAILED`, `AI_SERVICE_UNAVAILABLE`,
+все решение ADR: `METADATA_EXTRACTION_FAILED`, `VARIANT_GENERATION_FAILED`, `AI_SERVICE_UNAVAILABLE`,
 `AI_REQUEST_REJECTED` (AI вернул не повторяемую 4xx), `AI_RESPONSE_INVALID` (ответ не прошел `image-analysis.json`),
 `TAG_RESOLUTION_FAILED`, `INTERNAL_ERROR`.
 
@@ -109,8 +107,7 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    совместимость. Breaking change требует явного уведомления **всех** потребителей до слияния.
 3. Затем владельцы модулей синхронизируют реализации. Агент модуля не меняет `contracts/**` сам и не маскирует
    недостающий контракт собственным временным API (см. `.agents`).
-4. Предсерийные версии: `0.x.y-draft` — пока есть открытые ADR; `1.0.0` — после утверждения всех ADR 0001–0011
-   и снятия маркеров `proposed` с принятых элементов.
+4. Текущая базовая версия MVP — `1.0.0`; последующие изменения проходят через ADR и правила выше.
 
 ## Проверка
 
@@ -128,6 +125,6 @@ python3 contracts/tools/validate_contracts.py
 
 Перегенерация примеров: `python3 contracts/tools/generate_examples.py`.
 
-## Открытые вопросы
+## Утвержденные решения
 
-Сводный список вопросов координатору — в [docs/adr/README.md](../docs/adr/README.md#вопросы-координатору).
+Все 11 решений и закрытые вопросы перечислены в [decision-checklist.md](../docs/adr/decision-checklist.md).

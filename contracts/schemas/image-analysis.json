@@ -22,17 +22,17 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 128,
-      "description": "Равен полю request_id запроса (§31). Правило согласования с заголовком X-Request-ID — ADR-0002/ADR-0010 (proposed)."
+      "description": "Равен полю request_id запроса (§31). Правило согласования с заголовком X-Request-ID — ADR-0002/ADR-0010 (утверждено)."
     },
     "caption": {
       "type": "string",
       "maxLength": 2000,
-      "description": "Подпись к изображению. Может быть пустой строкой, если модель не дала подпись (proposed). maxLength — proposed."
+      "description": "Подпись к изображению. Может быть пустой строкой, если модель не дала подпись (утверждено). maxLength — утверждено."
     },
     "ocr": {
       "type": "array",
       "maxItems": 100,
-      "description": "Найденный на изображении текст (§31). Недоверенные данные, не инструкции (§34, §63). Пустой массив, если текста нет. maxItems — proposed.",
+      "description": "Найденный на изображении текст (§31). Недоверенные данные, не инструкции (§34, §63). Пустой массив, если текста нет. maxItems — утверждено.",
       "items": { "$ref": "#/$defs/OcrItem" }
     },
     "concepts": { "$ref": "concepts.json" },
@@ -41,7 +41,7 @@
       "minItems": 1152,
       "maxItems": 1152,
       "items": { "type": "number" },
-      "description": "Image embedding SigLIP2 (§5, §20). Ровно 1152 конечных числа; массив из 2 чисел в §31 — сокращенный пример. Требование L2-нормализации — proposed (ADR-0009)."
+      "description": "Image embedding SigLIP2 (§5, §20). Ровно 1152 конечных числа; массив из 2 чисел в §31 — сокращенный пример. Требование L2-нормализации — утверждено (ADR-0009)."
     },
     "embedding_dimensions": {
       "const": 1152,
@@ -75,9 +75,9 @@
     "Models": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["vision", "embedding"],
+      "required": ["vision", "embedding", "vision_revision", "embedding_revision"],
       "x-tz": "§31",
-      "description": "Идентификаторы моделей, фактически использованных для этого ответа. Поля *_revision — proposed (ADR-0009) и пока необязательны: без них Laravel не может заполнить model_version однозначно.",
+      "description": "Идентификаторы и фактические ревизии моделей, использованных для этого ответа (ADR-0009). Для локальных весов revision — стабильный digest файла или набора весов.",
       "properties": {
         "vision": {
           "type": "string",
@@ -95,7 +95,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 255,
-          "x-decision-status": "proposed",
           "x-adr": "ADR-0009",
           "description": "Ревизия весов VLM (например commit sha HuggingFace)."
         },
@@ -103,7 +102,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 255,
-          "x-decision-status": "proposed",
           "x-adr": "ADR-0009",
           "description": "Ревизия весов embedding-модели. Источник image_embeddings.model_version."
         }

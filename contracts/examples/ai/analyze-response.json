@@ -1186,7 +1186,9 @@
   "embedding_dimensions": 1152,
   "models": {
     "vision": "Qwen/Qwen3-VL-4B-Instruct",
-    "embedding": "google/siglip2-so400m-patch14-384"
+    "embedding": "google/siglip2-so400m-patch14-384",
+    "vision_revision": "qwen3vl-4b-20260925",
+    "embedding_revision": "siglip2-so400m-20260925"
   },
   "prompt_version": "image-analysis-v1",
   "processing_ms": 4812

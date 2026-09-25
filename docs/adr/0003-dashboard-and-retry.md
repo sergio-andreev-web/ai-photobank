@@ -1,6 +1,6 @@
 # ADR-0003: Dashboard и retry failed image
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-09-25
 - Затрагивает: backend, frontend; `GET /api/admin/dashboard`, `POST /api/admin/images/{image}/retry`, `reprocess`
 
@@ -38,3 +38,7 @@ Retry:
 
 1. Утвердить два новых endpoint?
 2. Нужен ли batch-level retry (вариант C) в MVP?
+
+## Принятое решение
+
+Владелец продукта утвердил этот пункт 2026-09-25. Итоговая формулировка: dashboard/retry.** Отдельные `GET /api/admin/dashboard` и `POST /api/admin/images/{id}/retry`. Retry только для failed image, продолжает с упавшего этапа. Batch-level retry в MVP не добавлять; reprocess сохраняет отдельную семантику.

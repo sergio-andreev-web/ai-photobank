@@ -3,9 +3,7 @@
 Журнал решений контрактного этапа (пакет 00). Каждый ADR закрывает строку таблицы
 «Решения, которые надо закрыть в контрактном этапе» из [development-plan.md](../development-plan.md).
 
-**Все ADR имеют статус `Proposed`.** Рекомендованный вариант уже отражен в `contracts/**` с маркером
-`x-decision-status: proposed`, но не является утвержденным контрактом. Координатор переводит ADR в `Accepted`
-(возможно, с другим вариантом); владелец контрактов после этого синхронизирует схемы и снимает маркеры.
+**Все ADR приняты владельцем продукта 2026-09-25.** Точные решения записаны в [decision-checklist.md](decision-checklist.md); при расхождении с первоначальной рекомендацией действует утвержденный список.
 
 Краткий пакет конкретных решений для review: [decision-checklist.md](decision-checklist.md).
 
@@ -13,22 +11,22 @@
 
 | ADR | Тема | Строка плана | Статус |
 | --- | --- | --- | --- |
-| [0001](0001-authentication-sanctum-spa.md) | Sanctum: cookie-сессия или bearer, CSRF, 401/403/419 | Sanctum | Proposed |
-| [0002](0002-api-conventions.md) | Формы ответов, пагинация, фильтры, ошибки, trace_id | Формы ответов | Proposed |
-| [0003](0003-dashboard-and-retry.md) | Dashboard и retry failed image | Dashboard и retry | Proposed |
-| [0004](0004-search-request.md) | `POST /api/search`: mode, валидация, tag_ids, debug | Search | Proposed |
-| [0005](0005-batch-lifecycle-and-upload.md) | Автомат batch, счетчики, дубликаты, параметры upload | Batch | Proposed |
-| [0006](0006-image-editing-and-suppression.md) | PATCH image, ручные теги, suppression | (связано с §41, §76) | Proposed |
-| [0007](0007-tag-normalization-and-aliases.md) | Нормализация, коллизии alias, уникальность, archive/delete | Alias collisions | Proposed |
-| [0008](0008-candidate-moderation.md) | approve/merge/reject, повторное обнаружение | Кандидат | Proposed |
-| [0009](0009-embedding-versioning.md) | model_key/model_version, активная версия, метрика и индекс | Embedding | Proposed |
-| [0010](0010-ai-service-contract.md) | /health vs /ready, ошибки AI, лимиты, API key, concept type | /health, 1152 | Proposed |
-| [0011](0011-media-serving.md) | Авторизованная отдача media, X-Accel-Redirect | Media | Proposed |
+| [0001](0001-authentication-sanctum-spa.md) | Sanctum: cookie-сессия или bearer, CSRF, 401/403/419 | Sanctum | Accepted |
+| [0002](0002-api-conventions.md) | Формы ответов, пагинация, фильтры, ошибки, trace_id | Формы ответов | Accepted |
+| [0003](0003-dashboard-and-retry.md) | Dashboard и retry failed image | Dashboard и retry | Accepted |
+| [0004](0004-search-request.md) | `POST /api/search`: mode, валидация, tag_ids, debug | Search | Accepted |
+| [0005](0005-batch-lifecycle-and-upload.md) | Автомат batch, счетчики, дубликаты, параметры upload | Batch | Accepted |
+| [0006](0006-image-editing-and-suppression.md) | PATCH image, ручные теги, suppression | (связано с §41, §76) | Accepted |
+| [0007](0007-tag-normalization-and-aliases.md) | Нормализация, коллизии alias, уникальность, archive/delete | Alias collisions | Accepted |
+| [0008](0008-candidate-moderation.md) | approve/merge/reject, повторное обнаружение | Кандидат | Accepted |
+| [0009](0009-embedding-versioning.md) | model_key/model_version, активная версия, метрика и индекс | Embedding | Accepted |
+| [0010](0010-ai-service-contract.md) | /health vs /ready, ошибки AI, лимиты, API key, concept type | /health, 1152 | Accepted |
+| [0011](0011-media-serving.md) | Авторизованная отдача media, X-Accel-Redirect | Media | Accepted |
 
 Строка плана «ТЗ показывает массив embedding из 2 чисел» закрыта без ADR — это однозначное требование §5:
 `schemas/image-analysis.json` требует ровно 1152 числа, полный пример — `contracts/examples/ai/analyze-response.json`.
 
-## Вопросы координатору
+## История вопросов координатору (закрыты)
 
 Блокирующие для старта соответствующих реализаций (в скобках — кого блокирует):
 

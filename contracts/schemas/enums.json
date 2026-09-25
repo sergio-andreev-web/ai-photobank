@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ai-photobank.local/contracts/schemas/enums.json",
   "title": "AI Photobank shared enums",
-  "description": "Общие enum для public API, AI API и БД. Значения со ссылкой x-tz взяты из ТЗ дословно; x-decision-status: proposed — предложение контрактного этапа, требует утверждения координатором.",
+  "description": "Общие enum для public API, AI API и БД. x-tz указывает раздел ТЗ, x-adr — принятое архитектурное решение.",
   "$defs": {
     "UserRole": {
       "type": "string",
@@ -13,7 +13,7 @@
       "type": "string",
       "enum": ["created", "uploading", "processing", "completed", "completed_with_errors", "failed"],
       "x-tz": "§14",
-      "description": "Переходы описаны в contracts/state-machines.md (proposed, ADR-0005)."
+      "description": "Переходы описаны в contracts/state-machines.md (утверждено, ADR-0005)."
     },
     "ImageStatus": {
       "type": "string",
@@ -54,7 +54,7 @@
       "type": "string",
       "enum": ["tags", "semantic", "hybrid"],
       "x-tz": "§45",
-      "description": "Значения из §45. То, что поле называется `mode` и является обязательным, — proposed (ADR-0004)."
+      "description": "Значения из §45. То, что поле называется `mode` и является обязательным, — утверждено (ADR-0004)."
     },
     "AiDevice": {
       "type": "string",

@@ -38,6 +38,8 @@ EXAMPLES = {
         "models": {
             "vision": "Qwen/Qwen3-VL-4B-Instruct",
             "embedding": "google/siglip2-so400m-patch14-384",
+            "vision_revision": "qwen3vl-4b-20260925",
+            "embedding_revision": "siglip2-so400m-20260925",
         },
         "prompt_version": "image-analysis-v1",
         "processing_ms": 4812,
@@ -47,6 +49,7 @@ EXAMPLES = {
     },
     "text-embeddings-response.json": {
         "model": "google/siglip2-so400m-patch14-384",
+        "revision": "siglip2-so400m-20260925",
         "dimensions": DIMENSIONS,
         "embeddings": [vector(1), vector(2), vector(3)],
     },

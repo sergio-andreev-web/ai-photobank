@@ -5,9 +5,8 @@
   "description": "Список визуальных понятий из VLM (§31). AI не знает ID тегов: Laravel нормализует label (§35) и сопоставляет его с таксономией через TagResolver (§36). Порядок элементов не значим.",
   "type": "array",
   "maxItems": 50,
-  "x-decision-status": "proposed",
   "x-adr": "ADR-0010",
-  "x-proposed-constraints": ["maxItems"],
+  "x-constraints": ["maxItems"],
   "items": { "$ref": "#/$defs/Concept" },
   "$defs": {
     "Concept": {
@@ -18,14 +17,14 @@
       "properties": {
         "type": {
           "$ref": "enums.json#/$defs/TagType",
-          "description": "Тип понятия. Что AI возвращает значения из enum типов тегов (§16), — proposed (ADR-0010): в ТЗ enum для concept.type не задан, в примере §31 используются person/object/scene/activity."
+          "description": "Тип понятия. Что AI возвращает значения из enum типов тегов (§16), — утверждено (ADR-0010): в ТЗ enum для concept.type не задан, в примере §31 используются person/object/scene/activity."
         },
         "label": {
           "type": "string",
           "minLength": 1,
           "maxLength": 255,
           "pattern": "\\S",
-          "description": "Текст понятия как его вернула модель, без нормализации. Непустой; длина ограничена tags.name VARCHAR(255) (proposed). Язык label — открытый вопрос ADR-0010."
+          "description": "Текст понятия как его вернула модель, без нормализации. Непустой; длина ограничена tags.name VARCHAR(255) (утверждено). Язык label — английский (ADR-0010)."
         },
         "confidence": {
           "type": "number",

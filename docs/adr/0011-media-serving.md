@@ -1,6 +1,6 @@
 # ADR-0011: Авторизованная отдача media-файлов
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-09-25
 - Затрагивает: backend, infra (nginx), frontend; `GET /api/media/images/{image}/{variant}`, `ImageUrls`
 
@@ -37,3 +37,7 @@ Frontend не читает файловую систему; файлы — че�
 1. Утвердить вариант A и префикс internal location `/_protected/`?
 2. Параметры кеширования?
 3. Нужен ли `Content-Disposition: attachment` (скачивание) для original через query-параметр?
+
+## Принятое решение
+
+Владелец продукта утвердил этот пункт 2026-09-25. Итоговая формулировка: media.** Cookie-сессия + nginx `X-Accel-Redirect` через внутренний путь `/_protected/`; вне Docker допустим PHP fallback с тем же клиентским URL. `Cache-Control: private, max-age=3600` и ETag. Original отдаётся inline; отдельный параметр `attachment` в MVP не нужен.

@@ -1,6 +1,6 @@
 # ADR-0010: Контракт AI service — health/ready, ошибки, лимиты, API key, concepts
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-09-25
 - Затрагивает: AI, backend (AiClient, FakeAiClient), infra (health checks, секреты); `ai-api.openapi.yaml`,
   `schemas/ai-error.json`, `schemas/concepts.json`
@@ -60,3 +60,7 @@ Concepts:
 4. Язык `label`?
 5. Лимиты по умолчанию (20 MiB, 50 MP, 64 текста, 1000 символов, 50 concepts)?
 6. `MODEL_OUTPUT_INVALID` повторяемый?
+
+## Принятое решение
+
+Владелец продукта утвердил этот пункт 2026-09-25. Итоговая формулировка: AI service.** `/health` проверяет живой процесс, `/ready` — загруженные модели. Service key передаётся через `Authorization: Bearer`. Concept type совпадает с типами тегов; неизвестный тип отображается в `other`. Labels — на английском. Лимиты: 20 MiB и 50 MP для analyze, до 64 текстов по 1000 символов, до 50 concepts. `MODEL_OUTPUT_INVALID` возвращает 502 и может повторяться.

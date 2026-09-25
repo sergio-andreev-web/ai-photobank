@@ -1,6 +1,6 @@
 # ADR-0008: Модерация tag candidates
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-09-25
 - Затрагивает: backend, frontend, QA; `/api/admin/tag-candidates*`, `state-machines.md`
 
@@ -41,3 +41,7 @@
 3. `source` привязанных при approve/merge тегов — `ai` (предложено; reprocess может их убрать) или `manual`
    (решение admin, защищено от reprocess)?
 4. Нужно ли хранить `resolved_tag_id` в tag_candidates для истории (сейчас §23 его нет)?
+
+## Принятое решение
+
+Владелец продукта утвердил этот пункт 2026-09-25. Итоговая формулировка: модерация.** Повторно обнаруженный rejected candidate остаётся rejected, но счётчик обновляется. Merge по умолчанию создаёт alias. Назначения изображений после approve/merge имеют `source=ai`, `locked=false`, так как понятия обнаружены AI; suppression учитывается. Добавить `resolved_tag_id` в `tag_candidates` для аудита результата решения администратора.

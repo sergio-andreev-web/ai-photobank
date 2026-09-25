@@ -2,11 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ai-photobank.local/contracts/schemas/ai-error.json",
   "title": "AI service error",
-  "description": "Тело любого не-2xx ответа AI service, включая ошибки валидации FastAPI (стандартный формат FastAPI `{detail: [...]}` должен быть заменен). Форма повторяет стандартную ошибку §51, но вместо trace_id содержит request_id (§64). Каталог кодов и правило повторов — proposed (ADR-0010).",
+  "description": "Тело любого не-2xx ответа AI service, включая ошибки валидации FastAPI (стандартный формат FastAPI `{detail: [...]}` должен быть заменен). Форма повторяет стандартную ошибку §51, но вместо trace_id содержит request_id (§64). Каталог кодов и правило повторов — утверждено (ADR-0010).",
   "type": "object",
   "additionalProperties": false,
   "required": ["error"],
-  "x-decision-status": "proposed",
   "x-adr": "ADR-0010",
   "properties": {
     "error": {
@@ -35,7 +34,7 @@
     "AiErrorCode": {
       "type": "string",
       "pattern": "^[A-Z][A-Z0-9_]*$",
-      "description": "Известные коды перечислены в x-known-codes. Клиент обязан обрабатывать неизвестный код как общую ошибку по HTTP-статусу. Повтор: 5xx и 429 — повторяемые, остальные 4xx — нет (proposed).",
+      "description": "Известные коды перечислены в x-known-codes. Клиент обязан обрабатывать неизвестный код как общую ошибку по HTTP-статусу. Повтор: 5xx и 429 — повторяемые, остальные 4xx — нет (утверждено).",
       "x-known-codes": {
         "INVALID_REQUEST": { "http": [400, 422], "retryable": false },
         "UNAUTHORIZED": { "http": [401], "retryable": false },

@@ -1,6 +1,6 @@
 # ADR-0009: Версии embeddings, активная версия, метрика и индекс
 
-- Статус: Proposed
+- Статус: Accepted
 - Дата: 2026-09-25
 - Затрагивает: backend (схема БД, search, TagResolver), AI (поля ответа), QA; `schemas/image-analysis.json`,
   `schemas/text-embeddings.json`
@@ -16,7 +16,7 @@
 ## Варианты источника версии
 
 - A. AI возвращает ревизию весов: `models.vision_revision`, `models.embedding_revision` в analyze и `revision`
-  в text embeddings (рекомендуется; поля добавлены в схемы как необязательные proposed). Laravel не может
+  в text embeddings (рекомендуется; поля обязательны в версии 1.0.0). Laravel не может
   «угадать» веса, загруженные AI.
 - B. Laravel берет версию из своей конфигурации (`EMBEDDING_MODEL_VERSION`). Рассинхронизация с фактическим AI не
   обнаруживается — главный риск смешивания векторов.
@@ -47,3 +47,7 @@
 5. Unique `tag_id + model_key` (§21) не включает `model_version`: при смене ревизии старый и новый tag embedding не
    могут сосуществовать во время переиндексации. Расширить unique до `tag_id + model_key + model_version`
    (предложено) или перезаписывать на месте?
+
+## Принятое решение
+
+Владелец продукта утвердил этот пункт 2026-09-25. Итоговая формулировка: embeddings.** AI возвращает фактические ревизии моделей; для локальных весов revision — стабильный digest файла/набора весов. `model_key` — имя модели без префикса организации. Векторы L2-нормализованы. Активная версия задаётся в Laravel; поиск не смешивает версии. Unique для tag embeddings включает `tag_id + model_key + model_version`.

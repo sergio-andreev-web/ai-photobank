@@ -1,20 +1,19 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 0.1.0-draft
+  version: 1.0.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
-    Статус: **черновик, не утвержден** (см. contracts/README.md).
+    Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
 
     Nuxt обращается только к этому API (§10, §70 Agent B). Frontend не читает БД,
     файловую систему и AI service, не повторяет логику TagResolver.
 
     Маркировка:
     - `x-tz` — операция или поле взяты из ТЗ (номер раздела);
-    - `x-decision-status: proposed` + `x-adr` — предложение контрактного этапа, ожидает решения координатора.
-      До утверждения такие элементы могут измениться.
+    - `x-adr` — ссылка на утвержденное архитектурное решение.
 
-    Общие правила (proposed, ADR-0002):
+    Общие правила (утверждено, ADR-0002):
     - JSON в UTF-8; даты — RFC 3339 в UTC (`2026-09-25T13:43:55Z`); ID — int64.
     - Один ресурс возвращается как объект без обертки (как в примерах §26, §49).
     - Коллекции: `{ "data": [...], "meta": { page, per_page, total, last_page } }`.
@@ -22,12 +21,12 @@ info:
     - Все ошибки — `{ "error": { code, message, details, trace_id } }` (§51). Логика клиента строится
       только на `error.code` и HTTP-статусе; неизвестный код обрабатывается как общая ошибка.
     - Каждый ответ содержит заголовок `X-Request-ID`, равный `error.trace_id` для ошибок (§64).
-  x-contract-status: draft
+  x-contract-status: accepted
 servers:
   - url: /
     description: |
       Same-origin за nginx: Nuxt и Laravel (`/api`, `/sanctum`) под одним origin, поэтому CORS не нужен
-      (proposed, ADR-0001).
+      (утверждено, ADR-0001).
 tags:
   - name: auth
   - name: dashboard
@@ -50,7 +49,6 @@ paths:
       description: |
         Стандартный маршрут Laravel Sanctum SPA. Устанавливает cookie `XSRF-TOKEN`; клиент передает его значение
         в заголовке `X-XSRF-TOKEN` во всех изменяющих запросах (POST/PATCH/DELETE).
-      x-decision-status: proposed
       x-adr: ADR-0001
       security: []
       responses:
@@ -68,7 +66,7 @@ paths:
       summary: Вход администратора
       x-tz: "§50"
       description: |
-        Создает серверную сессию (cookie-сессия Sanctum SPA, proposed ADR-0001). Регенерирует ID сессии.
+        Создает серверную сессию (cookie-сессия Sanctum SPA, утверждено ADR-0001). Регенерирует ID сессии.
         Пользователь с ролью, отличной от admin, получает 403 `FORBIDDEN`.
       security:
         - xsrfToken: []
@@ -126,7 +124,7 @@ paths:
       operationId: logout
       summary: Выход
       x-tz: "§50"
-      description: Инвалидирует сессию и XSRF-токен. Идемпотентен — без сессии тоже 204 (proposed, ADR-0001).
+      description: Инвалидирует сессию и XSRF-токен. Идемпотентен — без сессии тоже 204 (утверждено, ADR-0001).
       security:
         - xsrfToken: []
       responses:
@@ -164,7 +162,6 @@ paths:
         Экран Dashboard обязателен (§52), endpoint в §50 не назван. Предлагается отдельный endpoint
         вместо пяти запросов к спискам (ADR-0003).
       x-tz: "§52"
-      x-decision-status: proposed
       x-adr: ADR-0003
       responses:
         '200':
@@ -197,13 +194,12 @@ paths:
         - name: status
           in: query
           required: false
-          description: Фильтр по статусу (proposed).
+          description: Фильтр по статусу (утверждено).
           schema:
             $ref: './schemas/enums.json#/$defs/BatchStatus'
         - name: sort
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             type: string
@@ -284,7 +280,7 @@ paths:
       x-tz: "§49"
       description: |
         Frontend опрашивает примерно раз в 2 секунды (§49), WebSockets не используются.
-        Правила счетчиков `progress` — proposed (ADR-0005, contracts/state-machines.md).
+        Правила счетчиков `progress` — утверждено (ADR-0005, contracts/state-machines.md).
       responses:
         '200':
           description: Batch.
@@ -315,7 +311,7 @@ paths:
         Content-based MIME-проверка, санитизация имени, случайное имя хранения (§63).
         Дубликат по SHA-256 не сохраняется: 409 `IMAGE_ALREADY_EXISTS` с `details.existing_image_id` (§27);
         frontend показывает файл как skipped duplicate.
-        Имя поля формы, допустимые типы, лимит размера и код 201 — proposed (ADR-0005).
+        Имя поля формы, допустимые типы, лимит размера и код 201 — утверждено (ADR-0005).
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -332,7 +328,7 @@ paths:
                   type: string
                   contentMediaType: application/octet-stream
                   description: |
-                    Файл изображения. Имя поля `image` — proposed. Допустимые типы по содержимому (proposed):
+                    Файл изображения. Имя поля `image` — утверждено. Допустимые типы по содержимому (утверждено):
                     image/jpeg, image/png, image/webp. Лимит размера настраивается (§63), значение по умолчанию —
                     вопрос ADR-0005.
             encoding:
@@ -341,7 +337,6 @@ paths:
       responses:
         '201':
           description: Файл сохранен; обработка поставлена в очередь. Статус изображения `uploaded` или `queued`.
-          x-decision-status: proposed
           x-adr: ADR-0005
           headers:
             Location:
@@ -363,8 +358,8 @@ paths:
           $ref: '#/components/responses/BatchNotFound'
         '409':
           description: |
-            `IMAGE_ALREADY_EXISTS` — файл с тем же SHA-256 уже есть (§27; HTTP 409 — proposed);
-            `BATCH_NOT_ACCEPTING_UPLOADS` — batch уже завершен (proposed).
+            `IMAGE_ALREADY_EXISTS` — файл с тем же SHA-256 уже есть (§27; HTTP 409 — утверждено);
+            `BATCH_NOT_ACCEPTING_UPLOADS` — batch уже завершен (утверждено).
           content:
             application/json:
               schema:
@@ -399,7 +394,7 @@ paths:
       description: |
         Идемпотентен (§26): повторный вызов возвращает текущее состояние без изменений.
         Переводит batch в `processing` или сразу в финальный статус, если все изображения уже обработаны
-        (proposed, ADR-0005). После complete новые файлы не принимаются.
+        (утверждено, ADR-0005). После complete новые файлы не принимаются.
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -428,7 +423,7 @@ paths:
       summary: Библиотека изображений
       x-tz: "§50, §53"
       description: |
-        Фильтры §53: tags, status, batch, date. Параметры фильтров и сортировки — proposed (ADR-0002).
+        Фильтры §53: tags, status, batch, date. Параметры фильтров и сортировки — утверждено (ADR-0002).
         Удаленные (soft delete) изображения не возвращаются.
       parameters:
         - $ref: '#/components/parameters/Page'
@@ -463,7 +458,6 @@ paths:
         - name: sort
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             type: string
@@ -515,7 +509,6 @@ paths:
         ТЗ не определяет редактируемые поля. Предложение: только отображаемое имя `original_name`.
         Caption/OCR не редактируются, так как reprocess их перезаписывает (§76). Теги меняются через
         /tags (§41). Открытый вопрос ADR-0006.
-      x-decision-status: proposed
       x-adr: ADR-0006
       security:
         - sessionCookie: []
@@ -549,7 +542,7 @@ paths:
       summary: Удалить изображение (soft delete)
       x-tz: "§50, §78"
       description: |
-        Soft delete (§78). Файлы и история анализов не удаляются в MVP (proposed). Повторный DELETE → 404.
+        Soft delete (§78). Файлы и история анализов не удаляются в MVP (утверждено). Повторный DELETE → 404.
         Удаленное изображение исключается из списков, поиска, media и счетчиков.
       security:
         - sessionCookie: []
@@ -577,7 +570,7 @@ paths:
         Не удаляет manual tags, suppressions и оригинал; может обновить caption, OCR, AI concepts, AI tags,
         embedding и создает новую запись image_analyses, не удаляя старые (§76).
         Если изображение уже `queued`/`processing`, новая задача не создается и возвращается 202 с текущим
-        состоянием (proposed, ADR-0003).
+        состоянием (утверждено, ADR-0003).
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -608,7 +601,6 @@ paths:
         доступно только для `status=failed`; перезапускает обработку с первой упавшей задачи
         processing_tasks со сбросом attempts. Иначе 409 `IMAGE_NOT_RETRYABLE`.
       x-tz: "§3, §47"
-      x-decision-status: proposed
       x-adr: ADR-0003
       security:
         - sessionCookie: []
@@ -653,8 +645,8 @@ paths:
       x-tz: "§41"
       description: |
         Создает или переводит связь в `source=manual`, `locked=true` (§41). Существующая AI-связь
-        с тем же тегом становится manual. Suppression этого тега для изображения снимается (proposed, ADR-0006).
-        Повторное добавление уже manual тега — 200 без изменений (proposed). Архивный тег → 409 `TAG_ARCHIVED`.
+        с тем же тегом становится manual. Suppression этого тега для изображения снимается (утверждено, ADR-0006).
+        Повторное добавление уже manual тега — 200 без изменений (утверждено). Архивный тег → 409 `TAG_ARCHIVED`.
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -721,7 +713,7 @@ paths:
       x-tz: "§41"
       description: |
         `{tag}` — ID тега. Удаляет связь и создает image_tag_suppressions, чтобы reprocess не вернул тег (§19, §41).
-        ТЗ требует suppression для AI-тега; создавать ее и при удалении manual-тега — proposed (ADR-0006).
+        ТЗ требует suppression для AI-тега; создавать ее и при удалении manual-тега — утверждено (ADR-0006).
         Если связи нет — 404 `IMAGE_TAG_NOT_FOUND`.
       security:
         - sessionCookie: []
@@ -749,13 +741,12 @@ paths:
       x-tz: "§50, §55"
       description: |
         Плоский список; дерево строится клиентом по `parent_id` (§55 tree/list). Для загрузки всего дерева
-        допускается per_page до 500 (proposed, ADR-0002).
+        допускается per_page до 500 (утверждено, ADR-0002).
       parameters:
         - $ref: '#/components/parameters/Page'
         - name: per_page
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             type: integer
@@ -765,7 +756,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Поиск по name и aliases после нормализации (proposed).
+          description: Поиск по name и aliases после нормализации (утверждено).
           schema:
             type: string
             minLength: 1
@@ -778,7 +769,7 @@ paths:
         - name: status
           in: query
           required: false
-          description: По умолчанию возвращаются все статусы (proposed).
+          description: По умолчанию возвращаются все статусы (утверждено).
           schema:
             $ref: './schemas/enums.json#/$defs/TagStatus'
         - name: parent_id
@@ -791,7 +782,6 @@ paths:
         - name: sort
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             type: string
@@ -818,7 +808,7 @@ paths:
       description: |
         Canonical tag создается только действием администратора (§2). Уникальность `normalized_name + type` (§16);
         конфликт → 409 `TAG_ALREADY_EXISTS` с `details.existing_tag_id`. Правила нормализации и коллизий с aliases —
-        proposed (ADR-0007). После создания backend регенерирует tag embedding (§21).
+        утверждено (ADR-0007). После создания backend регенерирует tag embedding (§21).
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -884,7 +874,7 @@ paths:
       summary: Переименовать, сменить родителя/тип, архивировать или восстановить
       x-tz: "§50, §55"
       description: |
-        rename/parent/archive из §55. Архивирование и восстановление — через `status` (proposed, ADR-0007).
+        rename/parent/archive из §55. Архивирование и восстановление — через `status` (утверждено, ADR-0007).
         Родитель не может быть самим тегом или его потомком → 422 `TAG_PARENT_INVALID`.
         Переименование регенерирует tag embedding (§21).
       security:
@@ -929,7 +919,7 @@ paths:
       x-tz: "§50"
       description: |
         Если тег используется, он архивируется вместо удаления (§50) и возвращается 200 с `status=archived`.
-        Если не используется — удаляется физически, 204. Что считается использованием — proposed (ADR-0007):
+        Если не используется — удаляется физически, 204. Что считается использованием — утверждено (ADR-0007):
         связи image_tags, дочерние теги или ссылка из tag_candidates.closest_tag_id.
       security:
         - sessionCookie: []
@@ -961,7 +951,7 @@ paths:
       x-tz: "§17, §50"
       description: |
         Нормализованный alias уникален глобально и не совпадает с normalized_name другого тега
-        (proposed, ADR-0007) → иначе 409 `ALIAS_ALREADY_EXISTS` с `details.existing_tag_id`.
+        (утверждено, ADR-0007) → иначе 409 `ALIAS_ALREADY_EXISTS` с `details.existing_tag_id`.
         Регенерирует tag embedding (§21).
       security:
         - sessionCookie: []
@@ -1015,7 +1005,7 @@ paths:
       - name: alias
         in: path
         required: true
-        description: ID alias (а не текст alias) — proposed (ADR-0007).
+        description: ID alias (а не текст alias) — утверждено (ADR-0007).
         schema:
           type: integer
           format: int64
@@ -1056,7 +1046,6 @@ paths:
         - name: status
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             $ref: './schemas/enums.json#/$defs/TagCandidateStatus'
@@ -1076,7 +1065,6 @@ paths:
         - name: sort
           in: query
           required: false
-          x-decision-status: proposed
           x-adr: ADR-0002
           schema:
             type: string
@@ -1113,6 +1101,7 @@ paths:
                         updated_at: '2026-09-25T13:51:12Z'
                         resolved_at: null
                         resolved_by: null
+                        resolved_tag_id: null
                     meta:
                       page: 1
                       per_page: 50
@@ -1133,7 +1122,7 @@ paths:
       summary: Создать новый canonical tag из кандидата
       x-tz: "§2, §40, §50"
       description: |
-        Атомарно (proposed, ADR-0008): создает тег (по умолчанию из display_name/type кандидата),
+        Атомарно (утверждено, ADR-0008): создает тег (по умолчанию из display_name/type кандидата),
         переводит кандидата в `created`, привязывает тег ко всем изображениям кандидата с `source=ai`,
         confidence из tag_candidate_images, `locked=false`, пропуская suppressed пары. Регенерирует tag embedding.
         Если тег с тем же normalized_name + type уже есть → 409 `TAG_ALREADY_EXISTS` (используйте merge).
@@ -1189,7 +1178,7 @@ paths:
       description: |
         Candidate → canonical tag; изображения кандидата получают этот тег (§40) по тем же правилам, что approve.
         По умолчанию имя кандидата добавляется как alias целевого тега, чтобы следующее обнаружение сработало на
-        stage 2 и не создало кандидата снова (`create_alias`, proposed ADR-0008). Архивный целевой тег → 409 `TAG_ARCHIVED`.
+        stage 2 и не создало кандидата снова (`create_alias`, утверждено ADR-0008). Архивный целевой тег → 409 `TAG_ARCHIVED`.
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -1232,6 +1221,7 @@ paths:
                       updated_at: '2026-09-25T14:10:00Z'
                       resolved_at: '2026-09-25T14:10:00Z'
                       resolved_by: 1
+                      resolved_tag_id: 87
                     tag:
                       id: 87
                       name: Буровая
@@ -1269,7 +1259,7 @@ paths:
       x-tz: "§40, §50"
       description: |
         Переводит в `rejected`. Повторное обнаружение того же normalized_name + type не возвращает кандидата
-        в очередь (proposed, ADR-0008): увеличивается occurrences_count и сохраняется связь с изображением.
+        в очередь (утверждено, ADR-0008): увеличивается occurrences_count и сохраняется связь с изображением.
       security:
         - sessionCookie: []
           xsrfToken: []
@@ -1304,11 +1294,11 @@ paths:
       summary: Поиск по тегам, семантический или гибридный
       x-tz: "§42, §43, §44, §45"
       description: |
-        Режимы §45 (поле `mode` и правила валидации — proposed, ADR-0004):
+        Режимы §45 (поле `mode` и правила валидации — утверждено, ADR-0004):
         - `tags` — только `tag_ids` (≥1), AI не вызывается; сортировка created_at desc, id desc.
         - `semantic` — только `query`; сортировка по similarity desc, затем id asc.
         - `hybrid` — `query` + `tag_ids` (≥1); теги — жесткий фильтр (§43), query — ранжирование.
-        Несколько tag_ids — изображение должно иметь все (AND); дочерние теги не раскрываются (proposed).
+        Несколько tag_ids — изображение должно иметь все (AND); дочерние теги не раскрываются (утверждено).
         Векторы ищутся только среди embeddings активной версии модели (§77, ADR-0009).
         `semantic_score = 1 - cosine_distance` возвращается только при `debug=true` (§44).
         AI недоступен → semantic/hybrid возвращают 503 `AI_SERVICE_UNAVAILABLE` (§46); `tags` продолжает работать.
@@ -1395,7 +1385,7 @@ paths:
       x-tz: "§57"
       description: |
         Три пути §57 объединены шаблоном `{variant}`. Backend выполняет авторизацию по cookie сессии, поэтому
-        URL можно использовать напрямую в `<img src>` (proposed, ADR-0001/ADR-0011). В Docker Laravel отвечает
+        URL можно использовать напрямую в `<img src>` (утверждено, ADR-0001/ADR-0011). В Docker Laravel отвечает
         заголовком `X-Accel-Redirect` на internal location nginx, тело отдает nginx (§57) — клиент видит обычный
         ответ с файлом. thumbnail/preview — image/webp (§12); original — исходный MIME, `Content-Disposition: inline`
         с санитизированным именем. Вариант еще не создан → 404 `MEDIA_NOT_AVAILABLE`.
@@ -1405,7 +1395,7 @@ paths:
           description: Содержимое файла.
           headers:
             Cache-Control:
-              description: private, max-age=3600 (proposed).
+              description: private, max-age=3600 (утверждено).
               schema:
                 type: string
             ETag:
@@ -1456,10 +1446,9 @@ components:
       in: cookie
       name: laravel_session
       description: |
-        Laravel Sanctum SPA cookie-сессия (proposed, ADR-0001). Имя cookie задается SESSION_COOKIE;
+        Laravel Sanctum SPA cookie-сессия (утверждено, ADR-0001). Имя cookie задается SESSION_COOKIE;
         клиент не читает ее значение (HttpOnly) и только отправляет с `credentials: include`.
         Без сессии → 401 `UNAUTHENTICATED`; роль не admin → 403 `FORBIDDEN`.
-      x-decision-status: proposed
       x-adr: ADR-0001
     xsrfToken:
       type: apiKey
@@ -1468,11 +1457,10 @@ components:
       description: |
         Значение cookie `XSRF-TOKEN` (URL-decoded), обязательно для POST/PATCH/DELETE.
         Неверный/просроченный токен → 419 `CSRF_TOKEN_MISMATCH`; клиент повторно вызывает /sanctum/csrf-cookie.
-      x-decision-status: proposed
       x-adr: ADR-0001
   headers:
     RequestId:
-      description: ID запроса (trace_id), совпадает с error.trace_id в ошибках (proposed, ADR-0002).
+      description: ID запроса (trace_id), совпадает с error.trace_id в ошибках (утверждено, ADR-0002).
       schema:
         type: string
   parameters:
@@ -1480,7 +1468,7 @@ components:
       name: page
       in: query
       required: false
-      description: Номер страницы с 1. Страница за пределами — пустой data, не ошибка (proposed).
+      description: Номер страницы с 1. Страница за пределами — пустой data, не ошибка (утверждено).
       schema:
         type: integer
         minimum: 1
@@ -1489,7 +1477,6 @@ components:
       name: per_page
       in: query
       required: false
-      x-decision-status: proposed
       x-adr: ADR-0002
       schema:
         type: integer
@@ -1533,7 +1520,7 @@ components:
       name: tag_ids[]
       in: query
       required: false
-      description: Изображение должно иметь все указанные теги (AND, proposed ADR-0004). Формат Laravel `tag_ids[]=1&tag_ids[]=2`.
+      description: Изображение должно иметь все указанные теги (AND, утверждено ADR-0004). Формат Laravel `tag_ids[]=1&tag_ids[]=2`.
       style: form
       explode: true
       schema:
@@ -1557,7 +1544,7 @@ components:
       pattern: '^[A-Z][A-Z0-9_]*$'
       description: |
         Стабильный машиночитаемый код (§51). Каталог и HTTP-статусы — в contracts/README.md.
-        Из ТЗ: IMAGE_NOT_FOUND, IMAGE_ALREADY_EXISTS, AI_SERVICE_UNAVAILABLE. Остальные — proposed.
+        Из ТЗ: IMAGE_NOT_FOUND, IMAGE_ALREADY_EXISTS, AI_SERVICE_UNAVAILABLE. Остальные — утверждено.
         Клиент обязан обрабатывать неизвестный код как общую ошибку.
       examples: [IMAGE_NOT_FOUND]
     ErrorResponse:
@@ -1580,14 +1567,13 @@ components:
               type: object
               description: |
                 Детали по коду. Для `VALIDATION_ERROR` — `fields`: объект «имя поля → массив сообщений»
-                (proposed, ADR-0002). Для `IMAGE_ALREADY_EXISTS` — `existing_image_id` (§27).
+                (утверждено, ADR-0002). Для `IMAGE_ALREADY_EXISTS` — `existing_image_id` (§27).
             trace_id:
               type: string
               minLength: 1
     PaginationMeta:
       type: object
       required: [page, per_page, total, last_page]
-      x-decision-status: proposed
       x-adr: ADR-0002
       properties:
         page:
@@ -1629,16 +1615,10 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        remember:
-          type: boolean
-          default: false
-          x-decision-status: proposed
-          x-adr: ADR-0001
     Dashboard:
       type: object
       required: [images_count, tags_count, pending_candidates_count, processing_images_count, failed_images_count]
       x-tz: "§52"
-      x-decision-status: proposed
       x-adr: ADR-0003
       properties:
         images_count:
@@ -1664,7 +1644,7 @@ components:
       required: [total, processed, failed]
       x-tz: "§49"
       description: |
-        Правила (proposed, ADR-0005): total — число сохраненных изображений batch (дубликаты не считаются);
+        Правила (утверждено, ADR-0005): total — число сохраненных изображений batch (дубликаты не считаются);
         processed — изображения в финальном статусе (ready или failed); failed — изображения в статусе failed.
         Инвариант: 0 ≤ failed ≤ processed ≤ total.
       properties:
@@ -1731,7 +1711,6 @@ components:
     ImageUrls:
       type: object
       required: [thumbnail, preview, original]
-      x-decision-status: proposed
       x-adr: ADR-0011
       description: Относительные URL media endpoints (§57). null, если вариант еще не создан.
       properties:
@@ -1788,7 +1767,7 @@ components:
       type: object
       required: [id, vision_model, vision_model_version, embedding_model, embedding_model_version, prompt_version, caption, concepts, ocr, processing_ms, created_at]
       x-tz: "§22, §54"
-      description: Последний анализ (AI concepts на карточке, §54). raw_response не отдается (proposed).
+      description: Последний анализ (AI concepts на карточке, §54). raw_response не отдается (утверждено).
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -1873,7 +1852,7 @@ components:
         width:
           type: [integer, 'null']
           minimum: 1
-          description: null до завершения этапа metadata (proposed).
+          description: null до завершения этапа metadata (утверждено).
         height:
           type: [integer, 'null']
           minimum: 1
@@ -1890,7 +1869,7 @@ components:
         error_code:
           type: [string, 'null']
           maxLength: 64
-          description: Код последней ошибки обработки (proposed каталог — contracts/README.md).
+          description: Код последней ошибки обработки (каталог — contracts/README.md).
         error_message:
           type: [string, 'null']
         image_tags:
@@ -1920,7 +1899,6 @@ components:
       type: object
       additionalProperties: false
       minProperties: 1
-      x-decision-status: proposed
       x-adr: ADR-0006
       properties:
         original_name:
@@ -2063,7 +2041,7 @@ components:
           maximum: 1
     TagCandidate:
       type: object
-      required: [id, display_name, normalized_name, type, status, occurrences_count, closest_tag, similarity, sample_images, created_at, updated_at, resolved_at, resolved_by]
+      required: [id, display_name, normalized_name, type, status, occurrences_count, closest_tag, similarity, sample_images, created_at, updated_at, resolved_at, resolved_by, resolved_tag_id]
       x-tz: "§23, §40, §56"
       properties:
         id:
@@ -2090,7 +2068,7 @@ components:
         sample_images:
           type: array
           maxItems: 8
-          description: До 8 изображений, по убыванию confidence (proposed).
+          description: До 8 изображений, по убыванию confidence (утверждено).
           items:
             $ref: '#/components/schemas/CandidateSampleImage'
         created_at:
@@ -2104,6 +2082,11 @@ components:
           type: [integer, 'null']
           format: int64
           description: ID пользователя.
+        resolved_tag_id:
+          type: [integer, 'null']
+          format: int64
+          x-adr: ADR-0008
+          description: ID созданного или выбранного тега после approve/merge; null до решения или при reject.
     TagCandidateList:
       type: object
       required: [data, meta]
@@ -2117,7 +2100,6 @@ components:
     CandidateApproveRequest:
       type: object
       additionalProperties: false
-      x-decision-status: proposed
       x-adr: ADR-0008
       description: Все поля необязательны; по умолчанию name = display_name, type = type кандидата.
       properties:
@@ -2142,12 +2124,10 @@ components:
         create_alias:
           type: boolean
           default: true
-          x-decision-status: proposed
           x-adr: ADR-0008
     CandidateResolution:
       type: object
       required: [candidate, tag, attached_images_count, alias_created]
-      x-decision-status: proposed
       x-adr: ADR-0008
       properties:
         candidate:
@@ -2184,7 +2164,7 @@ components:
       minLength: 1
       maxLength: 1000
       pattern: '\S'
-      description: Свободный текст; пробельная строка невалидна (proposed).
+      description: Свободный текст; пробельная строка невалидна (утверждено).
     SearchTagIds:
       type: array
       minItems: 1
@@ -2194,7 +2174,6 @@ components:
         $ref: '#/components/schemas/Id'
     SearchRequest:
       x-tz: "§42, §45"
-      x-decision-status: proposed
       x-adr: ADR-0004
       oneOf:
         - $ref: '#/components/schemas/SearchTagsRequest'
@@ -2403,7 +2382,7 @@ components:
     AiServiceUnavailable:
       description: |
         `AI_SERVICE_UNAVAILABLE` (§46) — AI недоступен или не готов; либо `EMBEDDING_VERSION_MISMATCH` —
-        модель текстовых embeddings не совпадает с активной версией image embeddings (proposed, ADR-0009).
+        модель текстовых embeddings не совпадает с активной версией image embeddings (утверждено, ADR-0009).
       headers:
         Retry-After:
           schema:

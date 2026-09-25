@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — AI Service API
-  version: 0.1.0-draft
+  version: 1.0.0
   summary: HTTP-контракт Laravel ↔ FastAPI AI service.
   description: |
-    Статус: **черновик, не утвержден** (см. contracts/README.md).
+    Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
 
     AI service получает бинарное изображение или тексты и возвращает анализ/embeddings.
     Он не знает пользователей, записи изображений, ID тегов и не обращается к PostgreSQL (§33).
@@ -12,16 +12,16 @@ info:
 
     Маркировка:
     - `x-tz` — требование взято из ТЗ (номер раздела);
-    - `x-decision-status: proposed` + `x-adr` — предложение контрактного этапа, ожидает решения координатора.
+    - `x-adr` — ссылка на утвержденное архитектурное решение.
 
-    Трассировка (proposed, ADR-0002/ADR-0010): Laravel передает `X-Request-ID`
+    Трассировка (утверждено, ADR-0002/ADR-0010): Laravel передает `X-Request-ID`
     во всех запросах; AI возвращает тот же `X-Request-ID` в заголовке ответа (§64) и
     в `request_id` тела ошибки. Для analyze Laravel передает одинаковое значение в
     заголовке и в поле `request_id` формы (§31).
 
     Все не-2xx ответы имеют форму `schemas/ai-error.json`, включая ошибки валидации.
-    Повторы (proposed): 5xx и 429 — повторяемые; прочие 4xx — не повторяемые.
-  x-contract-status: draft
+    Повторы (утверждено): 5xx и 429 — повторяемые; прочие 4xx — не повторяемые.
+  x-contract-status: accepted
 servers:
   - url: http://localhost:8001
     description: Native macOS / CPU profile (§7, §8)
@@ -42,12 +42,11 @@ paths:
       operationId: getHealth
       summary: Liveness — процесс жив
       description: |
-        Возвращает 200, пока процесс FastAPI отвечает, даже если модели еще загружаются (proposed, ADR-0010).
+        Возвращает 200, пока процесс FastAPI отвечает, даже если модели еще загружаются (утверждено, ADR-0010).
         Форма ответа — из §30. Без аутентификации, чтобы health checks infra не требовали секрет.
         §61 одновременно говорит «только затем /health возвращает ready» и «добавить readiness отдельно»;
         предлагается трактовать готовность моделей только через `/ready`.
       x-tz: "§30, §61"
-      x-decision-status: proposed
       x-adr: ADR-0010
       security: []
       parameters:
@@ -78,9 +77,8 @@ paths:
       description: |
         200 только после шагов §61: конфигурация валидна, device проверен, модели загружены,
         размерность проверена, self-check пройден. Иначе 503 `MODEL_NOT_READY`.
-        Без аутентификации (proposed).
+        Без аутентификации (утверждено).
       x-tz: "§61"
-      x-decision-status: proposed
       x-adr: ADR-0010
       security: []
       parameters:
@@ -135,8 +133,8 @@ paths:
                   contentMediaType: application/octet-stream
                   description: |
                     Бинарное изображение (§31). Обычно preview или специальная AI-копия (§12).
-                    Допустимые форматы (proposed): image/jpeg, image/png, image/webp — по содержимому.
-                    Максимальный размер (proposed): 20 MiB, настраивается `AI_MAX_IMAGE_BYTES`.
+                    Допустимые форматы (утверждено): image/jpeg, image/png, image/webp — по содержимому.
+                    Максимальный размер: 20 MiB, настраивается `AI_MAX_IMAGE_BYTES`. Laravel передает уменьшенную копию, если оригинал больше; оригинал не изменяется (ADR-0005).
                 request_id:
                   $ref: '#/components/schemas/RequestId'
             encoding:
@@ -226,10 +224,9 @@ components:
       scheme: bearer
       description: |
         Service API key (§63, §69 `AI_SERVICE_API_KEY`). Способ передачи
-        `Authorization: Bearer <key>` — proposed (ADR-0010; альтернатива — `X-API-Key`).
+        `Authorization: Bearer <key>` — утверждено (ADR-0010; альтернатива — `X-API-Key`).
         Обязателен в production. Если ключ в конфигурации AI не задан (локальная разработка),
-        сервис принимает запросы без него (proposed). /health и /ready — без ключа.
-      x-decision-status: proposed
+        сервис принимает запросы без него (утверждено). /health и /ready — без ключа.
       x-adr: ADR-0010
   parameters:
     RequestIdHeader:
@@ -252,7 +249,7 @@ components:
       minLength: 1
       maxLength: 128
       pattern: '^[A-Za-z0-9._:-]+$'
-      description: Рекомендуется UUID. Ограничения формата — proposed (ADR-0002).
+      description: Рекомендуется UUID. Ограничения формата — утверждено (ADR-0002).
       examples: [0b9f6c1e-3d2a-4c55-9a51-6f1f3c0a7e42]
     Models:
       type: object
@@ -282,7 +279,6 @@ components:
       type: object
       additionalProperties: false
       required: [status, device, models, embedding_dimensions, prompt_version]
-      x-decision-status: proposed
       x-adr: ADR-0010
       properties:
         status:

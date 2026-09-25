@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ai-photobank.local/contracts/schemas/text-embeddings.json",
   "title": "Text embeddings request/response",
-  "description": "POST /v1/embeddings/text (§32). Используется TagResolver stage 3 (§36), генерацией tag_embeddings (§21) и semantic search (§42). Лимиты batch — proposed (ADR-0010).",
+  "description": "POST /v1/embeddings/text (§32). Используется TagResolver stage 3 (§36), генерацией tag_embeddings (§21) и semantic search (§42). Лимиты batch — утверждено (ADR-0010).",
   "$defs": {
     "TextEmbeddingsRequest": {
       "type": "object",
@@ -14,7 +14,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 64,
-          "x-proposed-constraints": ["maxItems", "items.maxLength"],
+          "x-constraints": ["maxItems", "items.maxLength"],
           "items": {
             "type": "string",
             "minLength": 1,
@@ -27,7 +27,7 @@
     "TextEmbeddingsResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "dimensions", "embeddings"],
+      "required": ["model", "revision", "dimensions", "embeddings"],
       "x-tz": "§32",
       "description": "embeddings[i] соответствует texts[i]; длина embeddings равна длине texts (проверяется клиентом, JSON Schema этого не выражает).",
       "properties": {
@@ -41,7 +41,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 255,
-          "x-decision-status": "proposed",
           "x-adr": "ADR-0009",
           "description": "Ревизия весов embedding-модели; равна models.embedding_revision анализа."
         },
