@@ -33,6 +33,7 @@ definePageMeta({
 })
 
 import type { Tag } from '~/types/api'
+import { fetchAllPages } from '~/utils/pagination'
 
 const api = useApi()
 const tags = ref<Tag[]>([])
@@ -44,8 +45,11 @@ const rootTags = computed(() => tags.value.filter(t => !t.parent_id))
 async function loadTags() {
   loading.value = true
   try {
-    const { data } = await api.get('/admin/tags', { params: { per_page: 1000 } })
-    tags.value = data.data
+    // per_page is capped at 500 by the contract; the tree needs the whole catalog.
+    tags.value = await fetchAllPages<Tag>(async (page) => {
+      const { data } = await api.get('/admin/tags', { params: { per_page: 500, page } })
+      return data
+    })
   } catch (e) {
     console.error('Failed to load tags:', e)
   } finally {
