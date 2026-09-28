@@ -135,16 +135,18 @@ _ai-mac-run:
 	@echo "Starting AI service natively on macOS ($(AI_MAC_DEVICE))..."
 	@echo "Prerequisites: Python 3.12+, and inside services/ai:"
 	@echo "  pip install -r requirements.txt -r requirements-model.txt"
+	@echo "  Uses services/ai/.venv/bin/python if that venv exists, else python3 on PATH"
 	@echo "Model cache: \$${AI_MAC_HF_HOME:-\$$HOME/.cache/photobank-ai/huggingface} (persists across restarts)"
 	@echo "Starting server on http://localhost:8001"
 	set -a; . ./.env; set +a; \
 	mkdir -p "$${AI_MAC_HF_HOME:-$$HOME/.cache/photobank-ai/huggingface}"; \
 	cd services/ai && \
+	if [ -x .venv/bin/python ]; then PYTHON=.venv/bin/python; else PYTHON=python3; fi; \
 	DEVICE=$(AI_MAC_DEVICE) \
 	AI_MODEL_PROVIDER=transformers \
 	AI_CONCURRENCY="$${AI_CONCURRENCY:-1}" \
 	HF_HOME="$${AI_MAC_HF_HOME:-$$HOME/.cache/photobank-ai/huggingface}" \
-	python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+	"$$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
 # Run AI service with CPU (for testing without GPU)
 ai-test:
