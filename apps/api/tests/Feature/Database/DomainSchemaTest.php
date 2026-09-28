@@ -6,6 +6,7 @@ use App\Models\Batch;
 use App\Models\Image;
 use App\Models\ImageEmbedding;
 use App\Models\ImageTag;
+use App\Models\ProcessingTask;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -172,7 +173,7 @@ class DomainSchemaTest extends TestCase
     public function test_processing_task_requires_image(): void
     {
         $this->expectException(QueryException::class);
-        \App\Models\ProcessingTask::create([
+        ProcessingTask::create([
             'image_id' => 999999,
             'type' => 'metadata',
             'status' => 'queued',
