@@ -48,7 +48,10 @@ def local_weights_digest(directory: Path) -> str:
 
 
 def _hub_offline() -> bool:
-    from huggingface_hub import constants
+    try:
+        from huggingface_hub import constants
+    except ImportError:  # mock/CI profile: no hub client, nothing is downloaded anyway
+        return False
 
     return bool(constants.HF_HUB_OFFLINE)
 
