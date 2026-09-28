@@ -11,7 +11,7 @@ SHA = "e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
 
 
 def test_hub_model_revision_is_resolved_commit_sha(tmp_path, monkeypatch):
-    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", False)
+    monkeypatch.setattr("app.models.weights._hub_offline", lambda: False)
     snapshot = tmp_path / "hub" / "models--google--siglip2" / "snapshots" / SHA
     snapshot.mkdir(parents=True)
     calls = []
@@ -37,7 +37,7 @@ def test_hub_model_revision_is_resolved_commit_sha(tmp_path, monkeypatch):
 
 
 def test_offline_mode_resolves_from_the_cache_only(tmp_path, monkeypatch):
-    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", True)
+    monkeypatch.setattr("app.models.weights._hub_offline", lambda: True)
     snapshot = tmp_path / "hub" / "models--google--siglip2" / "snapshots" / SHA
     snapshot.mkdir(parents=True)
     calls = []
