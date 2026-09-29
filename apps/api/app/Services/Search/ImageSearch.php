@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\Log;
  *   active image embedding version only (§77). Explicit tag_ids are part of
  *   the same WHERE clause as the vector ranking, so they are a hard
  *   constraint (§43) and are applied before, not after, any top-K cut.
+ *   Relevance (ADR-0004, 2026-09-30 addendum): images whose caption, OCR text
+ *   or tag names contain every query word come first; the rest are returned
+ *   only above max(min_similarity, relative × best similarity), with a
+ *   stricter relative share when some image matched the words.
  *
  * Only non-deleted images are returned; semantic/hybrid additionally require
  * an active embedding of the configured version.
@@ -77,15 +81,9 @@ final readonly class ImageSearch
             self::requireAllTags($query, 'i.id', $tagIds);
         }
 
-        $total = (clone $query)->count();
-
-        if ($total <= ($page - 1) * $perPage) {
-            return new SearchPage([], [], $total);
-        }
-
-        $ranked = DB::connection()->getDriverName() === 'pgsql'
-            ? $this->rankWithPgvector($query, $vector, $page, $perPage)
-            : $this->rankInPhp($query, $vector, $page, $perPage);
+        [$ranked, $total] = DB::connection()->getDriverName() === 'pgsql'
+            ? $this->rankWithPgvector($query, $vector, $text, $page, $perPage)
+            : $this->rankInPhp($query, $vector, $text, $page, $perPage);
 
         $scores = [];
         foreach ($ranked as [$imageId, $similarity]) {
@@ -154,50 +152,129 @@ final readonly class ImageSearch
     }
 
     /**
-     * @param  list<float>  $vector
-     * @return list<array{0: int, 1: float}>
+     * Similarity floor for images without a word match: max(min, relative × best). When some
+     * image matches the query words, those are the precise answer and only near-best vector
+     * neighbours are added (relative_similarity_with_word_match).
      */
-    private function rankWithPgvector(Builder $query, array $vector, int $page, int $perPage): array
+    private static function floor(?float $best, bool $hasWordMatch): float
+    {
+        $min = (float) config('photobank.search.min_similarity');
+        $relative = (float) config($hasWordMatch
+            ? 'photobank.search.relative_similarity_with_word_match'
+            : 'photobank.search.relative_similarity');
+
+        return $best === null ? $min : max($min, $relative * $best);
+    }
+
+    /**
+     * Full text over caption, OCR text and the names of the image's tags; `russian` stems both
+     * sides, so «жилищная» matches «ЖИЛИЩНАЯ». plainto_tsquery ANDs the query words.
+     */
+    private const string TEXT_MATCH_SQL = "to_tsvector('russian', coalesce(i.caption, '') || ' ' || coalesce(i.ocr_text, '') || ' ' || "
+        ."coalesce((SELECT string_agg(t.name, ' ') FROM image_tags it_m JOIN tags t ON t.id = it_m.tag_id WHERE it_m.image_id = i.id), '')) "
+        ."@@ plainto_tsquery('russian', ?)";
+
+    /**
+     * @param  list<float>  $vector
+     * @return array{0: list<array{0: int, 1: float}>, 1: int} the page and the total.
+     */
+    private function rankWithPgvector(Builder $query, array $vector, string $text, int $page, int $perPage): array
     {
         $literal = EmbeddingVersion::toVectorLiteral($vector);
+        $similarity = '1 - (ie.embedding <=> CAST(? AS vector))';
 
-        return DB::transaction(function () use ($query, $literal, $page, $perPage): array {
+        return DB::transaction(function () use ($query, $literal, $similarity, $text, $page, $perPage): array {
             // pgvector >= 0.8: keep walking the HNSW graph until LIMIT rows pass the WHERE
             // clause, in exact distance order. Without it a selective tag filter would only see
             // the first hnsw.ef_search (40) neighbours and silently drop matches (§43, ADR-0004).
             DB::statement('SET LOCAL hnsw.iterative_scan = strict_order');
 
-            $rows = $query
-                ->selectRaw('i.id, 1 - (ie.embedding <=> CAST(? AS vector)) AS similarity', [$literal])
+            $best = (clone $query)
+                ->selectRaw("{$similarity} AS similarity", [$literal])
                 ->orderByRaw('ie.embedding <=> CAST(? AS vector)', [$literal])
+                ->limit(1)
+                ->value('similarity');
+
+            $hasWordMatch = (clone $query)->whereRaw(self::TEXT_MATCH_SQL, [$text])->exists();
+
+            $relevant = (clone $query)->whereRaw(
+                "({$similarity} >= ? OR ".self::TEXT_MATCH_SQL.')',
+                [$literal, self::floor($best === null ? null : (float) $best, $hasWordMatch), $text],
+            );
+            $total = (clone $relevant)->count();
+            if ($total <= ($page - 1) * $perPage) {
+                return [[], $total];
+            }
+
+            $rows = $relevant
+                ->selectRaw("i.id, {$similarity} AS similarity, (".self::TEXT_MATCH_SQL.') AS text_match', [$literal, $text])
+                ->orderByDesc('text_match')
+                ->orderByDesc('similarity')
                 ->orderBy('i.id')
                 ->forPage($page, $perPage)
                 ->get();
 
-            return $rows->map(static fn (object $row): array => [(int) $row->id, (float) $row->similarity])->all();
+            return [$rows->map(static fn (object $row): array => [(int) $row->id, (float) $row->similarity])->all(), $total];
         });
     }
 
     /**
+     * The sqlite test schema has neither pgvector nor full text search: cosine in PHP, and a
+     * word match that approximates the `russian` stemmer by comparing word stems (all but the
+     * last two letters of longer words).
+     *
      * @param  list<float>  $vector
-     * @return list<array{0: int, 1: float}>
+     * @return array{0: list<array{0: int, 1: float}>, 1: int} the page and the total.
      */
-    private function rankInPhp(Builder $query, array $vector, int $page, int $perPage): array
+    private function rankInPhp(Builder $query, array $vector, string $text, int $page, int $perPage): array
     {
+        $rows = $query->select(['i.id', 'ie.embedding', 'i.caption', 'i.ocr_text'])->get();
+        $tagNames = DB::table('image_tags')
+            ->join('tags', 'tags.id', '=', 'image_tags.tag_id')
+            ->whereIn('image_tags.image_id', $rows->pluck('id'))
+            ->get(['image_tags.image_id', 'tags.name'])
+            ->groupBy('image_id');
+
         $scored = [];
-        foreach ($query->select(['i.id', 'ie.embedding'])->get() as $row) {
+        foreach ($rows as $row) {
             $stored = Vectors::decode($row->embedding);
             if ($stored === null || count($stored) !== count($vector)) {
                 continue;
             }
-
-            $scored[] = [(int) $row->id, Vectors::cosine($vector, $stored)];
+            $names = $tagNames->get($row->id, collect())->pluck('name')->all();
+            $haystack = implode(' ', [(string) $row->caption, (string) $row->ocr_text, ...$names]);
+            $scored[] = [(int) $row->id, Vectors::cosine($vector, $stored), self::wordsMatch($text, $haystack)];
         }
 
-        // similarity desc, then id asc (ADR-0004).
-        usort($scored, static fn (array $a, array $b): int => [$b[1], $a[0]] <=> [$a[1], $b[0]]);
+        $floor = self::floor($scored === [] ? null : max(array_column($scored, 1)), in_array(true, array_column($scored, 2), true));
+        $relevant = array_values(array_filter($scored, static fn (array $row): bool => $row[2] || $row[1] >= $floor));
+        // Word match first, then similarity desc, then id asc (ADR-0004).
+        usort($relevant, static fn (array $a, array $b): int => [$b[2], $b[1], $a[0]] <=> [$a[2], $a[1], $b[0]]);
 
-        return array_slice($scored, ($page - 1) * $perPage, $perPage);
+        $slice = array_slice($relevant, ($page - 1) * $perPage, $perPage);
+
+        return [array_map(static fn (array $row): array => [$row[0], $row[1]], $slice), count($relevant)];
+    }
+
+    private static function wordsMatch(string $query, string $haystack): bool
+    {
+        $words = array_filter(
+            preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($query)) ?: [],
+            static fn (string $word): bool => mb_strlen($word) > 1,
+        );
+        if ($words === []) {
+            return false;
+        }
+
+        $haystack = mb_strtolower($haystack);
+        foreach ($words as $word) {
+            $length = mb_strlen($word);
+            if (! str_contains($haystack, $length > 4 ? mb_substr($word, 0, $length - 2) : $word)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

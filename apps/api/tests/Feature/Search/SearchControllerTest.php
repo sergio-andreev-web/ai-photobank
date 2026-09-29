@@ -225,7 +225,7 @@ class SearchControllerTest extends TestCase
 
     // ---- semantic mode ----------------------------------------------------------------------
 
-    public function test_semantic_mode_ranks_by_similarity_then_id(): void
+    public function test_semantic_mode_ranks_by_similarity_then_id_above_the_relevance_floor(): void
     {
         $low = $this->imageWith(similarity: 0.2);
         $best = $this->imageWith(similarity: 0.95);
@@ -235,16 +235,77 @@ class SearchControllerTest extends TestCase
 
         $response = $this->search(['mode' => 'semantic', 'query' => self::QUERY, 'debug' => true]);
 
+        // Floor = max(0.05, 0.5 × 0.95): the unrelated images are not returned (ADR-0004, 2026-09-30).
         $response->assertOk()
-            ->assertJsonPath('meta', ['page' => 1, 'per_page' => 50, 'total' => 5, 'last_page' => 1, 'mode' => 'semantic']);
-        $this->assertSame([$best->id, $tieA->id, $tieB->id, $low->id, $opposite->id], $this->ids($response));
+            ->assertJsonPath('meta', ['page' => 1, 'per_page' => 50, 'total' => 3, 'last_page' => 1, 'mode' => 'semantic']);
+        $this->assertSame([$best->id, $tieA->id, $tieB->id], $this->ids($response));
+        $this->assertNotContains($low->id, $this->ids($response));
+        $this->assertNotContains($opposite->id, $this->ids($response));
 
         $scores = array_column($response->json('data'), 'semantic_score');
-        foreach ([0.95, 0.6, 0.6, 0.2, -0.5] as $i => $expected) {
+        foreach ([0.95, 0.6, 0.6] as $i => $expected) {
             $this->assertEqualsWithDelta($expected, $scores[$i], 1e-5);
         }
 
         $this->assertSame([[self::QUERY]], $this->ai->textCalls);
+    }
+
+    public function test_word_matches_in_caption_ocr_or_tags_come_first_even_below_the_floor(): void
+    {
+        $this->ai->embedAs('жилищная инспекция', ScriptedEmbeddingsAiClient::vector(self::AXIS));
+        $plate = $this->makeTag('Табличка');
+        $close = $this->imageWith(similarity: 0.9);
+        $byOcr = $this->imageWith(similarity: 0.06, attributes: ['ocr_text' => 'ГОСУДАРСТВЕННАЯ ЖИЛИЩНАЯ ИНСПЕКЦИЯ']);
+        $byCaption = $this->imageWith(similarity: 0.3, attributes: ['caption' => 'Синяя табличка жилищной инспекции на фасаде.']);
+        $byTag = $this->imageWith([$plate], 0.2, ['caption' => 'Вывеска у входа, жилищная служба.']);
+        $unrelated = $this->imageWith(similarity: 0.1, attributes: ['caption' => 'Футболисты на поле.']);
+
+        $response = $this->search(['mode' => 'semantic', 'query' => 'жилищная инспекция', 'debug' => true]);
+
+        // Word matches first; with a match only near-best neighbours join (0.8 × 0.9), so the
+        // close image stays. Every query word must match: the tag-only image lacks «инспекция».
+        $response->assertOk()->assertJsonPath('meta.total', 3);
+        $this->assertSame([$byCaption->id, $byOcr->id, $close->id], $this->ids($response));
+        $this->assertNotContains($byTag->id, $this->ids($response));
+        $this->assertNotContains($unrelated->id, $this->ids($response));
+        $this->assertEqualsWithDelta(0.3, $response->json('data.0.semantic_score'), 1e-5);
+    }
+
+    public function test_tag_names_count_as_words_of_the_image(): void
+    {
+        $this->ai->embedAs('таблички', ScriptedEmbeddingsAiClient::vector(self::AXIS));
+        $plate = $this->makeTag('Табличка');
+        $tagged = $this->imageWith([$plate], 0.01);
+        $this->imageWith(similarity: 0.9);
+
+        $ids = $this->ids($this->search(['mode' => 'semantic', 'query' => 'таблички'])->assertOk());
+
+        $this->assertSame($tagged->id, $ids[0]);
+    }
+
+    public function test_a_word_match_raises_the_floor_for_the_other_images(): void
+    {
+        $this->ai->embedAs('жилищная', ScriptedEmbeddingsAiClient::vector(self::AXIS));
+        $plate = $this->imageWith(similarity: 0.06, attributes: ['ocr_text' => 'ЖИЛИЩНАЯ ИНСПЕКЦИЯ']);
+        $nearBest = $this->imageWith(similarity: 0.1);
+        $weaker = $this->imageWith(similarity: 0.07); // above 0.5 × 0.1, below 0.8 × 0.1
+
+        $ids = $this->ids($this->search(['mode' => 'semantic', 'query' => 'жилищная'])->assertOk());
+
+        $this->assertSame([$plate->id, $nearBest->id], $ids);
+        $this->assertNotContains($weaker->id, $ids);
+    }
+
+    public function test_relevance_floor_comes_from_configuration(): void
+    {
+        config(['photobank.search.min_similarity' => 0.0, 'photobank.search.relative_similarity' => 0.0, 'photobank.search.relative_similarity_with_word_match' => 0.0]);
+        $this->imageWith(similarity: 0.9);
+        $this->imageWith(similarity: 0.01);
+
+        $this->search(['mode' => 'semantic', 'query' => self::QUERY])->assertOk()->assertJsonPath('meta.total', 2);
+
+        config(['photobank.search.min_similarity' => 0.95]);
+        $this->search(['mode' => 'semantic', 'query' => self::QUERY])->assertOk()->assertJsonPath('meta.total', 0);
     }
 
     public function test_semantic_score_is_only_returned_in_debug(): void
@@ -329,7 +390,7 @@ class SearchControllerTest extends TestCase
 
         $bestWithoutTags = $this->imageWith([], 0.99);
         $onlyOneTag = $this->imageWith([$helmet], 0.98);
-        $weak = $this->imageWith([$helmet, $factory], 0.1);
+        $weak = $this->imageWith([$helmet, $factory], 0.4);
         $strong = $this->imageWith([$helmet, $factory], 0.7);
         $this->imageWith([$helmet, $factory]); // matches the tags but has no embedding
 
