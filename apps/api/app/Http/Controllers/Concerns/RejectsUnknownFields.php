@@ -21,13 +21,13 @@ trait RejectsUnknownFields
         $unknown = array_diff($fields, $allowed);
         if ($unknown !== []) {
             throw ValidationException::withMessages([
-                '_unexpected' => 'Unexpected field(s): '.implode(', ', $unknown),
+                '_unexpected' => __('validation.unexpected_fields', ['fields' => implode(', ', $unknown)]),
             ]);
         }
 
         if ($requireOne && $fields === []) {
             throw ValidationException::withMessages([
-                '_empty' => 'At least one field is required: '.implode(', ', $allowed),
+                '_empty' => __('validation.at_least_one_field', ['fields' => implode(', ', $allowed)]),
             ]);
         }
     }

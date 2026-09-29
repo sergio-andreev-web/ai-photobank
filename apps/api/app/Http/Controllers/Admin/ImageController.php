@@ -86,7 +86,7 @@ class ImageController extends Controller
         $unknown = array_diff(array_keys($request->all()), ['original_name']);
         if ($unknown !== []) {
             throw ValidationException::withMessages([
-                '_unexpected' => 'Unexpected field(s): '.implode(', ', $unknown),
+                '_unexpected' => __('validation.unexpected_fields', ['fields' => implode(', ', $unknown)]),
             ]);
         }
 

@@ -103,7 +103,7 @@ class SearchController extends Controller
 
         if ($unknown !== []) {
             throw ValidationException::withMessages([
-                'tag_ids' => ['Unknown tag id(s): '.implode(', ', $unknown)],
+                'tag_ids' => [__('validation.unknown_tag_ids', ['ids' => implode(', ', $unknown)])],
             ]);
         }
     }
