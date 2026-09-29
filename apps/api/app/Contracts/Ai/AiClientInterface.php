@@ -3,6 +3,7 @@
 namespace App\Contracts\Ai;
 
 use App\Contracts\Ai\Data\AiHealthResult;
+use App\Contracts\Ai\Data\FaceDetectionResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
 use App\Contracts\Ai\Exceptions\AiException;
@@ -43,6 +44,14 @@ interface AiClientInterface
      *                                    fails text-embeddings.json.
      */
     public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult;
+
+    /**
+     * Faces and their vectors (POST /v1/faces/detect, ADR-0015). The AI knows no people.
+     *
+     * @throws AiException On any non-2xx response (503 MODEL_NOT_READY when faces are off).
+     * @throws InvalidAiResponseException On a 2xx body that fails face-detection.json.
+     */
+    public function detectFaces(string $imageContents, string $requestId): FaceDetectionResult;
 
     /**
      * Liveness probe (GET /health, §30). Does not guarantee models are loaded.

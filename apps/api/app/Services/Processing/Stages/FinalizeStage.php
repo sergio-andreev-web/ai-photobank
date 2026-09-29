@@ -2,6 +2,7 @@
 
 namespace App\Services\Processing\Stages;
 
+use App\Jobs\ScanImageFaces;
 use App\Models\Image;
 use App\Services\Processing\ProcessingStage;
 use App\Services\Processing\ProcessingState;
@@ -23,5 +24,11 @@ final class FinalizeStage implements ProcessingStage
         $image->error_code = null;
         $image->error_message = null;
         $image->save();
+
+        // Faces (ADR-0015) run as their own job once the image is ready; after reprocess the
+        // scanner only re-matches the known faces.
+        if (config('photobank.faces.enabled')) {
+            ScanImageFaces::dispatch($image->id)->afterCommit();
+        }
     }
 }

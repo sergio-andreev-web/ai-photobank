@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\RegenerateTagEmbedding;
+use App\Jobs\ScanImageFaces;
 use App\Models\Image;
 use App\Models\Tag;
 use App\Models\User;
@@ -152,3 +153,25 @@ Artisan::command('photobank:reindex-images {--dry-run} {--limit=0} {--batch=100}
 
     return 0;
 })->purpose('Queue ready images missing an active embedding for the active model version');
+
+// ADR-0015: faces of ready images not scanned yet (backfill after enabling faces); --all also
+// rescans images scanned with another face model revision.
+Artisan::command('photobank:scan-faces {--all}', function (): int {
+    $query = Image::query()->where('status', ProcessingState::IMAGE_READY);
+    if (! $this->option('all')) {
+        $query->whereNull('faces_revision');
+    } else {
+        $query->update(['faces_revision' => null]);
+        $query = Image::query()->where('status', ProcessingState::IMAGE_READY);
+    }
+    $count = 0;
+    $query->select('id')->chunkById(500, function ($images) use (&$count): void {
+        foreach ($images as $image) {
+            ScanImageFaces::dispatch($image->id);
+            $count++;
+        }
+    });
+    $this->info("Queued {$count} image(s) for face scanning.");
+
+    return 0;
+})->purpose('Queue face detection for ready images that have not been scanned (ADR-0015)');

@@ -29,6 +29,7 @@ class Image extends Model
         'sha256',
         'caption',
         'caption_edited',
+        'faces_revision',
         'ocr_text',
         'status',
         'error_code',
@@ -96,5 +97,10 @@ class Image extends Model
     public function candidateLinks(): HasMany
     {
         return $this->hasMany(TagCandidateImage::class);
+    }
+
+    public function faces(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Face::class);
     }
 }

@@ -4,6 +4,7 @@ namespace Tests\Support;
 
 use App\Contracts\Ai\AiClientInterface;
 use App\Contracts\Ai\Data\AiHealthResult;
+use App\Contracts\Ai\Data\FaceDetectionResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
 use Closure;
@@ -35,6 +36,11 @@ final class ReentrantAiClient implements AiClientInterface
     public function createTextEmbeddings(array $texts, string $requestId): TextEmbeddingsResult
     {
         return $this->inner->createTextEmbeddings($texts, $requestId);
+    }
+
+    public function detectFaces(string $imageContents, string $requestId): FaceDetectionResult
+    {
+        return $this->inner->detectFaces($imageContents, $requestId);
     }
 
     public function health(): AiHealthResult

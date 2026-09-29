@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Contracts\Ai\AiClientInterface;
 use App\Contracts\Ai\Data\AiHealthResult;
+use App\Contracts\Ai\Data\FaceDetectionResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
 use App\Contracts\Ai\Exceptions\AiException;
@@ -53,6 +54,20 @@ final class HttpAiClient implements AiClientInterface
         $this->validator->assertValidTextEmbeddings($data, count($texts), $requestId);
 
         return TextEmbeddingsResult::fromArray($data);
+    }
+
+    public function detectFaces(string $imageContents, string $requestId): FaceDetectionResult
+    {
+        $response = $this->send($requestId, fn (PendingRequest $client): Response => $client
+            ->attach('image', $imageContents, 'image')
+            ->post($this->endpoint('/v1/faces/detect'), [
+                'request_id' => $requestId,
+            ]));
+
+        $data = $this->decodeOrFail($response, $requestId);
+        $this->validator->assertValidFaceDetection($data, $requestId);
+
+        return FaceDetectionResult::fromArray($data);
     }
 
     public function health(): AiHealthResult

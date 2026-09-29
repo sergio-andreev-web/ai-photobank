@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Admin\BatchController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\FaceController;
 use App\Http\Controllers\Admin\ImageController;
 use App\Http\Controllers\Admin\ImageTagController;
+use App\Http\Controllers\Admin\PersonController;
 use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\TagCandidateController;
 use App\Http\Controllers\Admin\TagController;
@@ -50,6 +52,18 @@ Route::prefix('api')->group(function () {
             Route::get('/images/{image}', [ImageController::class, 'show'])->whereNumber('image');
             Route::get('/images/{image}/similar', [ImageController::class, 'similar'])->whereNumber('image');
             Route::get('/images/trash', [ImageController::class, 'trash']);
+            Route::get('/images/{image}/faces', [FaceController::class, 'imageFaces'])->whereNumber('image');
+
+            // People and faces (ADR-0015).
+            Route::get('/people', [PersonController::class, 'index']);
+            Route::post('/people', [PersonController::class, 'store']);
+            Route::get('/people/{person}', [PersonController::class, 'show'])->whereNumber('person');
+            Route::patch('/people/{person}', [PersonController::class, 'update'])->whereNumber('person');
+            Route::delete('/people/{person}', [PersonController::class, 'destroy'])->whereNumber('person');
+            Route::get('/people/{person}/faces', [PersonController::class, 'faces'])->whereNumber('person');
+            Route::get('/faces/clusters', [FaceController::class, 'clusters']);
+            Route::post('/faces/assign', [FaceController::class, 'assign']);
+            Route::post('/faces/{face}/reject', [FaceController::class, 'reject'])->whereNumber('face');
             Route::post('/images/download', [ImageController::class, 'download']);
             Route::post('/images/{image}/restore', [ImageController::class, 'restore'])->whereNumber('image');
             Route::patch('/images/{image}', [ImageController::class, 'update'])->whereNumber('image');

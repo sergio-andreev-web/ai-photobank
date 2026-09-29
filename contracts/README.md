@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.9.0` |
+| Версия | `1.10.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -84,6 +84,8 @@ Inline-примеры в OpenAPI покрывают критические оп�
 | `TAG_CANDIDATE_NOT_FOUND` | 404 | решение ADR |
 | `TAG_CANDIDATE_ALREADY_RESOLVED` | 409 | решение ADR (ADR-0008) |
 | `EMBEDDING_VERSION_MISMATCH` | 503 | решение ADR (ADR-0009) |
+| `PERSON_NOT_FOUND` | 404 | решение ADR (ADR-0015) |
+| `FACE_NOT_FOUND` | 404 | решение ADR (ADR-0015) |
 
 `NOT_FOUND` и `METHOD_NOT_ALLOWED` — общие ответы на запрос к несуществующему пути public API и к методу, который
 маршрут не поддерживает. Отсутствующий ресурс существующего маршрута по-прежнему возвращает свой код
@@ -134,6 +136,10 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    и frontend.
    `1.9.0` — AI API `POST /v1/faces/detect` и `schemas/face-detection.json` (ADR-0015, этап 1 распознавания людей).
    Совместимо; потребители — AI (реализация), backend (этап 2).
+   `1.10.0` — люди и лица (ADR-0015, этап 2): `/api/admin/people`, `/api/admin/people/{person}[/faces]`,
+   `/api/admin/images/{image}/faces`, `/api/admin/faces/clusters`, `/api/admin/faces/assign`,
+   `/api/admin/faces/{face}/reject`, фильтр `person_id` у списка изображений, enum `FaceStatus`, коды
+   `PERSON_NOT_FOUND`, `FACE_NOT_FOUND`. Совместимо; потребители — backend и frontend.
 
 ## Проверка
 

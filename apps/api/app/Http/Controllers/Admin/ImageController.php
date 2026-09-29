@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Models\Face;
 use App\Models\Image;
 use App\Services\Processing\BatchStatusUpdater;
 use App\Services\Processing\ProcessingPipeline;
@@ -38,6 +39,7 @@ class ImageController extends Controller
             'batch_id' => ['integer', 'min:1'],
             'tag_ids' => ['array', 'max:20'],
             'tag_ids.*' => ['integer', 'min:1'],
+            'person_id' => ['integer', 'min:1'],
             'created_from' => ['date'],
             'created_to' => ['date'],
             'sort' => ['string', 'in:-created_at,created_at'],
@@ -59,6 +61,11 @@ class ImageController extends Controller
 
         foreach (array_unique($validated['tag_ids'] ?? []) as $tagId) {
             $query->whereHas('tags', fn ($q) => $q->where('tags.id', $tagId));
+        }
+
+        if (isset($validated['person_id'])) {
+            // ADR-0015: images where this person is identified (auto or confirmed face).
+            $query->whereHas('faces', fn ($q) => $q->where('person_id', $validated['person_id'])->whereIn('status', Face::IDENTIFIED));
         }
 
         if (isset($validated['created_from'])) {

@@ -7,6 +7,8 @@ use App\Contracts\Ai\Data\AiHealthResult;
 use App\Contracts\Ai\Data\AiModels;
 use App\Contracts\Ai\Data\Concept;
 use App\Contracts\Ai\Data\ConceptType;
+use App\Contracts\Ai\Data\DetectedFace;
+use App\Contracts\Ai\Data\FaceDetectionResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\OcrItem;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
@@ -86,6 +88,51 @@ final class FakeAiClient implements AiClientInterface
                 $texts,
             ),
         );
+    }
+
+    public const string FACE_MODEL_REVISION = 'fake-faces-rev-1';
+
+    /** @var array<string, list<DetectedFace>> faces per image content hash; default: no faces */
+    private array $faces = [];
+
+    /** @var list<string> */
+    public array $faceRequests = [];
+
+    private ?Throwable $faceFailure = null;
+
+    public function failFacesWith(Throwable $failure): self
+    {
+        $this->faceFailure = $failure;
+
+        return $this;
+    }
+
+    public function detectFaces(string $imageContents, string $requestId): FaceDetectionResult
+    {
+        $this->faceRequests[] = $requestId;
+        if ($this->faceFailure !== null) {
+            throw $this->faceFailure;
+        }
+
+        return new FaceDetectionResult(
+            faces: $this->faces[hash('sha256', $imageContents)] ?? [],
+            modelName: 'fake-faces',
+            modelRevision: self::FACE_MODEL_REVISION,
+            imageWidth: 1000,
+            imageHeight: 1000,
+        );
+    }
+
+    /**
+     * The faces returned for an image with these bytes (ADR-0015 tests).
+     *
+     * @param  list<DetectedFace>  $faces
+     */
+    public function withFacesFor(string $imageContents, array $faces): self
+    {
+        $this->faces[hash('sha256', $imageContents)] = $faces;
+
+        return $this;
     }
 
     public function health(): AiHealthResult

@@ -116,6 +116,61 @@ final class AiResponseValidator
         $this->throwIfInvalid($requestId);
     }
 
+    /**
+     * contracts/schemas/face-detection.json (ADR-0015).
+     *
+     * @throws InvalidAiResponseException
+     */
+    public function assertValidFaceDetection(mixed $data, string $expectedRequestId): void
+    {
+        $this->violations = [];
+
+        if ($this->object($data, '$', ['request_id', 'faces', 'embedding_dimensions', 'model', 'image', 'processing_ms'])) {
+            if ($data['request_id'] !== $expectedRequestId) {
+                $this->violations[] = '$.request_id: does not match the request';
+            }
+            if (($data['embedding_dimensions'] ?? null) !== 512) {
+                $this->violations[] = '$.embedding_dimensions: must be 512';
+            }
+            if ($this->object($data['model'], '$.model', ['name', 'revision'])) {
+                $this->string($data['model']['name'], '$.model.name', 1, 255);
+                $this->string($data['model']['revision'], '$.model.revision', 1, 255);
+            }
+            if ($this->object($data['image'], '$.image', ['width', 'height'])) {
+                foreach (['width', 'height'] as $key) {
+                    if (! is_int($data['image'][$key]) || $data['image'][$key] < 1) {
+                        $this->violations[] = "\$.image.{$key}: must be a positive integer";
+                    }
+                }
+            }
+            if ($this->list($data['faces'], '$.faces', 0, 100)) {
+                foreach ($data['faces'] as $i => $face) {
+                    $path = "\$.faces[{$i}]";
+                    if (! $this->object($face, $path, ['box', 'score', 'landmarks', 'embedding'])) {
+                        continue;
+                    }
+                    if ($this->object($face['box'], "{$path}.box", ['x', 'y', 'width', 'height'])) {
+                        foreach (['x', 'y', 'width', 'height'] as $key) {
+                            $this->unitInterval($face['box'][$key], "{$path}.box.{$key}");
+                        }
+                    }
+                    $this->unitInterval($face['score'], "{$path}.score");
+                    $this->list($face['landmarks'], "{$path}.landmarks", 5, 5);
+                    if ($this->list($face['embedding'], "{$path}.embedding", 512, 512)) {
+                        foreach ($face['embedding'] as $value) {
+                            if (! $this->isNumber($value)) {
+                                $this->violations[] = "{$path}.embedding: numbers only";
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->throwIfInvalid($expectedRequestId);
+    }
+
     private function concept(mixed $concept, string $path): void
     {
         if (! $this->object($concept, $path, ['type', 'label', 'confidence'])) {

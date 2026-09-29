@@ -169,6 +169,7 @@ return [
     'at_least_one_field' => 'Укажите хотя бы одно поле: :fields.',
     'unknown_tag_ids' => 'Неизвестные теги: :ids.',
     'unknown_image_ids' => 'Изображения не найдены или удалены: :ids.',
+    'unknown_face_ids' => 'Лица не найдены: :ids.',
     'download_too_large' => 'Архив больше 2 ГБ — выберите меньше фото.',
 
     'custom' => [],
@@ -185,6 +186,9 @@ return [
         'locale' => 'язык',
         'original_name' => 'имя файла',
         'caption' => 'подпись',
+        'face_ids' => 'лица',
+        'person_id' => 'человек',
+        'note' => 'заметка',
         'tag_id' => 'тег',
         'tag_ids' => 'теги',
         'tag_ids.*' => 'тег',
