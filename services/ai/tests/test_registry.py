@@ -91,6 +91,21 @@ def test_explicit_accelerator_must_be_available(device, cuda, mps):
     assert builder.calls == []
 
 
+def test_mps_rejects_parallel_inference():
+    # PyTorch MPS is not thread-safe: AI_CONCURRENCY>1 aborts the process.
+    builder = RecordingBuilder()
+    registry = ModelRegistry(
+        real_settings(DEVICE="auto", AI_CONCURRENCY=2),
+        model_builder=builder,
+        cuda_available_fn=lambda: False,
+        mps_available_fn=lambda: True,
+    )
+    with pytest.raises(RuntimeError, match="AI_CONCURRENCY must be 1 on mps"):
+        registry.startup()
+    assert not registry.ready
+    assert builder.calls == []
+
+
 def test_mock_provider_does_not_require_accelerator():
     registry = ModelRegistry(make_settings(DEVICE="cuda"), cuda_available_fn=lambda: False)
     registry.startup()

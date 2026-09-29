@@ -36,6 +36,13 @@ def close_model(model: object | None) -> None:
         close()
 
 
+def text_embedding_device(settings: Settings, device: AiDevice) -> AiDevice:
+    """PyTorch MPS is not thread-safe: search must not share it with the VLM."""
+    if settings.ai_text_embedding_device == "cpu" or device is AiDevice.MPS:
+        return AiDevice.CPU
+    return device
+
+
 def build_transformers_models(settings: Settings, device: AiDevice, prompt: str) -> tuple[VisionModel, EmbeddingModel]:
     configure_weight_loading(device)
     from .transformers_backend import TransformersEmbeddingEncoder, TransformersVisionGenerator
@@ -50,7 +57,12 @@ def build_transformers_models(settings: Settings, device: AiDevice, prompt: str)
     embedding = SiglipEmbeddingModel(
         name=settings.embedding_model,
         revision=embedding_weights.revision,
-        encoder=TransformersEmbeddingEncoder.load(embedding_weights.path, device=device.value, dtype=dtype),
+        encoder=TransformersEmbeddingEncoder.load(
+            embedding_weights.path,
+            device=device.value,
+            dtype=dtype,
+            text_device=text_embedding_device(settings, device).value,
+        ),
     )
     try:
         vision_weights = resolve_weights(

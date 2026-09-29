@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
-from .concurrency import InferenceLimiter
+from .concurrency import InferenceLimiter, InferenceLimiters
 from .config import Settings, get_settings
 from .exception_handlers import (
     ai_service_error_handler,
@@ -39,7 +39,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = settings
     app.state.registry = ModelRegistry(settings)
-    app.state.limiter = InferenceLimiter(settings.ai_concurrency)
+    app.state.limiters = InferenceLimiters(
+        vision=InferenceLimiter(settings.ai_concurrency),
+        text=InferenceLimiter(settings.ai_text_embedding_concurrency),
+    )
 
     app.add_middleware(RequestIdMiddleware)
 

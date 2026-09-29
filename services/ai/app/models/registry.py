@@ -82,6 +82,10 @@ class ModelRegistry:
                 cuda_available_fn=self._cuda_available_fn,
                 mps_available_fn=self._mps_available_fn,
             )
+            if self.device is AiDevice.MPS and self.settings.ai_concurrency > 1:
+                # PyTorch MPS is not thread-safe: two concurrent analyses corrupt
+                # results or abort the process (Metal command-encoder assertion).
+                raise RuntimeError("AI_CONCURRENCY must be 1 on mps: PyTorch MPS is not thread-safe")
             if self.device is AiDevice.CPU:
                 logger.warning("ai_service.cpu_inference", extra={"note": "CPU is for development/smoke tests only (§58)"})
 

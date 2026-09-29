@@ -85,21 +85,29 @@ def _load_kwargs(device: str, dtype: str) -> dict:
 class TransformersEmbeddingEncoder:
     """google/siglip2-* (fixed-resolution) image/text towers."""
 
-    def __init__(self, model, processor, *, device: str, dtype: str) -> None:
+    def __init__(self, model, processor, *, device: str, dtype: str, text_device: str | None = None) -> None:
         self._model = model
         self._processor = processor
         self._device = device
+        self._text_device = text_device or device
         self._dtype = torch_dtype(dtype)
         self.dimensions = int(model.config.vision_config.hidden_size)
 
     @classmethod
-    def load(cls, path: Path, *, device: str, dtype: str) -> "TransformersEmbeddingEncoder":
+    def load(
+        cls, path: Path, *, device: str, dtype: str, text_device: str | None = None
+    ) -> "TransformersEmbeddingEncoder":
         from transformers import AutoModel, AutoProcessor
 
         processor = AutoProcessor.from_pretrained(path)
         model = AutoModel.from_pretrained(path, **_load_kwargs(device, dtype))
         model.eval()
-        return cls(model, processor, device=device, dtype=dtype)
+        if text_device and text_device != device:
+            # Search queries then never touch the accelerator. float32: CPU has
+            # no fast bf16 kernels (a query takes minutes instead of ~70 ms).
+            model.text_model.to(device=text_device, dtype=torch.float32)
+            release_accelerator_memory(device)
+        return cls(model, processor, device=device, dtype=dtype, text_device=text_device)
 
     @staticmethod
     def _as_tensor(features) -> torch.Tensor:
@@ -114,14 +122,14 @@ class TransformersEmbeddingEncoder:
             return features.float().cpu().tolist()
 
     def encode_texts(self, texts: list[str]) -> list[list[float]]:
-        with inference_guard(self._device):
+        with inference_guard(self._text_device):
             inputs = self._processor(
                 text=texts,
                 padding="max_length",
                 max_length=SIGLIP_TEXT_MAX_LENGTH,
                 truncation=True,
                 return_tensors="pt",
-            ).to(self._device)
+            ).to(self._text_device)
             features = self._as_tensor(self._model.get_text_features(**inputs))
             return features.float().cpu().tolist()
 

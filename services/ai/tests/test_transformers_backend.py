@@ -120,3 +120,22 @@ def test_encoder_close_drops_weights(monkeypatch):
     encoder = backend.TransformersEmbeddingEncoder(_FakeSiglip(), _FakeProcessor(), device="cpu", dtype="float32")
     encoder.close()
     assert encoder._model is None and released == ["cpu"]
+
+
+def test_encoder_runs_text_on_text_device():
+    processor = _FakeProcessor()
+    moved = []
+
+    class _Batch(_FakeBatch):
+        def to(self, device):
+            moved.append(device)
+            return super().to(device)
+
+    def call(images=None, text=None, **kwargs):
+        return _Batch(_FakeProcessor.__call__(processor, images=images, text=text, **kwargs))
+
+    encoder = backend.TransformersEmbeddingEncoder(
+        _FakeSiglip(), call, device="meta", dtype="float32", text_device="cpu"
+    )
+    encoder.encode_texts(["a"])
+    assert moved == ["cpu"]

@@ -14,6 +14,7 @@ from .schemas.analysis import PROMPT_VERSION_MAX_LENGTH, PROMPT_VERSION_PATTERN
 VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
 VALID_DTYPES = {"auto", "float32", "float16", "bfloat16"}
 VALID_PROVIDERS = {"mock", "transformers"}
+VALID_TEXT_EMBEDDING_DEVICES = {"auto", "cpu"}
 
 
 class Settings(BaseSettings):
@@ -39,7 +40,17 @@ class Settings(BaseSettings):
     ai_service_api_key: str = Field(default="", alias="AI_SERVICE_API_KEY")
 
     # §58 mac profile default; RunPod/infra may override.
-    ai_concurrency: int = Field(default=1, alias="AI_CONCURRENCY")
+    # Concurrent image analyses (VLM). Search queries use a separate pool below.
+    ai_concurrency: int = Field(default=1, ge=1, alias="AI_CONCURRENCY")
+    # Local detail: concurrent text-embedding (search) requests, independent of
+    # AI_CONCURRENCY so search stays available while a batch is being analysed.
+    ai_text_embedding_concurrency: int = Field(default=1, ge=1, alias="AI_TEXT_EMBEDDING_CONCURRENCY")
+    # How long a text-embedding request waits for a slot before 429.
+    ai_text_embedding_wait_seconds: float = Field(default=2.0, ge=0, alias="AI_TEXT_EMBEDDING_WAIT_SECONDS")
+    # Where the SigLIP2 text tower runs. auto: CPU (float32) when DEVICE resolves
+    # to mps — MPS is not thread-safe, so search must not touch it while Qwen
+    # generates — otherwise the model device. cpu: always CPU.
+    ai_text_embedding_device: str = Field(default="auto", alias="AI_TEXT_EMBEDDING_DEVICE")
 
     # §62 image limits. 20 MiB default matches contracts/ai-api.openapi.yaml.
     ai_max_image_bytes: int = Field(default=20 * 1024 * 1024, alias="AI_MAX_IMAGE_BYTES")
@@ -78,6 +89,15 @@ class Settings(BaseSettings):
     def _validate_dtype(cls, value: str) -> str:
         if value not in VALID_DTYPES:
             raise ValueError(f"DTYPE must be one of {sorted(VALID_DTYPES)}, got {value!r}")
+        return value
+
+    @field_validator("ai_text_embedding_device")
+    @classmethod
+    def _validate_text_embedding_device(cls, value: str) -> str:
+        if value not in VALID_TEXT_EMBEDDING_DEVICES:
+            raise ValueError(
+                f"AI_TEXT_EMBEDDING_DEVICE must be one of {sorted(VALID_TEXT_EMBEDDING_DEVICES)}, got {value!r}"
+            )
         return value
 
     @field_validator("ai_model_provider")

@@ -82,7 +82,10 @@ one: stored analyses must keep meaning what their `prompt_version` says.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `DTYPE` | `auto` | `auto`: cuda → bfloat16 (float16 without bf16 support), mps → bfloat16, cpu → float32. Use `DTYPE=float16` on macOS < 14 |
-| `AI_CONCURRENCY` | `1` | parallel inferences; extra requests get 429 `SERVICE_BUSY` |
+| `AI_CONCURRENCY` | `1` | parallel image analyses; extra requests get 429 `SERVICE_BUSY`. Must be `1` on MPS (startup fails otherwise): PyTorch MPS is not thread-safe |
+| `AI_TEXT_EMBEDDING_CONCURRENCY` | `1` | parallel text-embedding (search) requests; a separate pool, so search works while a photo is analysed |
+| `AI_TEXT_EMBEDDING_WAIT_SECONDS` | `2` | how long a search request waits for a free slot before 429 `SERVICE_BUSY` |
+| `AI_TEXT_EMBEDDING_DEVICE` | `auto` | SigLIP2 text tower device: `auto` → CPU float32 on MPS (~70 ms/query, +1.4 GB RAM), model device otherwise; `cpu` → always CPU |
 | `AI_VLM_MAX_PIXELS` | `1048576` | image area given to the VLM (bounds visual tokens / memory) |
 | `AI_VLM_MAX_NEW_TOKENS` | `1024` | generation length cap per attempt |
 | `AI_VLM_OUTPUT_ATTEMPTS` | `2` | attempts (greedy, then sampled) before 502 `MODEL_OUTPUT_INVALID` |
