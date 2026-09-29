@@ -1,8 +1,10 @@
 <template>
-  <UApp :data-app-ready="hydrated">
-    <NuxtLayout>
-      <NuxtPage />
-    </NuxtLayout>
+  <UApp>
+    <div :data-app-ready="hydrated">
+      <NuxtLayout>
+        <NuxtPage />
+      </NuxtLayout>
+    </div>
   </UApp>
 </template>
 
@@ -13,7 +15,9 @@ const auth = useAuthStore()
 
 // False during SSR and until the client has hydrated and attached event
 // listeners; e2e tests wait on this so they never interact with a form
-// before v-model bindings are live (see tests/e2e/helpers.ts).
+// before v-model bindings are live (see tests/e2e/helpers.ts). It is set on a
+// real wrapper <div>: UApp renders no element of its own, so an attribute
+// passed to <UApp> never reaches the DOM and the tests would wait forever.
 const hydrated = ref(false)
 
 onMounted(async () => {
