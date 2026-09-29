@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     embedding_model_revision: str = Field(default="main", alias="EMBEDDING_MODEL_REVISION")
     hf_home: str | None = Field(default=None, alias="HF_HOME")
     # §34 versioned VLM prompt: prompts/<PROMPT_VERSION>.txt, reported as
-    # prompt_version by /ready and every analysis. v1 stays selectable.
-    prompt_version: str = Field(default="image-analysis-v2", alias="PROMPT_VERSION")
+    # prompt_version by /ready and every analysis. v3 writes caption and labels
+    # in Russian (ADR-0010, contracts 1.3.0); v1/v2 (English) stay selectable.
+    prompt_version: str = Field(default="image-analysis-v3", alias="PROMPT_VERSION")
 
     # §63 security
     ai_service_api_key: str = Field(default="", alias="AI_SERVICE_API_KEY")

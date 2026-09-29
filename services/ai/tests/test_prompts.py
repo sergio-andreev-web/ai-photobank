@@ -15,7 +15,7 @@ from app.models.registry import PROMPTS_DIR, ModelRegistry
 from app.schemas.common import TagType
 from tests.conftest import make_jpeg_bytes, make_settings
 
-SELECTABLE_VERSIONS = ["image-analysis-v1", "image-analysis-v2"]
+SELECTABLE_VERSIONS = ["image-analysis-v1", "image-analysis-v2", "image-analysis-v3"]
 PROMPT_FILES = sorted(PROMPTS_DIR.glob("*.txt"))
 
 # §34 "Основные требования модели": every prompt version starts with them.
@@ -47,7 +47,7 @@ class PromptCapturingBuilder:
 
 def test_default_prompt_version_is_v2(monkeypatch):
     monkeypatch.delenv("PROMPT_VERSION", raising=False)
-    assert Settings().prompt_version == "image-analysis-v2"
+    assert Settings().prompt_version == "image-analysis-v3"
 
 
 def test_prompt_files_cover_selectable_versions():
@@ -65,8 +65,8 @@ def test_registry_loads_the_prompt_of_the_selected_version(version):
 
 
 def test_prompt_versions_differ():
-    v1, v2 = ((PROMPTS_DIR / f"{version}.txt").read_text(encoding="utf-8") for version in SELECTABLE_VERSIONS)
-    assert v1 != v2
+    texts = [(PROMPTS_DIR / f"{version}.txt").read_text(encoding="utf-8") for version in SELECTABLE_VERSIONS]
+    assert len(set(texts)) == len(texts)
 
 
 @pytest.mark.parametrize("version", SELECTABLE_VERSIONS)
@@ -115,3 +115,12 @@ def test_v2_asks_for_concepts_before_ocr():
     # able to push concepts past the cut; the parser keeps what precedes it.
     prompt = (PROMPTS_DIR / "image-analysis-v2.txt").read_text(encoding="utf-8")
     assert prompt.index('"concepts": [') < prompt.index('"ocr": [')
+
+
+def test_v3_asks_for_russian_caption_and_labels_but_verbatim_ocr():
+    prompt = (PROMPTS_DIR / "image-analysis-v3.txt").read_text(encoding="utf-8")
+    assert prompt.index('"concepts": [') < prompt.index('"ocr": [')
+    assert 'Write "caption" and every "label" in Russian' in prompt
+    assert "never translate it" in prompt
+    # Examples show the expected form of a label.
+    assert '"защитная каска"' in prompt

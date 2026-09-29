@@ -71,7 +71,8 @@ in `image_analyses`, so analyses of different versions can be compared.
 
 | Version | Notes |
 | --- | --- |
-| `image-analysis-v2` (default) | keys in the order caption → concepts → ocr, so a decoding loop in OCR can no longer push concepts past `AI_VLM_MAX_NEW_TOKENS`; 6–12 concepts (whole things, simple general labels, at most 2 colors, season/weather only outdoors); at most 10 distinct OCR items; names on signs are quoted verbatim in the caption |
+| `image-analysis-v2` | keys in the order caption → concepts → ocr, so a decoding loop in OCR can no longer push concepts past `AI_VLM_MAX_NEW_TOKENS`; 6–12 concepts (whole things, simple general labels, at most 2 colors, season/weather only outdoors); at most 10 distinct OCR items; names on signs are quoted verbatim in the caption |
+| `image-analysis-v3` (default) | same rules as v2, but `caption` and every `label` are written in Russian (nominative, lowercase, e.g. «защитная каска»); `type` keywords stay English, OCR stays verbatim in the original language (ADR-0010, contracts 1.3.0) |
 | `image-analysis-v1` | original prompt: OCR before concepts, up to 30 concepts |
 
 A changed prompt is a new file and a new version, never an edit of an existing

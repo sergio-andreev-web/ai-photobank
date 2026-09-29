@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.2.1` |
+| Версия | `1.3.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -119,6 +119,8 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    `1.2.0` — код ошибки обработки `AI_OUTPUT_INVALID` (ADR-0010).
    `1.2.1` — уточнения без изменения поведения: пример `CandidateDrillingPlatform`, `max_attempts`,
    ответы поиска при отказе AI (ADR-0004), формулировка `AI_OUTPUT_INVALID` (ADR-0010).
+   `1.3.0` — язык `caption` и `label` в ответе analyze — русский (ADR-0010, дополнение 2026-09-29). Схемы не меняются;
+   потребители: AI (prompt `image-analysis-v3`), backend и frontend — без изменений кода (Unicode-нормализация уже есть).
 
 ## Проверка
 
