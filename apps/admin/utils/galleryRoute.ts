@@ -4,6 +4,8 @@ const IMAGE_STATUSES: readonly ImageStatus[] = ['uploaded', 'queued', 'processin
 
 export interface GalleryRouteQuery {
   batchId?: number
+  /** ADR-0015: images where this person is identified. */
+  personId?: number
   status?: ImageStatus
 }
 
@@ -20,9 +22,12 @@ export function readGalleryRouteQuery(query: Record<string, unknown>): GalleryRo
   const rawBatch = firstString(query.batch_id)
   const batchId = rawBatch && /^[1-9]\d*$/.test(rawBatch) ? Number(rawBatch) : undefined
   const rawStatus = firstString(query.status)
+  const rawPerson = firstString(query.person_id)
+  const personId = rawPerson && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : undefined
   return {
     batchId: batchId !== undefined && Number.isSafeInteger(batchId) ? batchId : undefined,
     status: IMAGE_STATUSES.find((status) => status === rawStatus),
+    personId: personId !== undefined && Number.isSafeInteger(personId) ? personId : undefined,
   }
 }
 

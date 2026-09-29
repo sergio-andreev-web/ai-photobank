@@ -358,3 +358,62 @@ export interface ApiErrorBody {
 export interface ApiError {
   error: ApiErrorBody
 }
+
+// People and faces (ADR-0015)
+export type FaceStatus = 'unassigned' | 'suggested' | 'auto' | 'confirmed'
+
+export interface FaceBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface PersonRef {
+  id: number
+  name: string
+}
+
+export interface Face {
+  id: number
+  image: { id: number; original_name: string; urls: ImageUrls }
+  box: FaceBox
+  score: number
+  status: FaceStatus
+  person: PersonRef | null
+  similarity: number | null
+}
+
+export interface FaceList {
+  data: Face[]
+  meta: PaginationMeta
+}
+
+export interface FaceCluster {
+  faces: Face[]
+  images_count: number
+}
+
+export interface Person {
+  id: number
+  name: string
+  note: string | null
+  faces_count: number
+  images_count: number
+  suggested_count: number
+  cover: Face | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PersonList {
+  data: Person[]
+  meta: PaginationMeta
+}
+
+export interface FaceAssignResult {
+  person: Person
+  assigned_count: number
+  auto_count: number
+  suggested_count: number
+}

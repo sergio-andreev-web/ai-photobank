@@ -63,13 +63,14 @@ const navigation = [
   { to: '/uploader', label: 'Загрузка', icon: 'i-heroicons-arrow-up-tray' },
   { to: '/tags', label: 'Теги', icon: 'i-heroicons-tag' },
   { to: '/candidates', label: 'Модерация', icon: 'i-heroicons-inbox-stack' },
+  { to: '/people', label: 'Люди', icon: 'i-heroicons-user-group' },
   { to: '/search', label: 'Поиск', icon: 'i-heroicons-magnifying-glass' },
   { to: '/trash', label: 'Корзина', icon: 'i-heroicons-trash' },
 ]
 
 const initial = computed(() => auth.user?.name?.charAt(0)?.toUpperCase() || 'A')
 function isActive(path: string) {
-  return route.path === path || (path === '/gallery' && route.path.startsWith('/gallery/'))
+  return route.path === path || route.path.startsWith(`${path}/`)
 }
 
 async function handleLogout() {

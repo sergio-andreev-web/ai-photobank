@@ -29,7 +29,7 @@
           icon="i-heroicons-adjustments-horizontal"
           :aria-expanded="filtersOpen"
           aria-controls="gallery-filters"
-          @click="filtersOpen = !filtersOpen"
+          @click="() => { filtersOpen = !filtersOpen }"
         >
           Фильтры<template v-if="panelFilterCount"> ({{ panelFilterCount }})</template>
         </UButton>
@@ -51,6 +51,18 @@
             placeholder="Любой тег"
             class="w-full"
             @update:search-term="onTagSearch"
+          />
+        </UFormField>
+
+        <UFormField label="Человек" class="min-w-[180px] flex-1" data-testid="person-filter">
+          <USelectMenu
+            v-model="filters.personId"
+            :items="personOptions"
+            value-key="value"
+            ignore-filter
+            placeholder="Любой"
+            class="w-full"
+            @update:search-term="searchPeople"
           />
         </UFormField>
 
@@ -256,6 +268,7 @@ const filters = reactive<{
   status: ImageStatus | typeof ALL
   batchId: number | typeof ALL
   tagIds: number[]
+  personId: number | undefined
   // `<input type="date">` values (YYYY-MM-DD, local day); '' means no bound.
   dateFrom: string
   dateTo: string
@@ -263,6 +276,7 @@ const filters = reactive<{
   status: routeFilters.status ?? ALL,
   batchId: routeFilters.batchId ?? ALL,
   tagIds: [],
+  personId: routeFilters.personId,
   dateFrom: '',
   dateTo: '',
 })
@@ -287,7 +301,11 @@ const sortOptions: { label: string; value: ImageSort }[] = [
 // Tags, batch and dates live in a collapsible panel (status has its own tabs); it starts open when a
 // deep link already set one of them.
 const panelFilterCount = computed(
-  () => (filters.tagIds.length ? 1 : 0) + (filters.batchId !== ALL ? 1 : 0) + (filters.dateFrom || filters.dateTo ? 1 : 0),
+  () =>
+    (filters.tagIds.length ? 1 : 0) +
+    (filters.batchId !== ALL ? 1 : 0) +
+    (filters.personId !== undefined ? 1 : 0) +
+    (filters.dateFrom || filters.dateTo ? 1 : 0),
 )
 const filtersOpen = ref(panelFilterCount.value > 0)
 
@@ -352,6 +370,7 @@ const hasActiveFilters = computed(
     filters.status !== ALL ||
     filters.batchId !== ALL ||
     filters.tagIds.length > 0 ||
+    filters.personId !== undefined ||
     filters.dateFrom !== '' ||
     filters.dateTo !== ''
 )
@@ -387,6 +406,31 @@ function formatDateTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('ru-RU')
 }
 
+const peopleApi = usePeople()
+const personOptions = ref<{ label: string; value: number }[]>([])
+let peopleSeq = 0
+async function searchPeople(term: string) {
+  const seq = ++peopleSeq
+  try {
+    const data = await peopleApi.listPeople({ per_page: 20, q: term.trim() || undefined })
+    if (seq !== peopleSeq) return
+    const options = data.data.map((person) => ({ label: person.name, value: person.id }))
+    // A deep-linked person stays labelled even when not on the first page of the directory.
+    const current = filters.personId
+    if (current !== undefined && !options.some((option) => option.value === current)) {
+      try {
+        const person = await peopleApi.getPerson(current)
+        options.unshift({ label: person.name, value: person.id })
+      } catch {
+        // Unknown person: the filter shows its id only.
+      }
+    }
+    personOptions.value = options
+  } catch {
+    // The person filter degrades to an empty menu.
+  }
+}
+
 const imagesApi = useImages()
 const batchesApi = useBatches()
 const tagsApi = useTags()
@@ -409,6 +453,7 @@ async function loadImages(page = 1, options: { keepSelection?: boolean } = {}) {
       status: filters.status === ALL ? undefined : filters.status,
       batch_id: filters.batchId === ALL ? undefined : filters.batchId,
       tag_ids: filters.tagIds.length > 0 ? filters.tagIds : undefined,
+      person_id: filters.personId,
       created_from: createdFromParam(filters.dateFrom),
       created_to: createdToParam(filters.dateTo),
     })
@@ -458,6 +503,7 @@ function resetFilters() {
   filters.status = ALL
   filters.batchId = ALL
   filters.tagIds = []
+  filters.personId = undefined
   filters.dateFrom = ''
   filters.dateTo = ''
 }
@@ -474,5 +520,6 @@ onMounted(() => {
   loadImages()
   loadBatches()
   onTagSearch('')
+  searchPeople('')
 })
 </script>

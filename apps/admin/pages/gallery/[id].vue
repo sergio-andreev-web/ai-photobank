@@ -17,12 +17,24 @@
         <!-- Image Preview -->
         <div class="space-y-4">
           <div class="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-slate-100">
-            <img
-              v-if="image.urls.preview"
-              :src="image.urls.preview"
-              :alt="image.original_name"
-              class="h-full w-full object-contain"
-            />
+            <!-- The wrapper takes the image's own size, so face boxes (fractions) land on the faces. -->
+            <div v-if="image.urls.preview" class="relative" :style="previewStyle">
+              <img
+                :src="image.urls.preview"
+                :alt="image.original_name"
+                class="block h-full w-full object-contain"
+              />
+              <div
+                v-for="face in faceBoxes"
+                :key="face.id"
+                class="face-overlay"
+                :class="{ 'is-known': face.person && face.status !== 'suggested', 'is-suggested': face.status === 'suggested' }"
+                :style="{ left: `${face.box.x * 100}%`, top: `${face.box.y * 100}%`, width: `${face.box.width * 100}%`, height: `${face.box.height * 100}%` }"
+                data-testid="face-overlay"
+              >
+                <span v-if="face.person" class="face-overlay-label">{{ face.person.name }}{{ face.status === 'suggested' ? '?' : '' }}</span>
+              </div>
+            </div>
             <div v-else class="text-6xl text-slate-300"><UIcon name="i-heroicons-photo" /></div>
           </div>
           <div>
@@ -194,6 +206,12 @@
             </div>
           </div>
 
+          <ImageFaces
+            :image-id="image.id"
+            @loaded="(faces) => { faceBoxes = faces }"
+            @changed="(message) => { notice = message }"
+          />
+
           <!-- Image Tags -->
           <div class="rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between">
@@ -290,7 +308,7 @@ definePageMeta({
   middleware: 'auth',
 })
 
-import type { Concept, ImageDetail, ImageStatus, ImageSummary, Tag } from '~/types/api'
+import type { Concept, Face, ImageDetail, ImageStatus, ImageSummary, Tag } from '~/types/api'
 import { toApiProblem } from '~/utils/errorHandler'
 import {
   IMAGE_STATUS_LABELS,
@@ -350,6 +368,12 @@ const confirmingDelete = ref(false)
 
 const showAddTag = ref(false)
 const openConcept = ref<Concept | null>(null)
+const faceBoxes = ref<Face[]>([])
+// Fit both orientations inside the 4:3 preview area; overlays use this exact image rectangle.
+const previewStyle = computed(() => {
+  const ratio = image.value?.width && image.value?.height ? image.value.width / image.value.height : 4 / 3
+  return { width: `${Math.min(1, ratio / (4 / 3)) * 100}%`, aspectRatio: String(ratio) }
+})
 const similar = ref<ImageSummary[]>([])
 const similarTotal = ref(0)
 const similarLoading = ref(false)
