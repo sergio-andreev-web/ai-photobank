@@ -118,6 +118,13 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: photobank-api-worker
+    # `queue:work --max-time=3600` below exits 0 once an hour by design
+    # (Laravel recycles the worker to shed memory); without a restart policy
+    # the container then sits Exited(0) and processing silently stalls until
+    # someone notices. `unless-stopped` (already used for this same service
+    # in docker-compose.prod.yml) brings it back regardless of exit code,
+    # but not after an explicit `docker compose stop`/`down`.
+    restart: unless-stopped
     environment:
       APP_ENV: "${APP_ENV}"
       APP_URL: "${APP_URL}"
@@ -233,11 +240,13 @@ services:
       PROMPT_VERSION: "${PROMPT_VERSION}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
     ports:
-      - "8001:8000"
+      # The AI image serves on 8001 (services/ai/Dockerfile CMD), same port inside and out.
+      - "8001:8001"
     volumes:
       - ai_models_cache:/models
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      # python:3.12-slim has no curl; probe /health with the interpreter the image already ships.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3

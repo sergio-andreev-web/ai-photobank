@@ -15,8 +15,23 @@ services:
     environment:
       AI_BASE_URL: http://host.docker.internal:8001
 
+  # Processing stages (images.ai / images.reprocess queues) run in
+  # api-worker, not api — without this override the worker keeps the base
+  # file's AI_BASE_URL (the ai-cpu container, which this overlay never
+  # starts), so images would never reach the native AI service.
+  api-worker:
+    environment:
+      AI_BASE_URL: http://host.docker.internal:8001
+
   admin:
     environment:
-      NUXT_PUBLIC_API_BASE: "http://localhost"
+      # Same value as the base file: this overlay only relocates the AI
+      # backend to the host, not how the browser reaches nginx/the API.
+      # A previous "http://localhost" here (missing the /api path) broke
+      # every admin API call except the one explicit root override in
+      # apps/admin/stores/auth.ts (GET /sanctum/csrf-cookie) — useApi's
+      # axios instance appends request paths like "/admin/images" straight
+      # onto this base URL.
+      NUXT_PUBLIC_API_BASE: "/api"
 
   # ai-cpu stays disabled by its `ai` profile in the base Compose file.
