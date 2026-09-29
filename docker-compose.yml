@@ -52,6 +52,17 @@ services:
     networks:
       - photobank
 
+  # A fresh named volume is owned by root. Laravel runs as www-data (UID 33)
+  # and must be able to create originals/variants before the first upload.
+  storage-init:
+    image: nginx:alpine
+    user: "0:0"
+    network_mode: none
+    command: ["sh", "-c", "chown 33:33 /data"]
+    volumes:
+      - photobank_storage:/data
+    restart: "no"
+
   api:
     build:
       context: ./apps/api
@@ -98,6 +109,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     # No source bind mount here: the built image already has vendor/
     # installed, and mounting ./apps/api over /app on a clean checkout (no
     # vendor/ on the host) would erase it, breaking the container. For local

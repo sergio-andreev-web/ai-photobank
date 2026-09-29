@@ -77,26 +77,49 @@
 
       <!-- Uploading files -->
       <div v-if="uploads.length > 0" class="mt-6">
-        <div class="mb-2 flex items-center justify-between">
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-x-4">
           <h3 class="font-semibold text-gray-900">Files ({{ uploads.length }})</h3>
           <span class="text-sm text-gray-600">
             {{ uploadingCount }} uploading &middot; {{ uploadedCount }} uploaded &middot;
             {{ duplicateCount }} duplicate &middot; {{ errorCount }} failed
           </span>
         </div>
+        <p v-if="uploadedCount > 0" class="mb-3 text-sm text-gray-600" data-testid="processing-summary">
+          AI processing: {{ processingCount }} in progress &middot; {{ readyCount }} ready &middot;
+          {{ processingFailedCount }} failed
+        </p>
         <div class="space-y-2" data-testid="upload-list">
           <div
             v-for="upload in uploads"
             :key="upload.clientId"
-            class="flex items-center justify-between rounded border border-gray-200 p-3"
+            class="flex items-center justify-between gap-3 rounded border border-gray-200 p-3"
             :data-testid="`upload-row-${upload.clientId}`"
+            :data-state="fileState(upload)"
           >
             <div class="flex-1 overflow-hidden">
               <p class="truncate text-sm font-medium text-gray-900">{{ upload.file.name }}</p>
               <p class="text-xs text-gray-600">{{ statusLabel(upload) }}</p>
+              <!-- AI processing of an uploaded file (polled, §52); the upload line above stays as it was. -->
+              <p
+                v-if="processingLabel(upload)"
+                class="text-xs"
+                :class="upload.imageStatus === 'failed' ? 'text-red-600' : 'text-gray-600'"
+                :data-testid="`upload-processing-${upload.clientId}`"
+              >
+                {{ processingLabel(upload) }}
+                <NuxtLink
+                  v-if="upload.imageId !== null && processingLinkLabel(upload)"
+                  :to="`/gallery/${upload.imageId}`"
+                  class="ml-1 font-medium text-blue-600 hover:text-blue-700"
+                >
+                  {{ processingLinkLabel(upload) }}
+                </NuxtLink>
+              </p>
             </div>
             <div class="flex items-center gap-2">
-              <UBadge :color="statusColor(upload)">{{ upload.state }}</UBadge>
+              <UBadge :color="statusColor(upload)" :data-testid="`upload-state-${upload.clientId}`">
+                {{ fileState(upload) }}
+              </UBadge>
               <UButton
                 v-if="upload.state === 'error' && acceptingUploads"
                 size="xs"
@@ -134,15 +157,21 @@ definePageMeta({
 
 import type { Batch } from '~/types/api'
 import { runWithConcurrency } from '~/utils/concurrency'
+import {
+  applyImageStatuses,
+  fileState,
+  isAwaitingProcessing,
+  isFinalBatchStatus,
+  type TrackedFile,
+} from '~/utils/uploadTracking'
 
 const MAX_CONCURRENT_UPLOADS = 4
 
-type UploadState = 'queued' | 'uploading' | 'uploaded' | 'duplicate' | 'error'
-
-interface UploadItem {
+// `state` is the upload request's outcome; `imageStatus` (from polling) then carries the file through
+// AI processing. fileState() combines both into the states shown per file (§52).
+interface UploadItem extends TrackedFile {
   clientId: string
   file: File
-  state: UploadState
   errorCode: string | null
   errorMessage: string | null
   existingImageId: number | null
@@ -177,6 +206,12 @@ const uploadedCount = computed(() => uploads.value.filter((u) => u.state === 'up
 const duplicateCount = computed(() => uploads.value.filter((u) => u.state === 'duplicate').length)
 const errorCount = computed(() => uploads.value.filter((u) => u.state === 'error').length)
 const uploadedTotal = computed(() => uploadedCount.value + duplicateCount.value)
+const processingCount = computed(() => uploads.value.filter((u) => fileState(u) === 'processing').length)
+const readyCount = computed(() => uploads.value.filter((u) => fileState(u) === 'ready').length)
+// Uploaded files whose AI processing failed (upload errors are counted in errorCount).
+const processingFailedCount = computed(
+  () => uploads.value.filter((u) => u.state === 'uploaded' && fileState(u) === 'failed').length
+)
 
 function statusLabel(upload: UploadItem): string {
   switch (upload.state) {
@@ -197,15 +232,39 @@ function statusLabel(upload: UploadItem): string {
   }
 }
 
+function processingLabel(upload: UploadItem): string {
+  if (upload.state !== 'uploaded') return ''
+  switch (upload.imageStatus) {
+    case 'queued':
+      return 'Waiting for AI analysis'
+    case 'processing':
+      return 'AI analysis in progress'
+    case 'ready':
+      return 'Analysis complete'
+    case 'failed':
+      // The list item carries no error fields (ImageSummary); code and message are on the image page.
+      return 'Processing failed'
+    default:
+      return ''
+  }
+}
+
+function processingLinkLabel(upload: UploadItem): string {
+  if (upload.imageStatus === 'ready') return 'View image'
+  if (upload.imageStatus === 'failed') return 'See error details'
+  return ''
+}
+
 function statusColor(upload: UploadItem): 'success' | 'warning' | 'error' | 'info' | 'neutral' {
-  switch (upload.state) {
-    case 'uploaded':
+  switch (fileState(upload)) {
+    case 'ready':
       return 'success'
     case 'duplicate':
       return 'warning'
-    case 'error':
+    case 'failed':
       return 'error'
     case 'uploading':
+    case 'processing':
       return 'info'
     default:
       return 'neutral'
@@ -257,6 +316,9 @@ function enqueueFiles(files: File[]) {
     errorCode: null,
     errorMessage: null,
     existingImageId: null,
+    imageId: null,
+    imageStatus: null,
+    imageGone: false,
   }))
   uploads.value.push(...items)
   void runUploads(items)
@@ -274,8 +336,13 @@ async function uploadOne(item: UploadItem) {
   item.state = 'uploading'
   item.errorCode = null
   item.errorMessage = null
+  item.imageId = null
+  item.imageStatus = null
+  item.imageGone = false
   try {
-    await images.uploadImage(currentBatch.value.id, item.file)
+    const image = await images.uploadImage(currentBatch.value.id, item.file)
+    item.imageId = image.id
+    // The 201 only says "uploaded"; the next status (processing/ready/failed) comes from polling.
     item.state = 'uploaded'
   } catch (e) {
     const { code, message } = useApiError(e)
@@ -288,6 +355,8 @@ async function uploadOne(item: UploadItem) {
       item.errorMessage = message
     }
   }
+  // Follow processing from the first stored file on, not only after the whole selection was sent.
+  if (item.state === 'uploaded') startWatchingIfNeeded()
 }
 
 async function retryUpload(item: UploadItem) {
@@ -295,11 +364,27 @@ async function retryUpload(item: UploadItem) {
   startWatchingIfNeeded()
 }
 
+// Each poll (§49) also reloads the batch's images while an uploaded file has not reached ready/failed,
+// so every row can move on to processing/ready/failed (§52).
+async function refreshFileStates(batch: Batch) {
+  const rows = await images.listBatchImages(batch.id)
+  applyImageStatuses(uploads.value, rows, isFinalBatchStatus(batch.status))
+}
+
 function startWatchingIfNeeded() {
   if (!currentBatch.value || stopWatching) return
-  stopWatching = batches.watchBatch(currentBatch.value.id, (batch) => {
-    currentBatch.value = batch
-  })
+  stopWatching = batches.watchBatch(
+    currentBatch.value.id,
+    (batch) => {
+      currentBatch.value = batch
+    },
+    {
+      tracker: {
+        hasPending: () => uploads.value.some(isAwaitingProcessing),
+        refresh: refreshFileStates,
+      },
+    }
+  )
 }
 
 async function handleComplete() {

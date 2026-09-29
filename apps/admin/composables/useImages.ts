@@ -7,6 +7,10 @@ import type {
   ImageTag,
   PaginationParams,
 } from '~/types/api'
+import { fetchAllPages } from '~/utils/pagination'
+
+/** Largest page the contract allows for `GET /admin/images` (`PerPage` parameter). */
+const IMAGES_MAX_PER_PAGE = 100
 
 export function useImages() {
   const api = useApi()
@@ -22,9 +26,19 @@ export function useImages() {
   ) {
     const { data } = await api.get<ImageList>('/admin/images', {
       params,
-      paramsSerializer: { indexes: null },
+      // The contract (`TagIdsFilter`) wants Laravel's array form `tag_ids[]=1&tag_ids[]=2`. With
+      // `indexes: null` axios drops the brackets (`tag_ids=1&tag_ids=2`), which Laravel reads as the
+      // scalar `2` and rejects the request with 422.
+      paramsSerializer: { indexes: false },
     })
     return data
+  }
+
+  /** Every image of a batch, across all pages. */
+  async function listBatchImages(batchId: number) {
+    return fetchAllPages<ImageSummary>((page) =>
+      listImages({ batch_id: batchId, page, per_page: IMAGES_MAX_PER_PAGE })
+    )
   }
 
   async function getImage(id: number) {
@@ -74,6 +88,7 @@ export function useImages() {
 
   return {
     listImages,
+    listBatchImages,
     getImage,
     updateImage,
     deleteImage,

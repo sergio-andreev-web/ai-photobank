@@ -103,13 +103,34 @@ def test_missing_optional_sections_default_to_empty():
         '{"caption": null}',
         '{"caption": "   ", "ocr": [], "concepts": []}',
         '{"caption": "", "ocr": [{"text": "EXIT", "confidence": 0.9}], "concepts": []}',
-        # every concept dropped as invalid -> nothing left
-        '{"caption": "", "concepts": [{"type": "object", "label": "", "confidence": 0.5}]}',
     ],
 )
 def test_empty_analysis_is_invalid(raw):
     with pytest.raises(VisionOutputInvalid, match="neither caption nor concepts"):
         parse_vision_output(raw)
+
+
+@pytest.mark.parametrize(
+    "concepts",
+    [
+        # Real Qwen3-VL output: every concept without "confidence".
+        [{"type": "object", "label": "race car"}, {"type": "brand", "label": "Petronas"}],
+        ["race car", "race track"],
+        [{"type": "object", "label": "", "confidence": 0.5}],
+    ],
+)
+def test_concepts_list_without_any_valid_item_is_invalid(concepts):
+    # A caption alone must not turn a malformed concepts list into a 200 with
+    # an untagged image: the caller retries instead.
+    raw = json.dumps({"caption": "A race car on a track.", "concepts": concepts, "ocr": []})
+    with pytest.raises(VisionOutputInvalid, match="no concept fits the schema"):
+        parse_vision_output(raw)
+
+
+def test_empty_concepts_list_with_caption_is_valid():
+    result = parse_vision_output('{"caption": "A gray square.", "concepts": [], "ocr": []}')
+    assert result.caption == "A gray square."
+    assert result.concepts == []
 
 
 # Real Qwen3-VL output cut off by AI_VLM_MAX_NEW_TOKENS: the root object never
@@ -223,6 +244,76 @@ def test_limits_and_duplicates():
 def test_ocr_items_without_valid_text_or_confidence_are_dropped():
     raw = json.dumps({"caption": "Signs.", "ocr": [{"text": " ", "confidence": 0.9}, {"text": "EXIT"}, {"text": "STOP", "confidence": 0.8}]})
     assert [o.text for o in parse_vision_output(raw).ocr] == ["STOP"]
+
+
+def test_plain_string_ocr_items_are_dropped_without_inventing_confidence(caplog):
+    # Seen with a v2 draft prompt: OCR as a list of strings. The contract needs
+    # a model confidence, so such items are dropped (and logged), not completed.
+    raw = json.dumps({
+        "caption": "Credit cards.",
+        "concepts": [{"type": "object", "label": "credit card", "confidence": 0.9}],
+        "ocr": ["VISA", {"text": "MasterCard", "confidence": 0.85}, "1000"],
+    })
+    with caplog.at_level("INFO", logger="ai_service.vlm_output"):
+        result = parse_vision_output(raw)
+    assert [(o.text, o.confidence) for o in result.ocr] == [("MasterCard", 0.85)]
+    assert [c.label for c in result.concepts] == ["credit card"]
+    dropped = [r for r in caplog.records if r.getMessage() == "ai_service.vlm_ocr_dropped"]
+    assert [r.dropped for r in dropped] == [2]
+
+
+# image-analysis-v2 key order: caption, concepts, ocr (pretty-printed, as Qwen3-VL writes it).
+V2_OUTPUT = """```json
+{
+  "caption": "A blue plaque reading \\"ГОСУДАРСТВЕННАЯ ЖИЛИЩНАЯ ИНСПЕКЦИЯ\\" on a stone wall.",
+  "concepts": [
+    {
+      "type": "object",
+      "label": "plaque",
+      "confidence": 0.95
+    },
+    {
+      "type": "concept",
+      "label": "government agency",
+      "confidence": 0.9
+    }
+  ],
+  "ocr": [
+    {
+      "text": "ГОСУДАРСТВЕННАЯ ЖИЛИЩНАЯ ИНСПЕКЦИЯ",
+      "confidence": 0.93
+    }
+  ]
+}
+```"""
+
+
+def test_parses_v2_key_order():
+    result = parse_vision_output(V2_OUTPUT)
+    assert result.caption == 'A blue plaque reading "ГОСУДАРСТВЕННАЯ ЖИЛИЩНАЯ ИНСПЕКЦИЯ" on a stone wall.'
+    assert [(c.type, c.label, c.confidence) for c in result.concepts] == [
+        (TagType.OBJECT, "plaque", 0.95),
+        (TagType.CONCEPT, "government agency", 0.9),
+    ]
+    assert [(o.text, o.confidence) for o in result.ocr] == [("ГОСУДАРСТВЕННАЯ ЖИЛИЩНАЯ ИНСПЕКЦИЯ", 0.93)]
+
+
+def test_ocr_loop_cut_at_token_limit_keeps_caption_and_concepts():
+    # Greedy decoding repeating one banknote value until AI_VLM_MAX_NEW_TOKENS.
+    # With concepts before OCR (v2) nothing but the loop itself is lost.
+    loop = ",\n".join(['    {"text": "1000", "confidence": 0.95}'] * 40)
+    raw = (
+        '{\n  "caption": "A hand holds a key near a house made of credit cards.",\n'
+        '  "concepts": [\n'
+        '    {"type": "object", "label": "key", "confidence": 0.95},\n'
+        '    {"type": "concept", "label": "real estate", "confidence": 0.8}\n'
+        '  ],\n'
+        '  "ocr": [\n    {"text": "VISA", "confidence": 0.95},\n' + loop + ',\n    {"text": "10'
+    )
+    result = parse_vision_output(raw)
+    assert result.caption == "A hand holds a key near a house made of credit cards."
+    assert [c.label for c in result.concepts] == ["key", "real estate"]
+    assert [o.text for o in result.ocr] == ["VISA", "1000"]
 
 
 def test_parsed_result_passes_contract_schema():

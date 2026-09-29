@@ -58,7 +58,7 @@ def test_analyze_maps_model_failures(app_settings, exc, status, code):
         assert error["request_id"] == VALID_REQUEST_ID
         assert "/srv/secret" not in response.text
         if code == "MODEL_OUTPUT_INVALID":
-            assert error["details"] == {"prompt_version": "image-analysis-v1"}
+            assert error["details"] == {"prompt_version": "image-analysis-v2"}
 
         # The single inference slot (AI_CONCURRENCY=1) was released.
         app.state.registry.vision_model = MockVisionModel()

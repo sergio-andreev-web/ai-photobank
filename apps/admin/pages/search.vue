@@ -101,7 +101,9 @@ definePageMeta({
 })
 
 import type { PaginationMeta, SearchMode, SearchRequest, SearchResultItem, Tag } from '~/types/api'
+import { readSearchRouteQuery } from '~/utils/searchRoute'
 
+const route = useRoute()
 const searchApi = useSearch()
 const tagsApi = useTags()
 
@@ -182,7 +184,17 @@ async function handleSearch(page = 1) {
   }
 }
 
+// Deep link, e.g. the gallery's AI search box: /search?mode=semantic&q=… prefills the form and runs the
+// search. It only runs when the prefilled form is valid for the mode (hybrid still needs tags).
+function applyRouteQuery() {
+  const { mode: routeMode, q } = readSearchRouteQuery(route.query)
+  if (routeMode) mode.value = routeMode
+  if (q !== undefined) query.value = q
+  if (canSearch.value) void handleSearch()
+}
+
 onMounted(() => {
   onTagSearch('')
+  applyRouteQuery()
 })
 </script>

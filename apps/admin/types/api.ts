@@ -1,4 +1,4 @@
-// Types mirror contracts/public-api.openapi.yaml (v1.0.0) and contracts/schemas/enums.json.
+// Types mirror contracts/public-api.openapi.yaml (v1.2.1) and contracts/schemas/enums.json.
 // Client code must ignore unknown response fields and treat unknown error codes as a generic error.
 
 export interface PaginationMeta {
@@ -118,8 +118,6 @@ export interface Tag {
   aliases: TagAlias[]
   created_at: string
   updated_at: string
-  // Client-side only, populated while building a tree from the flat list.
-  children?: Tag[]
 }
 
 export interface TagList {

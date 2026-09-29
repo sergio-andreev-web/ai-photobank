@@ -45,7 +45,7 @@ make down            # Stop all services
 make logs            # View logs
 make migrate         # Run migrations
 make seed            # Seed database
-make test            # Run all tests
+make test            # Run all tests (backend, admin, AI) in throwaway containers; needs only Docker, not the running stack
 make ai-mac          # Run AI natively on Mac with MPS
 make ai-mac-cpu      # Same, but CPU fallback (dev/smoke only)
 make ai-test         # Run AI with CPU for testing
@@ -286,6 +286,10 @@ DNS resolution:
 | `rabbitmq_data` | RabbitMQ state |
 | `photobank_storage` | Image files, cache |
 | `ai_models_cache` | AI model weights (HuggingFace), `ai-cpu` Docker profile only |
+
+On a fresh `photobank_storage` volume, the one-shot `storage-init` service gives
+its root directory to Laravel's `www-data` user before `api` starts. This lets
+the first upload create `originals/` and `variants/` without a manual `chown`.
 
 Not a Docker volume, but the same role: `make ai-mac`/`make ai-mac-cpu` cache
 weights under the host path `AI_MAC_HF_HOME` (§68) — see "macOS with MPS"

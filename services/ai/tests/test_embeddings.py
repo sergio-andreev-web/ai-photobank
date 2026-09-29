@@ -10,7 +10,7 @@ def test_text_embeddings_happy_path(client):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["model"] == "google/siglip2-so400m-patch14-384"
+    assert body["model"] == "mock-embedding"
     assert body["revision"] == "mock-embedding-v1"
     assert body["dimensions"] == 1152
     assert len(body["embeddings"]) == 3

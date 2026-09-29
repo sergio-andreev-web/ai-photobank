@@ -121,11 +121,6 @@ definePageMeta({
 
 import type { PaginationMeta, Tag, TagCandidate, TagCandidateStatus } from '~/types/api'
 
-// Nuxt UI v3 reserves an empty string `value` on a SelectItem to mean "clear
-// selection" and throws if an item uses it, so "no filter" needs its own
-// sentinel instead of ''.
-const ALL = 'all' as const
-
 const candidatesApi = useCandidates()
 const tagsApi = useTags()
 
@@ -134,7 +129,7 @@ const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const pagination = ref<PaginationMeta | null>(null)
-const selectedStatus = ref<TagCandidateStatus | typeof ALL>('pending')
+const selectedStatus = ref<TagCandidateStatus>('pending')
 const actionInFlight = ref<{ id: number; action: 'approve' | 'merge' | 'reject' } | null>(null)
 
 const mergeTargetId = ref<number | null>(null)
@@ -142,12 +137,13 @@ const mergeTag = ref<number | undefined>()
 const mergeCreateAlias = ref(true)
 const mergeOptions = ref<{ label: string; value: number }[]>([])
 
-const statusOptions: { label: string; value: TagCandidateStatus | typeof ALL }[] = [
+// The API has no "all statuses" filter: a request without `status` returns only
+// `pending` (contract: default pending), so an "All" option would be misleading.
+const statusOptions: { label: string; value: TagCandidateStatus }[] = [
   { label: 'Pending', value: 'pending' },
   { label: 'Created', value: 'created' },
   { label: 'Merged', value: 'merged' },
   { label: 'Rejected', value: 'rejected' },
-  { label: 'All', value: ALL },
 ]
 
 function pendingAction(id: number) {
@@ -161,7 +157,7 @@ async function loadCandidates(page = 1) {
     const data = await candidatesApi.listCandidates({
       page,
       per_page: 20,
-      status: selectedStatus.value === ALL ? undefined : selectedStatus.value,
+      status: selectedStatus.value,
     })
     candidates.value = data.data
     pagination.value = data.meta

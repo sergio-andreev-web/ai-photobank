@@ -172,12 +172,13 @@ class ModelRegistry:
 
     def ready_payload(self) -> dict:
         assert self.device is not None
+        assert self.vision_model is not None and self.embedding_model is not None
         return {
             "status": "ready",
             "device": self.device.value,
             "models": {
-                "vision": self.settings.vision_model,
-                "embedding": self.settings.embedding_model,
+                "vision": self.vision_model.name,
+                "embedding": self.embedding_model.name,
             },
             "embedding_dimensions": EXPECTED_DIMENSIONS,
             "prompt_version": self.settings.prompt_version,

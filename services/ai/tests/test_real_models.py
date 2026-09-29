@@ -77,7 +77,7 @@ def test_ready_reports_resolved_device_and_models(app, client):
         assert body["device"] == configured
 
 
-def test_analyze_returns_contract_shape(client):
+def test_analyze_returns_contract_shape(app, client):
     response = client.post(
         "/v1/images/analyze",
         data={"request_id": REQUEST_ID},
@@ -87,6 +87,8 @@ def test_analyze_returns_contract_shape(client):
     assert response.status_code == 200, response.text
     body = ImageAnalysisResponse(**response.json())
     assert body.caption.strip()
+    assert body.concepts
+    assert body.prompt_version == app.state.settings.prompt_version
     assert COMMIT_OR_DIGEST.match(body.models.vision_revision)
     assert COMMIT_OR_DIGEST.match(body.models.embedding_revision)
     assert abs(math.sqrt(sum(c * c for c in body.embedding)) - 1.0) < 1e-3

@@ -25,7 +25,8 @@ def test_ready_returns_ready_once_started(client):
     body = response.json()
     assert body["status"] == "ready"
     assert body["embedding_dimensions"] == 1152
-    assert body["prompt_version"] == "image-analysis-v1"
+    assert body["prompt_version"] == "image-analysis-v2"
+    assert body["models"] == {"vision": "mock-vision", "embedding": "mock-embedding"}
 
 
 def test_health_and_ready_stay_unauthenticated_when_api_key_is_configured():

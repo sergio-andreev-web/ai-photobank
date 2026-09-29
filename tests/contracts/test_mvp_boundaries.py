@@ -126,12 +126,14 @@ class MvpBoundaryContracts(unittest.TestCase):
 
     def test_nuxt_tag_page_size_obeys_public_contract(self):
         page = (ROOT / "apps/admin/pages/tags.vue").read_text()
-        request = re.search(r"api\.get\('/admin/tags',\s*\{\s*params:\s*\{\s*per_page:\s*(\d+)", page)
-        self.assertIsNotNone(request, "Tag page's direct list request was not found")
+        tags_api = (ROOT / "apps/admin/composables/useTags.ts").read_text()
+        self.assertRegex(page, r"tagsApi\.listAllTags\(", "Tag page no longer loads the complete catalog")
+        request = re.search(r"listTags\(\{[^}]*per_page:\s*(\d+),\s*page", tags_api)
+        self.assertIsNotNone(request, "Complete tag catalog's paginated request was not found")
         params = self.public["paths"]["/api/admin/tags"]["get"]["parameters"]
         max_page_size = next(p["schema"]["maximum"] for p in params if p.get("name") == "per_page")
         self.assertLessEqual(int(request.group(1)), max_page_size,
-                             "Nuxt tags page requests more rows than Laravel's accepted contract permits")
+                             "Nuxt tag catalog requests more rows than Laravel's accepted contract permits")
 
 
 if __name__ == "__main__":

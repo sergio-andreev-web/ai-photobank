@@ -15,7 +15,7 @@ def make_settings(**overrides) -> Settings:
         DEVICE="cpu",
         VISION_MODEL="Qwen/Qwen3-VL-4B-Instruct",
         EMBEDDING_MODEL="google/siglip2-so400m-patch14-384",
-        PROMPT_VERSION="image-analysis-v1",
+        PROMPT_VERSION="image-analysis-v2",
         AI_SERVICE_API_KEY="",
         AI_CONCURRENCY=1,
         AI_MAX_IMAGE_BYTES=20 * 1024 * 1024,

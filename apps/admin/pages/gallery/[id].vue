@@ -24,7 +24,27 @@
           </div>
           <div>
             <p class="subtle-label">FILENAME</p>
-            <p class="mt-1 text-xl font-semibold text-gray-900 break-all">{{ image.original_name }}</p>
+            <div v-if="!renaming" class="mt-1 flex items-start gap-2">
+              <p class="flex-1 break-all text-xl font-semibold text-gray-900" data-testid="image-name">{{ image.original_name }}</p>
+              <UButton
+                size="sm"
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-pencil-square"
+                aria-label="Rename image"
+                title="Rename image"
+                @click="startRename"
+              />
+            </div>
+            <form v-else class="mt-2 space-y-3" novalidate @submit.prevent="handleRename">
+              <UFormField label="Filename" name="original_name" :error="renameError ?? draftError ?? undefined">
+                <UInput v-model="nameDraft" class="w-full" maxlength="1024" autofocus />
+              </UFormField>
+              <div class="flex gap-2">
+                <UButton type="submit" :loading="actionLoading === 'rename'" :disabled="!canSaveName">Save name</UButton>
+                <UButton variant="ghost" color="neutral" @click="cancelRename">Cancel</UButton>
+              </div>
+            </form>
           </div>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -50,7 +70,7 @@
             <p v-if="image.error_message">{{ image.error_message }}</p>
           </div>
 
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <UButton
               v-if="image.status === 'failed'"
               color="warning"
@@ -67,7 +87,33 @@
             >
               Reprocess
             </UButton>
+            <UButton
+              v-if="!confirmingDelete"
+              color="error"
+              variant="soft"
+              icon="i-heroicons-trash"
+              @click="() => { confirmingDelete = true }"
+            >
+              Delete image
+            </UButton>
           </div>
+
+          <section
+            v-if="confirmingDelete"
+            class="rounded-xl border border-red-200 bg-red-50 p-4"
+            aria-label="Delete confirmation"
+          >
+            <h3 class="font-semibold text-red-900">Delete this image?</h3>
+            <p class="mt-1 text-sm text-red-700">
+              It disappears from the gallery, search and counters. The stored file and its analysis history are kept.
+            </p>
+            <div class="mt-3 flex gap-2">
+              <UButton color="error" :loading="actionLoading === 'delete'" @click="handleDelete">Confirm delete</UButton>
+              <UButton variant="ghost" color="neutral" :disabled="actionLoading === 'delete'" @click="() => { confirmingDelete = false }">
+                Cancel
+              </UButton>
+            </div>
+          </section>
         </div>
 
         <!-- Image Details -->
@@ -128,7 +174,7 @@
           <div v-if="image.latest_analysis?.concepts?.length">
             <h3 class="section-title">AI Concepts</h3>
             <div class="mt-2 flex flex-wrap gap-2">
-              <UBadge v-for="concept in image.latest_analysis.concepts" :key="concept.label" variant="subtle">
+              <UBadge v-for="concept in image.latest_analysis.concepts" :key="`${concept.type}:${concept.label}`" variant="subtle">
                 {{ concept.label }} ({{ Math.round(concept.confidence * 100) }}%)
               </UBadge>
             </div>
@@ -159,6 +205,10 @@ definePageMeta({
 })
 
 import type { ImageDetail, ImageStatus, Tag } from '~/types/api'
+import { toApiProblem } from '~/utils/errorHandler'
+
+// ImagePatchRequest.original_name in contracts/public-api.openapi.yaml.
+const NAME_MAX_LENGTH = 1024
 
 const route = useRoute()
 const imagesApi = useImages()
@@ -168,7 +218,12 @@ const image = ref<ImageDetail | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
-const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | null>(null)
+const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | 'rename' | 'delete' | null>(null)
+
+const renaming = ref(false)
+const nameDraft = ref('')
+const renameError = ref<string | null>(null)
+const confirmingDelete = ref(false)
 
 const showAddTag = ref(false)
 const tagToAdd = ref<number | undefined>()
@@ -184,6 +239,14 @@ function statusColor(status: ImageStatus) {
   } as const
   return colors[status]
 }
+
+const canSaveName = computed(() => {
+  const name = nameDraft.value.trim()
+  return name.length > 0 && name !== image.value?.original_name
+})
+// The Save button stays disabled for a blank draft (and disabled buttons don't submit on Enter),
+// so say why right in the field.
+const draftError = computed(() => (nameDraft.value.trim() ? null : 'Enter a file name.'))
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleString()
@@ -269,6 +332,59 @@ async function handleReprocess() {
   } catch (e) {
     actionError.value = useApiError(e).message
   } finally {
+    actionLoading.value = null
+  }
+}
+
+function startRename() {
+  if (!image.value) return
+  nameDraft.value = image.value.original_name
+  renameError.value = null
+  renaming.value = true
+}
+
+function cancelRename() {
+  renaming.value = false
+  renameError.value = null
+}
+
+async function handleRename() {
+  if (!image.value) return
+  const name = nameDraft.value.trim()
+  if (!name) return
+  if (name.length > NAME_MAX_LENGTH) {
+    renameError.value = `Use at most ${NAME_MAX_LENGTH} characters.`
+    return
+  }
+  if (name === image.value.original_name) return
+
+  actionLoading.value = 'rename'
+  actionError.value = null
+  renameError.value = null
+  try {
+    // ADR-0006: original_name is the only editable field; the response is the full ImageDetail.
+    image.value = await imagesApi.updateImage(image.value.id, { original_name: name })
+    renaming.value = false
+  } catch (e) {
+    const problem = toApiProblem(e)
+    renameError.value = problem.fields.original_name?.join(' ') ?? null
+    actionError.value = problem.message
+  } finally {
+    actionLoading.value = null
+  }
+}
+
+async function handleDelete() {
+  if (!image.value) return
+  actionLoading.value = 'delete'
+  actionError.value = null
+  try {
+    // Soft delete (204). The gallery, search and dashboard counters load fresh on mount,
+    // so there is no client-side list to invalidate.
+    await imagesApi.deleteImage(image.value.id)
+    await navigateTo('/gallery')
+  } catch (e) {
+    actionError.value = useApiError(e).message
     actionLoading.value = null
   }
 }

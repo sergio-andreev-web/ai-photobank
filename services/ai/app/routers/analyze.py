@@ -74,8 +74,8 @@ def analyze_image(
         "embedding": embedding,
         "embedding_dimensions": len(embedding),
         "models": AnalysisModels(
-            vision=registry.settings.vision_model,
-            embedding=registry.settings.embedding_model,
+            vision=registry.vision_model.name,
+            embedding=registry.embedding_model.name,
             vision_revision=registry.vision_model.revision,
             embedding_revision=registry.embedding_model.revision,
         ),
