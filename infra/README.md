@@ -90,12 +90,14 @@ isn't available inside Docker Desktop's Linux VM:
 # Start services (without AI)
 docker compose -f docker-compose.yml -f docker-compose.mac.yml up -d
 
-# In another terminal: install real-model deps once, then run AI natively
-cd services/ai && pip install -r requirements.txt -r requirements-model.txt && cd ../..
-make ai-mac
+# In another terminal: install real-model deps once into services/ai/.venv, then run AI natively
+cd services/ai && python3 -m venv .venv && .venv/bin/pip install -r requirements-model.txt && cd ../..
+make ai-mac   # uses services/ai/.venv/bin/python when it exists
 ```
 
-API will connect to AI at `http://host.docker.internal:8001`. `make ai-mac`
+Both `api` and `api-worker` (which runs the AI stages) connect to AI at
+`http://host.docker.internal:8001`; set `HF_HUB_OFFLINE=1` in `.env` once
+the weights are cached to start without network access. `make ai-mac`
 sets `DEVICE=mps`, `AI_MODEL_PROVIDER=transformers`, `AI_CONCURRENCY=1`
 (§58) and sources the project-root `.env` for the rest (`VISION_MODEL`,
 `EMBEDDING_MODEL`, `AI_SERVICE_API_KEY`, ...), so the key matches what
@@ -134,8 +136,9 @@ host (VM, VPS, cloud compute instance):
 
 ```bash
 cp .env.example .env
-# edit .env: APP_KEY, NGINX_SERVER_NAME, SESSION_DOMAIN,
-# SANCTUM_STATEFUL_DOMAINS, DB/RabbitMQ passwords, AI_BASE_URL, etc.
+# uncomment the production block at the end of .env and set APP_KEY,
+# NGINX_SERVER_NAME, SESSION_DOMAIN, SANCTUM_STATEFUL_DOMAINS,
+# DB/RabbitMQ passwords, AI_BASE_URL, etc.
 # (populate secret values from your host's secret store, not by hand)
 mkdir -p certs && cp /path/to/fullchain.pem /path/to/privkey.pem certs/
 make prod-config   # validate the merged config
@@ -203,35 +206,19 @@ anything. Back up before every deploy that runs new migrations.
   public `/health` (or `/ready`) path under `/api`, so there is no
   contract-backed way to check Laravel's own DB/queue/storage readiness
   through the public origin. The container-internal check
-  (`http://localhost:8000/health` inside the `api`/`api-worker`
+  (`http://localhost:8000/up` inside the `api`
   containers, not proxied by nginx) is the only signal available today. If
   end-to-end readiness needs to be checkable from outside the host, the
   contract owner needs to add a `/api/health` (or similar) path first —
   this infra task does not invent one.
 
-### Dependencies not yet satisfied (blockers for actually running this profile)
+### Service images
 
-- `apps/api/Dockerfile` does not exist yet (owned by the backend agent). The
-  `api` and `api-worker` services build from `./apps/api`; until that
-  Dockerfile lands, `docker compose build`/`up` for either profile fails at
-  the build step. The Dockerfile must:
-  - set `upload_max_filesize` and `post_max_size` in `php.ini` to at least
-    `PHOTO_MAX_UPLOAD_BYTES`;
-  - serve on port 8000 inside the container (both Compose files' `api`
-    healthcheck and nginx's `upstream api { server api:8000; }` assume this);
-  - respond `200` on `GET /up` (Laravel's own default health route) — this
-    is the exact path both Compose files' `api` healthcheck probes
-    (`curl -f http://localhost:8000/up`), not `/health`: nginx's `/health` is
-    a separate static stub it answers itself, never proxied to `api`.
-  - honor `QUEUE_CONNECTION=rabbitmq` (already set by both Compose files) and
-    the `EMBEDDING_ACTIVE_MODEL_KEY`/`EMBEDDING_ACTIVE_MODEL_VERSION` env
-    vars this infra task added — see root `.env.example` and
-    `apps/api/config/photobank.php`/ADR-0009.
-- `apps/admin/` does not exist yet (owned by the frontend agent, Nuxt app +
-  Dockerfile). Same build-context dependency for the `admin` service.
-- Both gaps already existed in the base Compose file
-  (`infrastructure-base`); this task does not change that ownership
-  boundary, only documents the exact production-profile impact.
+Both Compose files build `apps/api/Dockerfile` (FrankenPHP serving Laravel on
+`:8000`, `GET /up` for health, PHP upload limits sized for
+`PHOTO_MAX_UPLOAD_BYTES`) and `apps/admin/Dockerfile` (Nuxt on `:3000`);
+`api-worker` reuses the api image with the `queue:work` command. The CI job
+"Integration Smoke" builds and starts this stack on every push.
 
 ## Health Checks
 

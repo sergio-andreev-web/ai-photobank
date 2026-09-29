@@ -14,8 +14,7 @@ final readonly class AiModels
         public string $embedding,
         public ?string $visionRevision = null,
         public ?string $embeddingRevision = null,
-    ) {
-    }
+    ) {}
 
     public static function fromArray(array $data): self
     {

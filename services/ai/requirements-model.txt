@@ -4,6 +4,8 @@
 # On Linux x86_64 the PyPI torch wheel ships CUDA; on macOS arm64 it has MPS.
 -r requirements.txt
 torch>=2.5,<3
+# The Qwen3-VL processor also builds a video processor, which needs torchvision (transformers 5.x).
+torchvision>=0.20,<1
 transformers>=4.57.0,<6
 accelerate>=1.0,<2
 huggingface_hub>=0.34

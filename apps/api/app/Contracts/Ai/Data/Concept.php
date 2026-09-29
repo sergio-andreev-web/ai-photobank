@@ -12,8 +12,7 @@ final readonly class Concept
         public ConceptType $type,
         public string $label,
         public float $confidence,
-    ) {
-    }
+    ) {}
 
     public static function fromArray(array $data): self
     {

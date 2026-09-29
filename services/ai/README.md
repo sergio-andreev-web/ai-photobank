@@ -19,7 +19,7 @@ Layout of the real provider:
 
 - `app/models/vision.py` — prompt, retries, deadline, pixel budget (no torch);
 - `app/models/embedding.py` — lowercasing, count/dimension/finite checks, L2 norm (no torch);
-- `app/models/vlm_output.py` — untrusted VLM text → `VisionResult` (unknown `type` → `other`, invalid items dropped);
+- `app/models/vlm_output.py` — untrusted VLM text → `VisionResult` (only a root object with `caption`/`ocr`/`concepts`; output cut off at `AI_VLM_MAX_NEW_TOKENS` keeps the caption and fully formed items; unknown `type` → `other`, invalid items dropped; neither caption nor concepts → invalid);
 - `app/models/transformers_backend.py` — the only torch/transformers code;
 - `app/models/weights.py` — HF cache resolution; `*_revision` = resolved commit sha, or `sha256:` digest for a local weights directory (ADR-0009);
 - `app/inference.py` — model failures → contract error codes.
@@ -39,6 +39,10 @@ AI_MODEL_PROVIDER=transformers DEVICE=cpu
 
 `DEVICE=cuda|mps` must actually be available, otherwise startup fails and
 `/ready` stays 503 (no silent CPU fallback). `DEVICE=auto` picks cuda → mps → cpu.
+
+On MPS the service sets `HF_DEACTIVATE_ASYNC_LOAD=1` before loading weights:
+Transformers 5.x otherwise copies tensors from a thread pool, which
+intermittently segfaults on MPS. An explicitly set non-empty value is kept.
 
 ## Startup and readiness
 
@@ -70,7 +74,8 @@ network access. Pin exact weights with `VISION_MODEL_REVISION` /
 
 Failure mapping (all retryable per contract):
 
-- VLM output not parseable after all attempts → 502 `MODEL_OUTPUT_INVALID`;
+- VLM output not parseable, or empty (no caption and no concepts), after all
+  attempts → 502 `MODEL_OUTPUT_INVALID`;
 - timeout, out-of-memory (caches are released), NaN/zero embeddings or any
   other model exception → 500 `INFERENCE_FAILED`.
 

@@ -75,6 +75,23 @@ def test_raises_output_invalid_after_all_attempts():
     assert len(generator.calls) == 3
 
 
+def test_truncated_output_is_used_without_retry():
+    truncated = '{"caption": "A gray square.", "ocr": [], "concepts": [{"type": "color", "label": "gray", "confidence": 0.9}, {"type": "sh'
+    generator = ScriptedGenerator([truncated])
+    result = make_model(generator, attempts=2).analyze(Image.new("RGB", (8, 8)))
+    assert result.caption == "A gray square."
+    assert [c.label for c in result.concepts] == ["gray"]
+    assert len(generator.calls) == 1
+
+
+def test_empty_analysis_is_retried_then_rejected():
+    empty = json.dumps({"caption": "", "ocr": [], "concepts": []})
+    generator = ScriptedGenerator([empty, empty])
+    with pytest.raises(VisionOutputInvalid, match="neither caption nor concepts"):
+        make_model(generator, attempts=2).analyze(Image.new("RGB", (8, 8)))
+    assert [call["sample"] for call in generator.calls] == [False, True]
+
+
 def test_deadline_is_shared_across_attempts():
     clock = FakeClock()
     generator = ScriptedGenerator(["garbage", GOOD_OUTPUT], clock=clock, step=31.0)

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Database;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -37,8 +38,8 @@ class PgVectorSchemaTest extends TestCase
         $this->skipUnlessPgsql();
 
         $row = DB::selectOne(
-            "SELECT format_type(a.atttypid, a.atttypmod) AS type FROM pg_attribute a ".
-            "JOIN pg_class c ON c.oid = a.attrelid ".
+            'SELECT format_type(a.atttypid, a.atttypmod) AS type FROM pg_attribute a '.
+            'JOIN pg_class c ON c.oid = a.attrelid '.
             "WHERE c.relname = 'image_embeddings' AND a.attname = 'embedding' AND a.attnum > 0"
         );
 
@@ -50,8 +51,8 @@ class PgVectorSchemaTest extends TestCase
         $this->skipUnlessPgsql();
 
         $row = DB::selectOne(
-            "SELECT format_type(a.atttypid, a.atttypmod) AS type FROM pg_attribute a ".
-            "JOIN pg_class c ON c.oid = a.attrelid ".
+            'SELECT format_type(a.atttypid, a.atttypmod) AS type FROM pg_attribute a '.
+            'JOIN pg_class c ON c.oid = a.attrelid '.
             "WHERE c.relname = 'tag_embeddings' AND a.attname = 'embedding' AND a.attnum > 0"
         );
 
@@ -123,7 +124,7 @@ class PgVectorSchemaTest extends TestCase
 
         $this->assertEquals(2, DB::table('tag_embeddings')->where('tag_id', $tagId)->count());
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         DB::statement(
             'INSERT INTO tag_embeddings (tag_id, model_key, model_version, source_text, embedding, created_at) '.
             'VALUES (?, ?, ?, ?, ?, now())',

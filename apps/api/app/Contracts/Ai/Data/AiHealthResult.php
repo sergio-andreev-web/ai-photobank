@@ -12,8 +12,7 @@ final readonly class AiHealthResult
         public string $status,
         public string $device,
         public AiModels $models,
-    ) {
-    }
+    ) {}
 
     public static function fromArray(array $data): self
     {

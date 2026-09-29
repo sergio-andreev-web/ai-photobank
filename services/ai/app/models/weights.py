@@ -47,6 +47,15 @@ def local_weights_digest(directory: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+def _hub_offline() -> bool:
+    try:
+        from huggingface_hub import constants
+    except ImportError:  # mock/CI profile: no hub client, nothing is downloaded anyway
+        return False
+
+    return bool(constants.HF_HUB_OFFLINE)
+
+
 def _default_snapshot_download(**kwargs) -> str:
     from huggingface_hub import snapshot_download
 
@@ -70,6 +79,9 @@ def resolve_weights(
             revision=revision,
             cache_dir=hub_cache_dir(hf_home),
             allow_patterns=ALLOW_PATTERNS,
+            # huggingface_hub 1.x lists the revision's files before looking at the cache when
+            # allow_patterns is set, which fails under HF_HUB_OFFLINE; ask for the cache only.
+            local_files_only=_hub_offline(),
         )
     )
     if not _COMMIT_SHA.match(snapshot.name):

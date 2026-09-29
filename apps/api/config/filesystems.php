@@ -64,7 +64,17 @@ return [
         // only the relative storage_key is ever persisted to the database.
         'photobank' => [
             'driver' => env('PHOTO_STORAGE_DRIVER', 'local'),
-            'root' => env('PHOTO_STORAGE_ROOT') ?: storage_path('app/photobank'),
+            // A relative PHOTO_STORAGE_ROOT (as in .env.example) is resolved against the app
+            // root, not the process working directory: FrankenPHP does not run from /app.
+            'root' => (static function (): string {
+                $root = env('PHOTO_STORAGE_ROOT');
+
+                if (! $root) {
+                    return storage_path('app/photobank');
+                }
+
+                return str_starts_with($root, '/') ? $root : base_path($root);
+            })(),
             'serve' => false,
             'throw' => true,
             'report' => false,
