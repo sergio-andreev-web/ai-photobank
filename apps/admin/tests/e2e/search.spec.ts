@@ -37,16 +37,16 @@ test.describe('search', () => {
 
     await gotoReady(page, '/search')
     // Nuxt UI v3 USelect renders role="combobox", not a native <select> or <button>.
-    await page.getByRole('combobox', { name: 'Search Mode' }).click()
-    await page.getByRole('option', { name: 'Semantic query' }).click()
+    await page.getByRole('combobox', { name: 'Режим поиска' }).click()
+    await page.getByRole('option', { name: 'По смыслу запроса' }).click()
 
-    await page.getByPlaceholder(/workers in hard hats/).fill('мужчина в каске на промышленном объекте')
-    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await page.getByPlaceholder(/рабочие в касках/).fill('мужчина в каске на промышленном объекте')
+    await page.getByRole('button', { name: 'Найти', exact: true }).click()
 
-    await expect(page.getByText('AI service unavailable')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Retry search' })).toBeVisible()
+    await expect(page.getByText('ИИ-сервис недоступен')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Повторить поиск' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Retry search' }).click()
+    await page.getByRole('button', { name: 'Повторить поиск' }).click()
     await expect(page.getByTestId('search-results')).toBeVisible()
     await expect(page.getByText('IMG_0001.jpg')).toBeVisible()
   })
@@ -69,12 +69,12 @@ test.describe('search', () => {
     })
 
     await gotoReady(page, '/search')
-    await page.getByRole('combobox', { name: 'Search Mode' }).click()
-    await page.getByRole('option', { name: 'Tags only' }).click()
-    await page.getByText('Select tags (all must match)').click()
-    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.getByRole('combobox', { name: 'Режим поиска' }).click()
+    await page.getByRole('option', { name: 'Только теги' }).click()
+    await page.getByText('Выберите теги (нужны все)').click()
+    await page.getByRole('option', { name: 'Каска (Объект)' }).click()
     await page.keyboard.press('Escape')
-    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await page.getByRole('button', { name: 'Найти', exact: true }).click()
 
     // The contract requires integer ids; the select must not submit its option objects.
     await expect.poll(() => requestBody?.tag_ids).toEqual([14])
@@ -91,11 +91,11 @@ test.describe('search', () => {
     )
 
     await gotoReady(page, '/search')
-    await page.getByRole('combobox', { name: 'Search Mode' }).click()
-    await page.getByRole('option', { name: 'Tags only' }).click()
+    await page.getByRole('combobox', { name: 'Режим поиска' }).click()
+    await page.getByRole('option', { name: 'Только теги' }).click()
 
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
-    await expect(page.getByText('Select at least one tag.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Найти', exact: true })).toBeDisabled()
+    await expect(page.getByText('Выберите хотя бы один тег.')).toBeVisible()
   })
 
   test('opens from a link with mode and q, prefills the form and runs the semantic search', async ({ page }) => {
@@ -116,8 +116,8 @@ test.describe('search', () => {
 
     await expect(page.getByTestId('search-results')).toBeVisible()
     await expect(page.getByText('IMG_0001.jpg')).toBeVisible()
-    await expect(page.getByRole('combobox', { name: 'Search Mode' })).toContainText('Semantic query')
-    await expect(page.getByPlaceholder(/workers in hard hats/)).toHaveValue('мужчина в каске & без очков')
+    await expect(page.getByRole('combobox', { name: 'Режим поиска' })).toContainText('По смыслу запроса')
+    await expect(page.getByPlaceholder(/рабочие в касках/)).toHaveValue('мужчина в каске & без очков')
     // Exactly one request, in the shape of the contract's semantic mode.
     expect(requests).toEqual([
       { mode: 'semantic', query: 'мужчина в каске & без очков', page: 1, per_page: 24, debug: false },
@@ -138,10 +138,10 @@ test.describe('search', () => {
     // An unknown mode falls back to the default (hybrid), which cannot run without tags.
     await gotoReady(page, '/search?mode=fulltext&q=helmet')
 
-    await expect(page.getByPlaceholder(/workers in hard hats/)).toHaveValue('helmet')
-    await expect(page.getByRole('combobox', { name: 'Search Mode' })).toContainText('Hybrid')
-    await expect(page.getByText('Hybrid search needs both a query and at least one tag.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+    await expect(page.getByPlaceholder(/рабочие в касках/)).toHaveValue('helmet')
+    await expect(page.getByRole('combobox', { name: 'Режим поиска' })).toContainText('Гибридный')
+    await expect(page.getByText('Для гибридного поиска нужны запрос и хотя бы один тег.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Найти', exact: true })).toBeDisabled()
     await page.waitForTimeout(300)
     expect(searches).toBe(0)
   })
@@ -159,7 +159,7 @@ test.describe('search', () => {
 
     await gotoReady(page, '/search')
 
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Найти', exact: true })).toBeDisabled()
     await page.waitForTimeout(300)
     expect(searches).toBe(0)
   })

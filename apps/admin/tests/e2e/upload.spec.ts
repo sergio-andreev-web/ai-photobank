@@ -100,10 +100,10 @@ test.describe('batch upload', () => {
     )
 
     await gotoReady(page, '/uploader')
-    await page.getByPlaceholder('e.g., Site visit - September 2026').fill('E2E batch')
-    await page.getByRole('button', { name: 'Create Batch' }).click()
+    await page.getByPlaceholder('Например: Выезд на объект, сентябрь 2026').fill('E2E batch')
+    await page.getByRole('button', { name: 'Создать партию' }).click()
 
-    await expect(page.getByText('Batch #42')).toBeVisible()
+    await expect(page.getByText('Партия #42')).toBeVisible()
 
     const fileInput = page.locator('input[type="file"]')
     await fileInput.setInputFiles([
@@ -117,17 +117,17 @@ test.describe('batch upload', () => {
     await expect(list.getByText('dup.jpg')).toBeVisible()
     await expect(list.getByText('bad.jpg')).toBeVisible()
 
-    await expect(list.getByText('Uploaded, queued for processing')).toBeVisible()
-    await expect(list.getByText(/Skipped: duplicate of image #999/)).toBeVisible()
-    await expect(list.getByText('Unsupported media type')).toBeVisible()
+    await expect(list.getByText('Загружен, ждёт обработки')).toBeVisible()
+    await expect(list.getByText(/Пропущен: дубликат изображения #999/)).toBeVisible()
+    await expect(list.getByText('Формат не поддерживается. Загрузите JPEG, PNG или WebP.')).toBeVisible()
 
     // Every file carries one of the per-file states of §52.
-    await expect(stateOf(rowFor(page, 'ok.jpg'))).toHaveText('uploaded')
-    await expect(stateOf(rowFor(page, 'dup.jpg'))).toHaveText('duplicate')
-    await expect(stateOf(rowFor(page, 'bad.jpg'))).toHaveText('failed')
+    await expect(stateOf(rowFor(page, 'ok.jpg'))).toHaveText('Загружен')
+    await expect(stateOf(rowFor(page, 'dup.jpg'))).toHaveText('Дубликат')
+    await expect(stateOf(rowFor(page, 'bad.jpg'))).toHaveText('Ошибка')
 
     // Failed row exposes a retry action; the duplicate row does not.
-    await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Повторить' })).toHaveCount(1)
   })
 
   test('completing a batch polls progress until a final status', async ({ page }) => {
@@ -192,15 +192,15 @@ test.describe('batch upload', () => {
     })
 
     await gotoReady(page, '/uploader')
-    await page.getByRole('button', { name: 'Create Batch' }).click()
-    await expect(page.getByText('Batch #42')).toBeVisible()
+    await page.getByRole('button', { name: 'Создать партию' }).click()
+    await expect(page.getByText('Партия #42')).toBeVisible()
 
     await page.locator('input[type="file"]').setInputFiles([{ name: 'ok.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG }])
-    await expect(page.getByText('Uploaded, queued for processing')).toBeVisible()
+    await expect(page.getByText('Загружен, ждёт обработки')).toBeVisible()
 
-    await page.getByRole('button', { name: /Mark upload finished/ }).click()
+    await page.getByRole('button', { name: /Завершить загрузку/ }).click()
     await expect(page.getByTestId('batch-progress')).toBeVisible()
-    await expect(page.getByText('Status: completed', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Статус: Завершена', { exact: true })).toBeVisible({ timeout: 10000 })
   })
   test('shows every file moving from uploaded to processing to ready or failed, then stops polling', async ({ page }) => {
     await loginAsAdmin(page)
@@ -256,8 +256,8 @@ test.describe('batch upload', () => {
     })
 
     await gotoReady(page, '/uploader')
-    await page.getByRole('button', { name: 'Create Batch' }).click()
-    await expect(page.getByText('Batch #42')).toBeVisible()
+    await page.getByRole('button', { name: 'Создать партию' }).click()
+    await expect(page.getByText('Партия #42')).toBeVisible()
     await page.locator('input[type="file"]').setInputFiles([
       { name: 'ok.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
       { name: 'broken.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
@@ -267,32 +267,32 @@ test.describe('batch upload', () => {
     const broken = rowFor(page, 'broken.jpg')
 
     // Straight after the 201 the files are only "uploaded".
-    await expect(stateOf(ok)).toHaveText('uploaded')
-    await expect(stateOf(broken)).toHaveText('uploaded')
-    await expect(ok).toContainText('Uploaded, queued for processing')
+    await expect(stateOf(ok)).toHaveText('Загружен')
+    await expect(stateOf(broken)).toHaveText('Загружен')
+    await expect(ok).toContainText('Загружен, ждёт обработки')
 
     // First poll: the images are in the AI queue / being analysed.
-    await expect(stateOf(ok)).toHaveText('processing', { timeout: 10_000 })
-    await expect(stateOf(broken)).toHaveText('processing')
-    await expect(ok).toContainText('Waiting for AI analysis')
-    await expect(broken).toContainText('AI analysis in progress')
-    await expect(page.getByTestId('processing-summary')).toContainText('2 in progress')
+    await expect(stateOf(ok)).toHaveText('Обработка', { timeout: 10_000 })
+    await expect(stateOf(broken)).toHaveText('Обработка')
+    await expect(ok).toContainText('Ждёт ИИ-анализа')
+    await expect(broken).toContainText('Идёт ИИ-анализ')
+    await expect(page.getByTestId('processing-summary')).toContainText('в работе 2')
     expect(imageRequests[0]!.searchParams.get('batch_id')).toBe('42')
     expect(imageRequests[0]!.searchParams.get('per_page')).toBe('100')
 
     // Second poll: one image is ready, the other failed.
     releaseOutcome()
-    await expect(stateOf(ok)).toHaveText('ready', { timeout: 10_000 })
-    await expect(stateOf(broken)).toHaveText('failed')
-    await expect(ok).toContainText('Analysis complete')
-    await expect(ok.getByRole('link', { name: 'View image' })).toHaveAttribute('href', '/gallery/300')
-    await expect(broken).toContainText('Processing failed')
-    await expect(broken.getByRole('link', { name: 'See error details' })).toHaveAttribute('href', '/gallery/301')
-    await expect(page.getByTestId('processing-summary')).toContainText('0 in progress')
-    await expect(page.getByTestId('processing-summary')).toContainText('1 ready')
-    await expect(page.getByTestId('processing-summary')).toContainText('1 failed')
+    await expect(stateOf(ok)).toHaveText('Готов', { timeout: 10_000 })
+    await expect(stateOf(broken)).toHaveText('Ошибка')
+    await expect(ok).toContainText('Анализ завершён')
+    await expect(ok.getByRole('link', { name: 'Открыть изображение' })).toHaveAttribute('href', '/gallery/300')
+    await expect(broken).toContainText('Ошибка обработки')
+    await expect(broken.getByRole('link', { name: 'Подробнее об ошибке' })).toHaveAttribute('href', '/gallery/301')
+    await expect(page.getByTestId('processing-summary')).toContainText('в работе 0')
+    await expect(page.getByTestId('processing-summary')).toContainText('готово 1')
+    await expect(page.getByTestId('processing-summary')).toContainText('с ошибками 1')
     // The upload line of the row is still there next to the new state.
-    await expect(ok).toContainText('Uploaded, queued for processing')
+    await expect(ok).toContainText('Загружен, ждёт обработки')
 
     // Everything is final: the batch keeps being polled (it is not complete yet) but the image list is not.
     const imagePollsWhenSettled = imageRequests.length
@@ -300,8 +300,8 @@ test.describe('batch upload', () => {
     await expect.poll(() => batchPolls, { timeout: 10_000 }).toBeGreaterThan(batchPollsWhenSettled)
     expect(imageRequests).toHaveLength(imagePollsWhenSettled)
 
-    await page.getByRole('button', { name: /Mark upload finished/ }).click()
-    await expect(page.getByText('Status: completed_with_errors', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /Завершить загрузку/ }).click()
+    await expect(page.getByText('Статус: Завершена с ошибками', { exact: true })).toBeVisible()
     await expect(page.getByTestId('batch-progress')).toBeVisible()
   })
 
@@ -321,12 +321,12 @@ test.describe('batch upload', () => {
     )
 
     await gotoReady(page, '/uploader')
-    await page.getByRole('button', { name: 'Create Batch' }).click()
+    await page.getByRole('button', { name: 'Создать партию' }).click()
     await page.locator('input[type="file"]').setInputFiles([{ name: 'slow.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG }])
 
     const row = rowFor(page, 'slow.jpg')
-    await expect(stateOf(row)).toHaveText('processing', { timeout: 10_000 })
-    await expect(stateOf(row)).toHaveText('ready', { timeout: 10_000 })
+    await expect(stateOf(row)).toHaveText('Обработка', { timeout: 10_000 })
+    await expect(stateOf(row)).toHaveText('Готов', { timeout: 10_000 })
     expect(imageRequests).toHaveLength(2)
   })
 })

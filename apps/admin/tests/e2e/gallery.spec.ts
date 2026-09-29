@@ -3,7 +3,7 @@ import { gotoReady, imageSummary, json, loginAsAdmin, pageOf } from './helpers'
 
 // The date filters and the created date on the cards follow the admin's local calendar; pin the zone
 // (UTC+3, no DST) and the locale so the expectations do not depend on the machine running the tests.
-test.use({ timezoneId: 'Europe/Moscow', locale: 'en-US' })
+test.use({ timezoneId: 'Europe/Moscow', locale: 'ru-RU' })
 
 function tag(id: number, name: string, extra: Record<string, unknown> = {}) {
   return {
@@ -133,17 +133,17 @@ test.describe('gallery', () => {
 
     const helmet = cards.filter({ hasText: 'IMG_0001.jpg' })
     await expect(helmet.getByRole('img', { name: 'IMG_0001.jpg' })).toHaveAttribute('src', '/api/media/images/152/thumbnail')
-    await expect(helmet.getByText('ready', { exact: true })).toBeVisible()
+    await expect(helmet.getByText('Готово', { exact: true })).toBeVisible()
     await expect(helmet.getByTestId('gallery-card-tags')).toContainText('Каска')
     await expect(helmet.getByTestId('gallery-card-tags')).toContainText('Инженер')
     // 22:30 UTC on 25 Sep is the 26th on the admin's calendar.
-    await expect(helmet.getByTestId('gallery-card-created')).toHaveText('Sep 26, 2026')
+    await expect(helmet.getByTestId('gallery-card-created')).toHaveText('26 сент. 2026 г.')
     await expect(helmet.getByTestId('gallery-card-created')).toHaveAttribute('datetime', '2026-09-25T22:30:00Z')
 
     const queued = cards.filter({ hasText: 'IMG_0002.jpg' })
-    await expect(queued.getByText('queued', { exact: true })).toBeVisible()
-    await expect(queued.getByText('No tags')).toBeVisible()
-    await expect(queued.getByTestId('gallery-card-created')).toHaveText('Sep 24, 2026')
+    await expect(queued.getByText('В очереди', { exact: true })).toBeVisible()
+    await expect(queued.getByText('Нет тегов')).toBeVisible()
+    await expect(queued.getByTestId('gallery-card-created')).toHaveText('24 сент. 2026 г.')
     await expect(queued.getByRole('img')).toHaveCount(0)
   })
 
@@ -183,7 +183,7 @@ test.describe('gallery', () => {
     expect(imageRequests[0]!.searchParams.has('tag_ids')).toBe(false)
 
     await openTagFilter(page)
-    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.getByRole('option', { name: 'Каска (Объект)' }).click()
 
     await expect(page.getByTestId('gallery-card')).toHaveCount(1)
     await expect(page.getByTestId('gallery-card')).toContainText('IMG_0001.jpg')
@@ -192,8 +192,8 @@ test.describe('gallery', () => {
     expect(lastOf(imageRequests).searchParams.has('tag_ids')).toBe(false)
 
     // A second tag narrows the result further (AND): no photo has both.
-    await page.getByRole('option', { name: 'Буровая (object)' }).click()
-    await expect(page.getByText('No images match these filters.')).toBeVisible()
+    await page.getByRole('option', { name: 'Буровая (Объект)' }).click()
+    await expect(page.getByText('Нет изображений, подходящих под фильтры.')).toBeVisible()
     expect(lastOf(imageRequests).searchParams.getAll('tag_ids[]')).toEqual(['14', '87'])
     for (const id of lastOf(imageRequests).searchParams.getAll('tag_ids[]')) {
       expect(id).toMatch(/^[1-9]\d*$/)
@@ -214,16 +214,16 @@ test.describe('gallery', () => {
     expect(tagRequests[0]!.searchParams.has('q')).toBe(false)
 
     await openTagFilter(page)
-    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.getByRole('option', { name: 'Каска (Объект)' }).click()
     await expect.poll(() => lastOf(imageRequests).searchParams.getAll('tag_ids[]')).toEqual(['14'])
 
     // Typing asks the server; a match that the label alone would not show is still offered (ignore-filter).
-    await page.getByPlaceholder('Search...').fill('вышк')
+    await page.getByPlaceholder('Поиск...').fill('вышк')
     await expect.poll(() => lastOf(tagRequests).searchParams.get('q')).toBe('вышк')
-    await expect(page.getByRole('option', { name: 'Буровая (object)' })).toHaveCount(0)
+    await expect(page.getByRole('option', { name: 'Буровая (Объект)' })).toHaveCount(0)
 
     // The selected tag stays in the menu, checked, although the search result no longer contains it.
-    await expect(page.getByRole('option', { name: 'Каска (object)' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Каска (Объект)' })).toBeVisible()
     await expect(tagFilter(page)).toContainText('Каска')
   })
 
@@ -233,7 +233,7 @@ test.describe('gallery', () => {
 
     await gotoReady(page, '/gallery')
     await openTagFilter(page)
-    await page.getByRole('option', { name: 'Старый логотип (object, archived)' }).click()
+    await page.getByRole('option', { name: 'Старый логотип (Объект, в архиве)' }).click()
 
     await expect.poll(() => lastOf(imageRequests).searchParams.getAll('tag_ids[]')).toEqual(['31'])
   })
@@ -247,18 +247,18 @@ test.describe('gallery', () => {
     expect(imageRequests[0]!.searchParams.has('created_from')).toBe(false)
     expect(imageRequests[0]!.searchParams.has('created_to')).toBe(false)
 
-    await page.getByLabel('Created from').fill('2026-09-24')
+    await page.getByLabel('Создано с').fill('2026-09-24')
     // 24 Sep 00:00 in Moscow (UTC+3) is 23 Sep 21:00 UTC; nothing else is sent for the end yet.
     await expect.poll(() => lastOf(imageRequests).searchParams.get('created_from')).toBe('2026-09-23T21:00:00Z')
     expect(lastOf(imageRequests).searchParams.has('created_to')).toBe(false)
 
-    await page.getByLabel('Created to').fill('2026-09-25')
+    await page.getByLabel('Создано по').fill('2026-09-25')
     // The 25th is included: created_to (exclusive) is the start of the 26th, i.e. 25 Sep 21:00 UTC.
     await expect.poll(() => lastOf(imageRequests).searchParams.get('created_to')).toBe('2026-09-25T21:00:00Z')
     expect(lastOf(imageRequests).searchParams.get('created_from')).toBe('2026-09-23T21:00:00Z')
 
     // Emptying a field lifts that bound only.
-    await page.getByLabel('Created from').fill('')
+    await page.getByLabel('Создано с').fill('')
     await expect.poll(() => lastOf(imageRequests).searchParams.has('created_from')).toBe(false)
     expect(lastOf(imageRequests).searchParams.get('created_to')).toBe('2026-09-25T21:00:00Z')
   })
@@ -269,16 +269,16 @@ test.describe('gallery', () => {
 
     await gotoReady(page, '/gallery')
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
-    await expect(page.getByRole('button', { name: 'Reset filters' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0)
 
-    await page.getByRole('combobox', { name: 'Status' }).click()
-    await page.getByRole('option', { name: 'Ready' }).click()
-    await page.getByRole('combobox', { name: 'Batch' }).click()
+    await page.getByRole('combobox', { name: 'Статус' }).click()
+    await page.getByRole('option', { name: 'Готово' }).click()
+    await page.getByRole('combobox', { name: 'Партия' }).click()
     await page.getByRole('option', { name: 'Site visit' }).click()
     await openTagFilter(page)
-    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.getByRole('option', { name: 'Каска (Объект)' }).click()
     await page.keyboard.press('Escape')
-    await page.getByLabel('Created from').fill('2026-09-24')
+    await page.getByLabel('Создано с').fill('2026-09-24')
 
     await expect.poll(() => Object.fromEntries(lastOf(imageRequests).searchParams)).toMatchObject({
       status: 'ready',
@@ -289,14 +289,14 @@ test.describe('gallery', () => {
       per_page: '24',
     })
 
-    await page.getByRole('button', { name: 'Reset filters' }).click()
+    await page.getByRole('button', { name: 'Сбросить фильтры' }).click()
     await expect.poll(() => Object.fromEntries(lastOf(imageRequests).searchParams)).toEqual({
       page: '1',
       per_page: '24',
     })
-    await expect(page.getByRole('button', { name: 'Reset filters' })).toHaveCount(0)
-    await expect(page.getByLabel('Created from')).toHaveValue('')
-    await expect(page.getByRole('combobox', { name: 'Status' })).toContainText('All')
+    await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0)
+    await expect(page.getByLabel('Создано с')).toHaveValue('')
+    await expect(page.getByRole('combobox', { name: 'Статус' })).toContainText('Все')
     await expect(tagFilter(page)).not.toContainText('Каска')
   })
 
@@ -324,10 +324,10 @@ test.describe('gallery', () => {
     await gotoReady(page, '/gallery')
     await expect(page.getByTestId('gallery-card')).toHaveCount(1)
 
-    await page.getByRole('combobox', { name: 'Status' }).click()
-    await page.getByRole('option', { name: 'Failed' }).click()
-    await page.getByRole('combobox', { name: 'Status' }).click()
-    await page.getByRole('option', { name: 'Ready' }).click()
+    await page.getByRole('combobox', { name: 'Статус' }).click()
+    await page.getByRole('option', { name: 'Ошибка' }).click()
+    await page.getByRole('combobox', { name: 'Статус' }).click()
+    await page.getByRole('option', { name: 'Готово' }).click()
     await expect(page.getByText('LATEST.jpg')).toBeVisible()
 
     releaseSlow()
@@ -351,10 +351,10 @@ test.describe('gallery', () => {
     })
 
     await gotoReady(page, '/gallery')
-    const submit = page.getByRole('button', { name: 'AI search', exact: true })
+    const submit = page.getByRole('button', { name: 'ИИ-поиск', exact: true })
     await expect(submit).toBeDisabled()
 
-    await page.getByRole('textbox', { name: 'AI search' }).fill('  мужчина в каске на промышленном объекте  ')
+    await page.getByRole('textbox', { name: 'ИИ-поиск' }).fill('  мужчина в каске на промышленном объекте  ')
     await expect(submit).toBeEnabled()
     await submit.click()
 
@@ -367,8 +367,8 @@ test.describe('gallery', () => {
     // The search page shows the prefilled semantic form and the results of the query.
     await expect(page.getByTestId('search-results')).toBeVisible()
     await expect(page.getByTestId('search-results').getByText('IMG_0001.jpg')).toBeVisible()
-    await expect(page.getByRole('combobox', { name: 'Search Mode' })).toContainText('Semantic query')
-    await expect(page.getByPlaceholder(/workers in hard hats/)).toHaveValue('мужчина в каске на промышленном объекте')
+    await expect(page.getByRole('combobox', { name: 'Режим поиска' })).toContainText('По смыслу запроса')
+    await expect(page.getByPlaceholder(/рабочие в касках/)).toHaveValue('мужчина в каске на промышленном объекте')
     expect(searchRequests).toEqual([
       { mode: 'semantic', query: 'мужчина в каске на промышленном объекте', page: 1, per_page: 24, debug: false },
     ])
@@ -382,11 +382,11 @@ test.describe('gallery', () => {
     )
 
     await gotoReady(page, '/gallery')
-    await page.getByRole('textbox', { name: 'AI search' }).fill('drilling rig at night')
-    await page.getByRole('textbox', { name: 'AI search' }).press('Enter')
+    await page.getByRole('textbox', { name: 'ИИ-поиск' }).fill('drilling rig at night')
+    await page.getByRole('textbox', { name: 'ИИ-поиск' }).press('Enter')
 
     await page.waitForURL('**/search?**')
     expect(new URL(page.url()).searchParams.get('q')).toBe('drilling rig at night')
-    await expect(page.getByText('No results found.')).toBeVisible()
+    await expect(page.getByText('Ничего не найдено.')).toBeVisible()
   })
 })

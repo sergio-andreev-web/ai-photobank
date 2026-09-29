@@ -24,7 +24,8 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'AI Photobank Admin',
+      title: 'Фотобанк — админка',
+      htmlAttrs: { lang: 'ru' },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

@@ -1,13 +1,13 @@
 <template>
   <div class="space-y-6">
     <NuxtLink to="/gallery" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700">
-      <UIcon name="i-heroicons-arrow-left" /> Back to Gallery
+      <UIcon name="i-heroicons-arrow-left" /> Назад в галерею
     </NuxtLink>
 
-    <ErrorAlert v-if="loadError" title="Failed to load image" :message="loadError" @dismiss="loadError = null" />
+    <ErrorAlert v-if="loadError" title="Не удалось загрузить изображение" :message="loadError" @dismiss="loadError = null" />
     <ErrorAlert v-if="actionError" :message="actionError" @dismiss="actionError = null" />
 
-    <div v-if="loading && !image" class="text-center text-gray-600">Loading image details...</div>
+    <div v-if="loading && !image" class="text-center text-gray-600">Загрузка…</div>
 
     <div v-else-if="image" class="surface-card p-6 md:p-8">
       <div class="grid gap-8 lg:grid-cols-2">
@@ -23,7 +23,7 @@
             <div v-else class="text-6xl text-slate-300"><UIcon name="i-heroicons-photo" /></div>
           </div>
           <div>
-            <p class="subtle-label">FILENAME</p>
+            <p class="subtle-label">ИМЯ ФАЙЛА</p>
             <div v-if="!renaming" class="mt-1 flex items-start gap-2">
               <p class="flex-1 break-all text-xl font-semibold text-gray-900" data-testid="image-name">{{ image.original_name }}</p>
               <UButton
@@ -31,43 +31,42 @@
                 color="neutral"
                 variant="ghost"
                 icon="i-heroicons-pencil-square"
-                aria-label="Rename image"
-                title="Rename image"
+                aria-label="Переименовать"
+                title="Переименовать"
                 @click="startRename"
               />
             </div>
             <form v-else class="mt-2 space-y-3" novalidate @submit.prevent="handleRename">
-              <UFormField label="Filename" name="original_name" :error="renameError ?? draftError ?? undefined">
+              <UFormField label="Имя файла" name="original_name" :error="renameError ?? draftError ?? undefined">
                 <UInput v-model="nameDraft" class="w-full" maxlength="1024" autofocus />
               </UFormField>
               <div class="flex gap-2">
-                <UButton type="submit" :loading="actionLoading === 'rename'" :disabled="!canSaveName">Save name</UButton>
-                <UButton variant="ghost" color="neutral" @click="cancelRename">Cancel</UButton>
+                <UButton type="submit" :loading="actionLoading === 'rename'" :disabled="!canSaveName">Сохранить</UButton>
+                <UButton variant="ghost" color="neutral" @click="cancelRename">Отмена</UButton>
               </div>
             </form>
           </div>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p class="text-gray-600">Status</p>
-              <UBadge :color="statusColor(image.status)" class="mt-1">{{ image.status }}</UBadge>
+              <p class="text-gray-600">Статус</p>
+              <UBadge :color="statusColor(image.status)" class="mt-1">{{ labelOf(IMAGE_STATUS_LABELS, image.status) }}</UBadge>
             </div>
             <div>
-              <p class="text-gray-600">Dimensions</p>
+              <p class="text-gray-600">Размеры</p>
               <p class="text-gray-900">{{ image.width && image.height ? `${image.width} × ${image.height}` : '—' }}</p>
             </div>
             <div>
-              <p class="text-gray-600">Size</p>
+              <p class="text-gray-600">Объём</p>
               <p class="text-gray-900">{{ formatSize(image.file_size) }}</p>
             </div>
             <div>
-              <p class="text-gray-600">Created</p>
+              <p class="text-gray-600">Создано</p>
               <p class="text-gray-900">{{ formatDate(image.created_at) }}</p>
             </div>
           </div>
 
           <div v-if="image.status === 'failed'" class="rounded-md bg-red-50 p-3 text-sm text-red-700">
-            <p class="font-medium">{{ image.error_code }}</p>
-            <p v-if="image.error_message">{{ image.error_message }}</p>
+            <p class="font-medium">{{ imageErrorText }}</p>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -77,7 +76,7 @@
               :loading="actionLoading === 'retry'"
               @click="handleRetry"
             >
-              Retry Processing
+              Повторить обработку
             </UButton>
             <UButton
               v-if="image.status === 'ready' || image.status === 'failed'"
@@ -85,7 +84,7 @@
               :loading="actionLoading === 'reprocess'"
               @click="handleReprocess"
             >
-              Reprocess
+              Обработать заново
             </UButton>
             <UButton
               v-if="!confirmingDelete"
@@ -94,23 +93,23 @@
               icon="i-heroicons-trash"
               @click="() => { confirmingDelete = true }"
             >
-              Delete image
+              Удалить изображение
             </UButton>
           </div>
 
           <section
             v-if="confirmingDelete"
             class="rounded-xl border border-red-200 bg-red-50 p-4"
-            aria-label="Delete confirmation"
+            aria-label="Подтверждение удаления"
           >
-            <h3 class="font-semibold text-red-900">Delete this image?</h3>
+            <h3 class="font-semibold text-red-900">Удалить изображение?</h3>
             <p class="mt-1 text-sm text-red-700">
-              It disappears from the gallery, search and counters. The stored file and its analysis history are kept.
+              Оно исчезнет из галереи, поиска и счётчиков. Сам файл и история анализа сохранятся.
             </p>
             <div class="mt-3 flex gap-2">
-              <UButton color="error" :loading="actionLoading === 'delete'" @click="handleDelete">Confirm delete</UButton>
+              <UButton color="error" :loading="actionLoading === 'delete'" @click="handleDelete">Удалить</UButton>
               <UButton variant="ghost" color="neutral" :disabled="actionLoading === 'delete'" @click="() => { confirmingDelete = false }">
-                Cancel
+                Отмена
               </UButton>
             </div>
           </section>
@@ -119,18 +118,18 @@
         <!-- Image Details -->
         <div class="space-y-6">
           <div v-if="image.caption || image.ocr_text" class="rounded-xl bg-slate-50 p-5">
-            <h3 class="section-title">Metadata</h3>
+            <h3 class="section-title">Описание</h3>
             <div class="mt-2 space-y-2 text-sm text-gray-600">
-              <p v-if="image.caption">Caption: {{ image.caption }}</p>
-              <p v-if="image.ocr_text">OCR text: {{ image.ocr_text }}</p>
+              <p v-if="image.caption">Подпись: {{ image.caption }}</p>
+              <p v-if="image.ocr_text">Текст на изображении: {{ image.ocr_text }}</p>
             </div>
           </div>
 
           <!-- Image Tags -->
           <div class="rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between">
-              <h3 class="section-title">Tags</h3>
-              <UButton size="sm" variant="soft" @click="() => { showAddTag = !showAddTag }"> Add Tag </UButton>
+              <h3 class="section-title">Теги</h3>
+              <UButton size="sm" variant="soft" @click="() => { showAddTag = !showAddTag }"> Добавить тег </UButton>
             </div>
 
             <div v-if="showAddTag" class="mt-2 flex gap-2">
@@ -138,12 +137,12 @@
                 v-model="tagToAdd"
                 :items="tagOptions"
                 value-key="value"
-                placeholder="Select a tag"
+                placeholder="Выберите тег"
                 class="flex-1"
                 @update:search-term="onTagSearch"
               />
               <UButton :disabled="tagToAdd == null" :loading="actionLoading === 'add-tag'" @click="handleAddTag">
-                Add
+                Добавить
               </UButton>
             </div>
 
@@ -156,23 +155,23 @@
                 class="flex items-center gap-1"
               >
                 {{ imageTag.tag.name }}
-                <span class="text-xs">({{ imageTag.source }})</span>
+                <span class="text-xs">({{ labelOf(TAG_SOURCE_LABELS, imageTag.source) }})</span>
                 <button
                   type="button"
                   class="ml-1 text-xs opacity-70 hover:opacity-100"
-                  :aria-label="`Remove ${imageTag.tag.name}`"
+                  :aria-label="`Убрать тег ${imageTag.tag.name}`"
                   @click="handleRemoveTag(imageTag.tag.id)"
                 >
                   ✕
                 </button>
               </UBadge>
             </div>
-            <p v-else class="mt-2 text-sm text-gray-600">No tags assigned yet.</p>
+            <p v-else class="mt-2 text-sm text-gray-600">Тегов пока нет.</p>
           </div>
 
           <!-- AI concepts -->
           <div v-if="image.latest_analysis?.concepts?.length">
-            <h3 class="section-title">AI Concepts</h3>
+            <h3 class="section-title">Понятия, найденные ИИ</h3>
             <div class="mt-2 flex flex-wrap gap-2">
               <UBadge v-for="concept in image.latest_analysis.concepts" :key="`${concept.type}:${concept.label}`" variant="subtle">
                 {{ concept.label }} ({{ Math.round(concept.confidence * 100) }}%)
@@ -182,13 +181,13 @@
 
           <!-- Processing Tasks -->
           <div v-if="image.processing_tasks.length">
-            <h3 class="section-title">Processing Tasks</h3>
+            <h3 class="section-title">Этапы обработки</h3>
             <div class="mt-2 space-y-2">
               <div v-for="task in image.processing_tasks" :key="task.type" class="text-sm">
-                <p class="font-medium text-gray-900">{{ task.type }}</p>
+                <p class="font-medium text-gray-900">{{ labelOf(TASK_TYPE_LABELS, task.type) }}</p>
                 <p class="text-xs text-gray-600">
-                  Status: {{ task.status }} ({{ task.attempts }}/{{ task.max_attempts }} attempts)
-                  <span v-if="task.error_code" class="text-red-600">({{ task.error_code }})</span>
+                  Статус: {{ labelOf(TASK_STATUS_LABELS, task.status) }} (попыток: {{ task.attempts }} из {{ task.max_attempts }})
+                  <span v-if="task.error_code" class="text-red-600">— {{ processingErrorText(task.error_code) }}</span>
                 </p>
               </div>
             </div>
@@ -206,6 +205,15 @@ definePageMeta({
 
 import type { ImageDetail, ImageStatus, Tag } from '~/types/api'
 import { toApiProblem } from '~/utils/errorHandler'
+import {
+  IMAGE_STATUS_LABELS,
+  labelOf,
+  processingErrorText,
+  TAG_SOURCE_LABELS,
+  TAG_TYPE_LABELS,
+  TASK_STATUS_LABELS,
+  TASK_TYPE_LABELS,
+} from '~/utils/labels'
 
 // ImagePatchRequest.original_name in contracts/public-api.openapi.yaml.
 const NAME_MAX_LENGTH = 1024
@@ -240,21 +248,24 @@ function statusColor(status: ImageStatus) {
   return colors[status]
 }
 
+// A failed image carries a processing error code; the stored message is not shown (Russian-only UI).
+const imageErrorText = computed(() => processingErrorText(image.value?.error_code))
+
 const canSaveName = computed(() => {
   const name = nameDraft.value.trim()
   return name.length > 0 && name !== image.value?.original_name
 })
 // The Save button stays disabled for a blank draft (and disabled buttons don't submit on Enter),
 // so say why right in the field.
-const draftError = computed(() => (nameDraft.value.trim() ? null : 'Enter a file name.'))
+const draftError = computed(() => (nameDraft.value.trim() ? null : 'Введите имя файла.'))
 
 function formatDate(date: string): string {
-  return new Date(date).toLocaleString()
+  return new Date(date).toLocaleString('ru-RU')
 }
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} МБ`
 }
 
 async function loadImage() {
@@ -274,7 +285,7 @@ async function onTagSearch(query: string) {
     const data = await tagsApi.listTags({ q: query || undefined, per_page: 20, status: 'active' })
     tagOptions.value = data.data
       .filter((tag: Tag) => !image.value?.image_tags.some((it) => it.tag.id === tag.id))
-      .map((tag: Tag) => ({ value: tag.id, label: `${tag.name} (${tag.type})` }))
+      .map((tag: Tag) => ({ value: tag.id, label: `${tag.name} (${labelOf(TAG_TYPE_LABELS, tag.type)})` }))
   } catch (e) {
     // Search box degrades gracefully to an empty list on failure.
   }
@@ -353,7 +364,7 @@ async function handleRename() {
   const name = nameDraft.value.trim()
   if (!name) return
   if (name.length > NAME_MAX_LENGTH) {
-    renameError.value = `Use at most ${NAME_MAX_LENGTH} characters.`
+    renameError.value = `Не больше ${NAME_MAX_LENGTH} символов.`
     return
   }
   if (name === image.value.original_name) return

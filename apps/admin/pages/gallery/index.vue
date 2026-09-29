@@ -2,11 +2,11 @@
   <div class="space-y-6">
     <div class="page-heading flex flex-wrap items-end justify-between gap-4">
       <div>
-        <span class="subtle-label">IMAGE LIBRARY</span>
-        <h1>Gallery</h1>
-        <p>Browse and manage your images.</p>
+        <span class="subtle-label">БИБЛИОТЕКА ИЗОБРАЖЕНИЙ</span>
+        <h1>Галерея</h1>
+        <p>Просмотр и управление изображениями.</p>
       </div>
-      <UButton to="/uploader" icon="i-heroicons-arrow-up-tray" size="lg">Upload Images</UButton>
+      <UButton to="/uploader" icon="i-heroicons-arrow-up-tray" size="lg">Загрузить изображения</UButton>
     </div>
 
     <!-- AI search + filters -->
@@ -16,18 +16,18 @@
         <UInput
           v-model="aiQuery"
           icon="i-heroicons-sparkles"
-          placeholder="AI search: describe what you are looking for"
-          aria-label="AI search"
+          placeholder="ИИ-поиск: опишите, что ищете"
+          aria-label="ИИ-поиск"
           maxlength="1000"
           class="min-w-[240px] flex-1"
         />
-        <UButton type="submit" :disabled="!aiQuery.trim()">AI search</UButton>
+        <UButton type="submit" :disabled="!aiQuery.trim()">ИИ-поиск</UButton>
       </form>
 
       <div class="flex flex-wrap gap-4">
         <UFormField
-          label="Tags"
-          help="An image must have all selected tags."
+          label="Теги"
+          help="У изображения должны быть все выбранные теги."
           class="min-w-[240px] flex-[2]"
           data-testid="tag-filter"
         >
@@ -37,32 +37,32 @@
             value-key="value"
             multiple
             ignore-filter
-            placeholder="Any tag"
+            placeholder="Любой тег"
             class="w-full"
             @update:search-term="onTagSearch"
           />
         </UFormField>
 
-        <UFormField label="Status" class="min-w-[160px] flex-1">
+        <UFormField label="Статус" class="min-w-[160px] flex-1">
           <USelect v-model="filters.status" :items="statusOptions" class="w-full" />
         </UFormField>
 
-        <UFormField label="Batch" class="min-w-[160px] flex-1">
+        <UFormField label="Партия" class="min-w-[160px] flex-1">
           <USelect v-model="filters.batchId" :items="batchOptions" class="w-full" />
         </UFormField>
 
-        <UFormField label="Created from" class="min-w-[160px] flex-1">
+        <UFormField label="Создано с" class="min-w-[160px] flex-1">
           <UInput v-model="filters.dateFrom" type="date" :max="filters.dateTo || undefined" class="w-full" />
         </UFormField>
 
-        <UFormField label="Created to" class="min-w-[160px] flex-1">
+        <UFormField label="Создано по" class="min-w-[160px] flex-1">
           <UInput v-model="filters.dateTo" type="date" :min="filters.dateFrom || undefined" class="w-full" />
         </UFormField>
       </div>
 
       <div v-if="hasActiveFilters">
         <UButton variant="ghost" color="neutral" icon="i-heroicons-x-mark" size="sm" @click="resetFilters">
-          Reset filters
+          Сбросить фильтры
         </UButton>
       </div>
     </div>
@@ -70,13 +70,13 @@
     <ErrorAlert v-if="loadError" :message="loadError" @dismiss="loadError = null" />
 
     <!-- Image Grid -->
-    <div v-if="loading" class="text-center text-gray-600">Loading images...</div>
+    <div v-if="loading" class="text-center text-gray-600">Загрузка изображений…</div>
 
     <div v-else-if="images.length === 0" class="surface-card p-12 text-center">
-      <p v-if="hasActiveFilters" class="text-gray-600">No images match these filters.</p>
+      <p v-if="hasActiveFilters" class="text-gray-600">Нет изображений, подходящих под фильтры.</p>
       <template v-else>
-        <p class="text-gray-600">No images found. Start by uploading a batch.</p>
-        <UButton to="/uploader" class="mt-4"> Create First Batch </UButton>
+        <p class="text-gray-600">Изображений пока нет. Начните с загрузки партии.</p>
+        <UButton to="/uploader" class="mt-4"> Создать первую партию </UButton>
       </template>
     </div>
 
@@ -100,7 +100,7 @@
         <div class="space-y-2 p-4">
           <p class="truncate text-sm font-semibold text-gray-900">{{ image.original_name }}</p>
           <div class="flex items-center justify-between gap-2">
-            <UBadge :color="statusColor(image.status)">{{ image.status }}</UBadge>
+            <UBadge :color="statusColor(image.status)">{{ labelOf(IMAGE_STATUS_LABELS, image.status) }}</UBadge>
             <time
               class="text-xs text-gray-500"
               :datetime="image.created_at"
@@ -123,17 +123,17 @@
             </UBadge>
             <span v-if="hiddenTagCount(image) > 0" class="text-xs text-gray-500">+{{ hiddenTagCount(image) }}</span>
           </div>
-          <p v-else class="text-xs text-gray-400">No tags</p>
+          <p v-else class="text-xs text-gray-400">Нет тегов</p>
         </div>
       </NuxtLink>
     </div>
 
     <!-- Pagination -->
     <div v-if="pagination && pagination.last_page > 1" class="flex justify-center gap-2">
-      <UButton v-if="pagination.page > 1" variant="ghost" @click="loadImages(pagination.page - 1)"> Previous </UButton>
-      <span class="flex items-center text-sm text-gray-600"> Page {{ pagination.page }} of {{ pagination.last_page }} </span>
+      <UButton v-if="pagination.page > 1" variant="ghost" @click="loadImages(pagination.page - 1)"> Назад </UButton>
+      <span class="flex items-center text-sm text-gray-600"> Страница {{ pagination.page }} из {{ pagination.last_page }} </span>
       <UButton v-if="pagination.page < pagination.last_page" variant="ghost" @click="loadImages(pagination.page + 1)">
-        Next
+        Вперёд
       </UButton>
     </div>
   </div>
@@ -146,6 +146,7 @@ definePageMeta({
 
 import type { Batch, ImageStatus, ImageSummary, PaginationMeta, Tag } from '~/types/api'
 import { createdFromParam, createdToParam } from '~/utils/dateRange'
+import { IMAGE_STATUS_LABELS, labelOf, TAG_TYPE_LABELS } from '~/utils/labels'
 import { semanticSearchLocation } from '~/utils/searchRoute'
 
 // Nuxt UI v3 reserves an empty string `value` on a SelectItem to mean "clear
@@ -183,17 +184,16 @@ const filters = reactive<{
 })
 
 const statusOptions: { label: string; value: ImageStatus | typeof ALL }[] = [
-  { label: 'All', value: ALL },
-  { label: 'Uploaded', value: 'uploaded' },
-  { label: 'Queued', value: 'queued' },
-  { label: 'Processing', value: 'processing' },
-  { label: 'Ready', value: 'ready' },
-  { label: 'Failed', value: 'failed' },
+  { label: 'Все', value: ALL },
+  ...(['uploaded', 'queued', 'processing', 'ready', 'failed'] as const).map((value) => ({
+    label: IMAGE_STATUS_LABELS[value],
+    value,
+  })),
 ]
 
 const batchOptions = computed(() => [
-  { label: 'All batches', value: ALL },
-  ...batches.value.map((b) => ({ label: b.name || `Batch #${b.id}`, value: b.id })),
+  { label: 'Все партии', value: ALL },
+  ...batches.value.map((b) => ({ label: b.name || `Партия #${b.id}`, value: b.id })),
 ])
 
 // Tags are looked up on the server (name and aliases), so the list only ever holds the latest search
@@ -203,7 +203,7 @@ const tagResults = ref<TagOption[]>([])
 const knownTags = new Map<number, TagOption>()
 
 const tagOptions = computed<TagOption[]>(() => {
-  const selected = filters.tagIds.map((id) => knownTags.get(id) ?? { value: id, label: `Tag #${id}` })
+  const selected = filters.tagIds.map((id) => knownTags.get(id) ?? { value: id, label: `Тег #${id}` })
   return [...selected, ...tagResults.value.filter((option) => !filters.tagIds.includes(option.value))]
 })
 
@@ -235,7 +235,7 @@ function hiddenTagCount(image: ImageSummary) {
   return Math.max(0, image.tags.length - MAX_CARD_TAGS)
 }
 
-const createdFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+const createdFormat = new Intl.DateTimeFormat('ru-RU', { year: 'numeric', month: 'short', day: 'numeric' })
 
 function formatCreated(iso: string): string {
   const date = new Date(iso)
@@ -244,7 +244,7 @@ function formatCreated(iso: string): string {
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('ru-RU')
 }
 
 const imagesApi = useImages()
@@ -290,7 +290,8 @@ async function loadBatches() {
 
 function tagLabel(tag: Tag): string {
   // Archived tags stay filterable: their links to images are preserved (state-machines.md).
-  return `${tag.name} (${tag.status === 'archived' ? `${tag.type}, archived` : tag.type})`
+  const type = labelOf(TAG_TYPE_LABELS, tag.type)
+  return `${tag.name} (${tag.status === 'archived' ? `${type}, в архиве` : type})`
 }
 
 let tagSearchSeq = 0

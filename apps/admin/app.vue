@@ -1,5 +1,5 @@
 <template>
-  <UApp>
+  <UApp :locale="ru">
     <div :data-app-ready="hydrated">
       <NuxtLayout>
         <NuxtPage />
@@ -9,6 +9,7 @@
 </template>
 
 <script setup lang="ts">
+import { ru } from '@nuxt/ui/locale'
 import { useAuthStore } from './stores/auth'
 
 const auth = useAuthStore()

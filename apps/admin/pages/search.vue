@@ -1,20 +1,20 @@
 <template>
   <div class="space-y-6">
     <div class="page-heading">
-      <span class="subtle-label">FIND YOUR ASSETS</span>
-      <h1>Search Images</h1>
-      <p>Search by tags, semantic meaning, or both combined.</p>
+      <span class="subtle-label">ПОИСК ПО БИБЛИОТЕКЕ</span>
+      <h1>Поиск изображений</h1>
+      <p>Ищите по тегам, по смыслу запроса или сочетайте оба способа.</p>
     </div>
 
     <!-- Search Form -->
     <div class="surface-card p-6">
       <form class="max-w-2xl space-y-5" @submit.prevent="handleSearch()">
-        <UFormField label="Search Mode" name="mode">
+        <UFormField label="Режим поиска" name="mode">
           <USelect v-model="mode" :items="modeOptions" class="w-full" />
         </UFormField>
 
-        <UFormField v-if="mode !== 'tags'" label="Query" name="query">
-          <UInput v-model="query" placeholder="e.g., workers in hard hats near industrial equipment" class="w-full" />
+        <UFormField v-if="mode !== 'tags'" label="Запрос" name="query">
+          <UInput v-model="query" placeholder="Например: рабочие в касках возле промышленного оборудования" class="w-full" />
         </UFormField>
 
         <UFormField v-if="mode !== 'semantic'" :label="tagsLabel" name="tags">
@@ -23,15 +23,15 @@
             :items="tagOptions"
             value-key="value"
             multiple
-            placeholder="Select tags (all must match)"
+            placeholder="Выберите теги (нужны все)"
             class="w-full"
             @update:search-term="onTagSearch"
           />
         </UFormField>
 
         <div class="flex items-center gap-4">
-          <UButton type="submit" :loading="searching" :disabled="!canSearch"> Search </UButton>
-          <UCheckbox v-model="debug" label="Debug (show similarity score)" />
+          <UButton type="submit" :loading="searching" :disabled="!canSearch"> Найти </UButton>
+          <UCheckbox v-model="debug" label="Отладка (показать степень сходства)" />
         </div>
         <p v-if="!canSearch" class="text-xs text-gray-500">{{ validationHint }}</p>
       </form>
@@ -39,24 +39,24 @@
 
     <ErrorAlert
       v-if="searchError"
-      :title="searchErrorCode === 'AI_SERVICE_UNAVAILABLE' ? 'AI service unavailable' : 'Search failed'"
+      :title="searchErrorCode === 'AI_SERVICE_UNAVAILABLE' ? 'ИИ-сервис недоступен' : 'Поиск не удался'"
       :message="searchError"
       @dismiss="searchError = null"
     >
     </ErrorAlert>
     <div v-if="searchErrorCode === 'AI_SERVICE_UNAVAILABLE'" class="-mt-4">
-      <UButton size="sm" variant="soft" :loading="searching" @click="handleSearch()"> Retry search </UButton>
+      <UButton size="sm" variant="soft" :loading="searching" @click="handleSearch()"> Повторить поиск </UButton>
     </div>
 
     <!-- Results -->
-    <div v-if="searched && searching" class="text-center text-gray-600">Searching...</div>
+    <div v-if="searched && searching" class="text-center text-gray-600">Идёт поиск…</div>
 
     <div v-else-if="searched && !searchError && results.length === 0" class="surface-card p-12 text-center">
-      <p class="text-gray-600">No results found. Try a different query or search mode.</p>
+      <p class="text-gray-600">Ничего не найдено. Попробуйте другой запрос или режим поиска.</p>
     </div>
 
     <div v-else-if="results.length > 0" class="surface-card p-6">
-      <h2 class="mb-4 text-lg font-semibold text-gray-900">Results ({{ pagination?.total || 0 }})</h2>
+      <h2 class="mb-4 text-lg font-semibold text-gray-900">Результаты ({{ pagination?.total || 0 }})</h2>
 
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="search-results">
         <NuxtLink
@@ -77,7 +77,7 @@
           <div class="p-3">
             <p class="truncate text-sm font-medium text-gray-900">{{ result.original_name }}</p>
             <p v-if="debug && result.semantic_score != null" class="mt-1 text-xs text-gray-600">
-              Score: {{ result.semantic_score.toFixed(3) }}
+              Сходство: {{ result.semantic_score.toFixed(3) }}
             </p>
           </div>
         </NuxtLink>
@@ -85,10 +85,10 @@
 
       <!-- Pagination -->
       <div v-if="pagination && pagination.last_page > 1" class="mt-6 flex justify-center gap-2">
-        <UButton v-if="pagination.page > 1" variant="ghost" @click="handleSearch(pagination.page - 1)"> Previous </UButton>
-        <span class="flex items-center text-sm text-gray-600"> Page {{ pagination.page }} of {{ pagination.last_page }} </span>
+        <UButton v-if="pagination.page > 1" variant="ghost" @click="handleSearch(pagination.page - 1)"> Назад </UButton>
+        <span class="flex items-center text-sm text-gray-600"> Страница {{ pagination.page }} из {{ pagination.last_page }} </span>
         <UButton v-if="pagination.page < pagination.last_page" variant="ghost" @click="handleSearch(pagination.page + 1)">
-          Next
+          Вперёд
         </UButton>
       </div>
     </div>
@@ -101,6 +101,7 @@ definePageMeta({
 })
 
 import type { PaginationMeta, SearchMode, SearchRequest, SearchResultItem, Tag } from '~/types/api'
+import { labelOf, TAG_TYPE_LABELS } from '~/utils/labels'
 import { readSearchRouteQuery } from '~/utils/searchRoute'
 
 const route = useRoute()
@@ -121,12 +122,12 @@ const searchError = ref<string | null>(null)
 const searchErrorCode = ref<string | null>(null)
 
 const modeOptions: { label: string; value: SearchMode }[] = [
-  { label: 'Hybrid (tags + semantic)', value: 'hybrid' },
-  { label: 'Tags only', value: 'tags' },
-  { label: 'Semantic query', value: 'semantic' },
+  { label: 'Гибридный (теги + смысл)', value: 'hybrid' },
+  { label: 'Только теги', value: 'tags' },
+  { label: 'По смыслу запроса', value: 'semantic' },
 ]
 
-const tagsLabel = computed(() => (mode.value === 'hybrid' ? 'Tags (required filter)' : 'Tags'))
+const tagsLabel = computed(() => (mode.value === 'hybrid' ? 'Теги (обязательный фильтр)' : 'Теги'))
 
 const canSearch = computed(() => {
   if (mode.value === 'tags') return selectedTags.value.length > 0
@@ -135,15 +136,15 @@ const canSearch = computed(() => {
 })
 
 const validationHint = computed(() => {
-  if (mode.value === 'tags') return 'Select at least one tag.'
-  if (mode.value === 'semantic') return 'Enter a search query.'
-  return 'Hybrid search needs both a query and at least one tag.'
+  if (mode.value === 'tags') return 'Выберите хотя бы один тег.'
+  if (mode.value === 'semantic') return 'Введите поисковый запрос.'
+  return 'Для гибридного поиска нужны запрос и хотя бы один тег.'
 })
 
 async function onTagSearch(q: string) {
   try {
     const data = await tagsApi.listTags({ q: q || undefined, per_page: 20, status: 'active' })
-    tagOptions.value = data.data.map((tag: Tag) => ({ value: tag.id, label: `${tag.name} (${tag.type})` }))
+    tagOptions.value = data.data.map((tag: Tag) => ({ value: tag.id, label: `${tag.name} (${labelOf(TAG_TYPE_LABELS, tag.type)})` }))
   } catch (e) {
     // Tag lookup failing shouldn't block the rest of the search form.
   }

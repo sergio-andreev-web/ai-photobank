@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosError } from 'axios'
 import type { ApiError } from '~/types/api'
+import { errorText } from '~/utils/labels'
 
 let instance: AxiosInstance | null = null
 
@@ -50,16 +51,12 @@ function getCookie(name: string): string | undefined {
   }
 }
 
+/** `message` is the Russian UI text for the error code (utils/labels.ts), never the API's own text. */
 export function useApiError(error: unknown): { code: string; message: string } {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as ApiError | undefined
-    return {
-      code: data?.error?.code || 'UNKNOWN_ERROR',
-      message: data?.error?.message || error.message,
-    }
+    const code = data?.error?.code || 'UNKNOWN_ERROR'
+    return { code, message: errorText(code, error.response?.status ?? null) }
   }
-  return {
-    code: 'UNKNOWN_ERROR',
-    message: error instanceof Error ? error.message : String(error),
-  }
+  return { code: 'UNKNOWN_ERROR', message: errorText(null, null) }
 }

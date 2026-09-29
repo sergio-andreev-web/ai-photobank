@@ -104,5 +104,6 @@ body { margin: 0; background: #f5f7fb; color: #172033; }
   .dashboard-stats { gap: 10px; }
   .dashboard-stat { min-height: 160px; padding: 17px; }
   .dashboard-priority-body { align-items: flex-start; flex-wrap: wrap; }
-  .dashboard-priority-body .ui-button { margin-left: 55px; }
+  .dashboard-priority-body > div { flex-basis: calc(100% - 55px); }
+  .dashboard-priority-action { margin-left: 55px; }
 }
