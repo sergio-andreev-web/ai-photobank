@@ -107,3 +107,15 @@ body { margin: 0; background: #f5f7fb; color: #172033; }
   .dashboard-priority-body > div { flex-basis: calc(100% - 55px); }
   .dashboard-priority-action { margin-left: 55px; }
 }
+
+/* Gallery: status tabs, selection and bulk actions */
+.gallery-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #fff; border: 1px solid #e6ecf4; border-radius: 12px; }
+.gallery-tab { padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #5b6b85; }
+.gallery-tab:hover { background: #f3f6fb; color: #1d2d48; }
+.gallery-tab.is-active { background: #2862d7; color: #fff; }
+.gallery-card-check { position: absolute; top: 10px; left: 10px; z-index: 10; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #ffffffe6; box-shadow: 0 1px 4px #14294a26; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.relative:hover > .gallery-card-check, .gallery-card-check:focus-within, .gallery-card-check.is-visible { opacity: 1; }
+@media (hover: none) { .gallery-card-check { opacity: 1; } }
+.bulk-bar { padding: 12px 16px; box-shadow: 0 8px 28px #14294a1f; }
+.bulk-panel { margin-top: 12px; padding: 12px; border: 1px solid #e6ecf4; border-radius: 12px; }
+.surface-card.is-selected { border-color: #2862d7; box-shadow: 0 0 0 2px #2862d7; }

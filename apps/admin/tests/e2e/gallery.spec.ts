@@ -271,8 +271,7 @@ test.describe('gallery', () => {
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
     await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0)
 
-    await page.getByRole('combobox', { name: 'Статус' }).click()
-    await page.getByRole('option', { name: 'Готово' }).click()
+    await page.getByRole('button', { name: 'Готовые', exact: true }).click()
     await page.getByRole('combobox', { name: 'Партия' }).click()
     await page.getByRole('option', { name: 'Site visit' }).click()
     await openTagFilter(page)
@@ -285,6 +284,7 @@ test.describe('gallery', () => {
       batch_id: '42',
       'tag_ids[]': '14',
       created_from: '2026-09-23T21:00:00Z',
+      sort: '-created_at',
       page: '1',
       per_page: '24',
     })
@@ -293,10 +293,11 @@ test.describe('gallery', () => {
     await expect.poll(() => Object.fromEntries(lastOf(imageRequests).searchParams)).toEqual({
       page: '1',
       per_page: '24',
+      sort: '-created_at',
     })
     await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0)
     await expect(page.getByLabel('Создано с')).toHaveValue('')
-    await expect(page.getByRole('combobox', { name: 'Статус' })).toContainText('Все')
+    await expect(page.getByRole('button', { name: 'Все', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await expect(tagFilter(page)).not.toContainText('Каска')
   })
 
@@ -324,10 +325,8 @@ test.describe('gallery', () => {
     await gotoReady(page, '/gallery')
     await expect(page.getByTestId('gallery-card')).toHaveCount(1)
 
-    await page.getByRole('combobox', { name: 'Статус' }).click()
-    await page.getByRole('option', { name: 'Ошибка' }).click()
-    await page.getByRole('combobox', { name: 'Статус' }).click()
-    await page.getByRole('option', { name: 'Готово' }).click()
+    await page.getByRole('button', { name: 'С ошибками', exact: true }).click()
+    await page.getByRole('button', { name: 'Готовые', exact: true }).click()
     await expect(page.getByText('LATEST.jpg')).toBeVisible()
 
     releaseSlow()

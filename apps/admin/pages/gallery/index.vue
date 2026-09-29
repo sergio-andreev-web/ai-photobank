@@ -43,10 +43,6 @@
           />
         </UFormField>
 
-        <UFormField label="Статус" class="min-w-[160px] flex-1">
-          <USelect v-model="filters.status" :items="statusOptions" class="w-full" />
-        </UFormField>
-
         <UFormField label="Партия" class="min-w-[160px] flex-1">
           <USelect v-model="filters.batchId" :items="batchOptions" class="w-full" />
         </UFormField>
@@ -67,6 +63,44 @@
       </div>
     </div>
 
+    <!-- Status tabs, select-all and sort -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="gallery-tabs" role="group" aria-label="Статус">
+        <button
+          v-for="tab in statusTabs"
+          :key="tab.value"
+          type="button"
+          class="gallery-tab"
+          :class="{ 'is-active': filters.status === tab.value }"
+          :aria-pressed="filters.status === tab.value"
+          @click="filters.status = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+      <div class="flex items-center gap-4">
+        <UCheckbox
+          v-if="images.length > 0"
+          :model-value="pageSelection"
+          label="Выбрать все на странице"
+          @update:model-value="toggleAll"
+        />
+        <USelect v-model="sort" :items="sortOptions" aria-label="Сортировка" class="w-44" />
+      </div>
+    </div>
+
+    <BulkActionBar
+      v-if="selectedImages.length > 0"
+      class="sticky top-3 z-20"
+      :images="selectedImages"
+      @finished="onBulkFinished"
+      @clear="clearSelection"
+    />
+
+    <div v-if="notice" role="status" aria-live="polite" data-testid="gallery-notice">
+      <UAlert :color="notice.tone" variant="soft" :title="notice.message" close @update:open="notice = null" />
+    </div>
+
     <ErrorAlert v-if="loadError" :message="loadError" @dismiss="loadError = null" />
 
     <!-- Image Grid -->
@@ -81,12 +115,29 @@
     </div>
 
     <div v-else class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" data-testid="gallery-grid">
-      <NuxtLink
+      <div
         v-for="image in images"
         :key="image.id"
+        class="relative"
+        data-testid="gallery-card"
+        :data-selected="selected.has(image.id)"
+      >
+      <!-- The native toggle is not cancelled (a cancelled click reverts the box after Vue has set it);
+           the click only reads Shift for range selection. -->
+      <label class="gallery-card-check" :class="{ 'is-visible': selected.size > 0 }">
+        <input
+          type="checkbox"
+          class="h-4 w-4 accent-blue-600"
+          :checked="selected.has(image.id)"
+          :aria-label="`Выбрать ${image.original_name}`"
+          @click="onToggle(image.id, $event)"
+        />
+      </label>
+      <NuxtLink
         :to="`/gallery/${image.id}`"
         class="surface-card group block overflow-hidden transition-shadow hover:shadow-lg"
-        data-testid="gallery-card"
+        :class="{ 'is-selected': selected.has(image.id) }"
+        @click="onCardClick(image.id, $event)"
       >
         <div class="aspect-[4/3] overflow-hidden bg-slate-100">
           <img
@@ -126,6 +177,7 @@
           <p v-else class="text-xs text-gray-400">Нет тегов</p>
         </div>
       </NuxtLink>
+      </div>
     </div>
 
     <!-- Pagination -->
@@ -146,6 +198,7 @@ definePageMeta({
 
 import type { Batch, ImageStatus, ImageSummary, PaginationMeta, Tag } from '~/types/api'
 import { createdFromParam, createdToParam } from '~/utils/dateRange'
+import { keepVisible, pageSelectionState, toggleSelection } from '~/utils/selection'
 import { IMAGE_STATUS_LABELS, labelOf, TAG_TYPE_LABELS } from '~/utils/labels'
 import { semanticSearchLocation } from '~/utils/searchRoute'
 
@@ -183,13 +236,60 @@ const filters = reactive<{
   dateTo: '',
 })
 
-const statusOptions: { label: string; value: ImageStatus | typeof ALL }[] = [
+const statusTabs: { label: string; value: ImageStatus | typeof ALL }[] = [
   { label: 'Все', value: ALL },
-  ...(['uploaded', 'queued', 'processing', 'ready', 'failed'] as const).map((value) => ({
-    label: IMAGE_STATUS_LABELS[value],
-    value,
-  })),
+  { label: 'Готовые', value: 'ready' },
+  { label: 'В обработке', value: 'processing' },
+  { label: 'В очереди', value: 'queued' },
+  { label: 'Загруженные', value: 'uploaded' },
+  { label: 'С ошибками', value: 'failed' },
 ]
+
+// GET /admin/images `sort` (contract enum).
+type ImageSort = '-created_at' | 'created_at'
+const sort = ref<ImageSort>('-created_at')
+const sortOptions: { label: string; value: ImageSort }[] = [
+  { label: 'Сначала новые', value: '-created_at' },
+  { label: 'Сначала старые', value: 'created_at' },
+]
+
+// Selection lives on the current page only: it is pruned on every reload and cleared on page/filter changes.
+const selected = ref<Set<number>>(new Set())
+let selectionAnchor: number | null = null
+const notice = ref<{ message: string; tone: 'success' | 'warning' } | null>(null)
+
+const pageIds = computed(() => images.value.map((image) => image.id))
+const selectedImages = computed(() => images.value.filter((image) => selected.value.has(image.id)))
+const pageSelection = computed(() => pageSelectionState(selected.value, pageIds.value))
+
+function onToggle(id: number, event: MouseEvent) {
+  selected.value = toggleSelection(selected.value, pageIds.value, id, { shift: event.shiftKey, anchor: selectionAnchor })
+  selectionAnchor = id
+}
+
+/** While something is selected, a click on a card selects it instead of opening it. */
+function onCardClick(id: number, event: MouseEvent) {
+  if (selected.value.size === 0 || event.metaKey || event.ctrlKey) return
+  event.preventDefault()
+  onToggle(id, event)
+}
+
+function toggleAll(value: boolean | 'indeterminate') {
+  selected.value = value === true ? new Set(pageIds.value) : new Set()
+  selectionAnchor = null
+}
+
+function clearSelection() {
+  selected.value = new Set()
+  selectionAnchor = null
+}
+
+async function onBulkFinished(message: string, failedIds: number[], tone: 'success' | 'warning') {
+  notice.value = { message, tone }
+  // Failed images stay selected so the action can be repeated on them.
+  selected.value = new Set(failedIds)
+  await loadImages(pagination.value?.page ?? 1, { keepSelection: true })
+}
 
 const batchOptions = computed(() => [
   { label: 'Все партии', value: ALL },
@@ -254,14 +354,17 @@ const tagsApi = useTags()
 // Filters can change faster than the API answers; only the newest request may update the grid.
 let loadSeq = 0
 
-async function loadImages(page = 1) {
+async function loadImages(page = 1, options: { keepSelection?: boolean } = {}) {
   const seq = ++loadSeq
-  loading.value = true
+  if (!options.keepSelection) clearSelection()
+  // A reload after a bulk action keeps the grid on screen instead of flashing the loading state.
+  if (!options.keepSelection) loading.value = true
   loadError.value = null
   try {
     const data = await imagesApi.listImages({
       page,
       per_page: 24,
+      sort: sort.value,
       status: filters.status === ALL ? undefined : filters.status,
       batch_id: filters.batchId === ALL ? undefined : filters.batchId,
       tag_ids: filters.tagIds.length > 0 ? filters.tagIds : undefined,
@@ -271,6 +374,7 @@ async function loadImages(page = 1) {
     if (seq !== loadSeq) return
     images.value = data.data
     pagination.value = data.meta
+    selected.value = keepVisible(selected.value, pageIds.value)
   } catch (e) {
     if (seq !== loadSeq) return
     loadError.value = useApiError(e).message
@@ -323,7 +427,7 @@ async function submitAiSearch() {
   await navigateTo(semanticSearchLocation(query))
 }
 
-watch(filters, () => loadImages())
+watch([filters, sort], () => loadImages())
 
 onMounted(() => {
   loadImages()
