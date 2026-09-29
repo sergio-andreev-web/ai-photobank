@@ -21,6 +21,7 @@ export function useImages() {
       status?: ImageStatus
       batch_id?: number
       tag_ids?: number[]
+      person_id?: number
       created_from?: string
       created_to?: string
     }

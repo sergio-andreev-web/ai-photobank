@@ -1,5 +1,6 @@
 import type {
   BatchStatus,
+  FaceStatus,
   ImageStatus,
   ImageTagSource,
   ProcessingTaskStatus,
@@ -88,6 +89,13 @@ export const CANDIDATE_RESOLUTION_LABELS: Record<TagCandidateStatus, string> = {
   rejected: 'отклонён',
 }
 
+export const FACE_STATUS_LABELS: Record<FaceStatus, string> = {
+  unassigned: 'Не знаем, кто это',
+  suggested: 'Похоже — подтвердите',
+  auto: 'Узнан автоматически',
+  confirmed: 'Подтверждён',
+}
+
 export const FILE_STATE_LABELS: Record<FileState, string> = {
   uploading: 'Загрузка',
   uploaded: 'Загружен',
@@ -144,6 +152,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   ALIAS_ALREADY_EXISTS: 'Такой синоним уже есть у другого тега.',
   TAG_CANDIDATE_NOT_FOUND: 'Кандидат не найден.',
   TAG_CANDIDATE_ALREADY_RESOLVED: 'По этому кандидату уже принято решение.',
+  PERSON_NOT_FOUND: 'Человек не найден — возможно, его уже удалили.',
+  FACE_NOT_FOUND: 'Лицо не найдено — возможно, фото переобработали.',
   EMBEDDING_VERSION_MISMATCH: 'Поисковый индекс строится на другой версии модели. Семантический поиск временно недоступен.',
   // Processing error codes (image.error_code, processing_tasks[].error_code).
   METADATA_EXTRACTION_FAILED: 'Не удалось прочитать метаданные файла.',
