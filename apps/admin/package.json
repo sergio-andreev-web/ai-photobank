@@ -7,6 +7,7 @@
     "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
+    "postinstall": "[ ! -f nuxt.config.ts ] || nuxt prepare",
     "lint": "eslint . --fix",
     "test": "vitest",
     "test:e2e": "playwright test"
