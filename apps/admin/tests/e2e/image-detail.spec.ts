@@ -81,6 +81,52 @@ test.describe('image detail', () => {
     await expect(page.getByText('No tags assigned yet.')).toBeVisible()
   })
 
+  test('adding a tag sends the selected tag id as an integer', async ({ page }) => {
+    await loginAsAdmin(page)
+
+    const KASKA = { id: 14, name: 'Каска', type: 'object', status: 'active' }
+    let added = false
+    await page.route('**/api/admin/images/152', (route) =>
+      json(
+        route,
+        200,
+        added
+          ? {
+              ...READY_IMAGE,
+              image_tags: [
+                ...READY_IMAGE.image_tags,
+                { tag: KASKA, source: 'manual', confidence: null, locked: true, created_at: '2026-09-25T14:00:00Z', updated_at: '2026-09-25T14:00:00Z' },
+              ],
+            }
+          : READY_IMAGE
+      )
+    )
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, {
+        data: [
+          { ...KASKA, parent_id: null, slug: 'kaska', normalized_name: 'каска', images_count: 3, aliases: [], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+        ],
+        meta: { page: 1, per_page: 20, total: 1, last_page: 1 },
+      })
+    )
+    let requestBody: { tag_id?: unknown } | undefined
+    await page.route('**/api/admin/images/152/tags', (route) => {
+      requestBody = route.request().postDataJSON()
+      added = true
+      return json(route, 201, { tag: KASKA, source: 'manual', confidence: null, locked: true, created_at: '2026-09-25T14:00:00Z', updated_at: '2026-09-25T14:00:00Z' })
+    })
+
+    await gotoReady(page, '/gallery/152')
+    await page.getByRole('button', { name: 'Add Tag' }).click()
+    await page.getByText('Select a tag').click()
+    await page.getByRole('option', { name: 'Каска (object)' }).click()
+    await page.getByRole('button', { name: 'Add', exact: true }).click()
+
+    // The contract requires an integer id; the select must not submit its option object.
+    await expect.poll(() => requestBody?.tag_id).toBe(14)
+    await expect(page.getByTestId('image-tags').getByText('Каска')).toBeVisible()
+  })
+
   test('retrying a failed image shows the updated status', async ({ page }) => {
     await loginAsAdmin(page)
 

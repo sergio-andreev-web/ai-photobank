@@ -46,6 +46,47 @@ test.describe('tag candidate moderation', () => {
     await expect(page.getByText('No candidates found for this filter.')).toBeVisible()
   })
 
+  test('merging a candidate sends the target tag id as an integer', async ({ page }) => {
+    await loginAsAdmin(page)
+
+    let resolved = false
+    await page.route('**/api/admin/tag-candidates?*', (route) =>
+      json(route, 200, {
+        data: resolved ? [] : [PENDING_CANDIDATE],
+        meta: { page: 1, per_page: 20, total: resolved ? 0 : 1, last_page: 1 },
+      })
+    )
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, {
+        data: [
+          { id: 87, parent_id: null, name: 'Буровая', slug: 'burovaya', normalized_name: 'буровая', type: 'object', status: 'active', images_count: 12, aliases: [], created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+        ],
+        meta: { page: 1, per_page: 20, total: 1, last_page: 1 },
+      })
+    )
+    let requestBody: { tag_id?: unknown; create_alias?: unknown } | undefined
+    await page.route('**/api/admin/tag-candidates/5/merge', (route) => {
+      requestBody = route.request().postDataJSON()
+      resolved = true
+      return json(route, 200, {
+        candidate: { ...PENDING_CANDIDATE, status: 'merged', resolved_tag_id: 87, resolved_at: '2026-09-25T14:00:00Z' },
+        tag: { id: 87, name: 'Буровая', type: 'object', status: 'active' },
+        attached_images_count: 37,
+        alias_created: true,
+      })
+    })
+
+    await gotoReady(page, '/candidates')
+    await page.getByRole('button', { name: 'Merge Into...' }).click()
+    await page.getByText('Search tags...').click()
+    await page.getByRole('option', { name: 'Буровая (object)' }).click()
+    await page.getByRole('button', { name: 'Confirm Merge' }).click()
+
+    // The contract requires an integer tag_id; the select must not submit its option object.
+    await expect.poll(() => requestBody).toEqual({ tag_id: 87, create_alias: true })
+    await expect(page.getByText('No candidates found for this filter.')).toBeVisible()
+  })
+
   test('rejecting an already-resolved candidate surfaces the contract error', async ({ page }) => {
     await loginAsAdmin(page)
 

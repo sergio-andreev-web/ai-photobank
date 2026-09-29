@@ -88,6 +88,7 @@
             <USelectMenu
               v-model="mergeTag"
               :items="mergeOptions"
+              value-key="value"
               placeholder="Search tags..."
               @update:search-term="onMergeSearch"
             />
