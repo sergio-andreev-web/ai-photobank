@@ -3,9 +3,8 @@
 namespace App\Services\Search;
 
 /**
- * One page of image IDs in result order, plus the total of matching images
- * (ADR-0004: no similarity threshold, so total is every image that passes the
- * filters).
+ * One page of image IDs in result order, plus the total of images the query
+ * returns (after the relevance floor, ADR-0004 2026-09-30 addendum / ADR-0012).
  */
 final readonly class SearchPage
 {

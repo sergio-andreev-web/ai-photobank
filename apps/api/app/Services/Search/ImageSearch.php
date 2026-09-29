@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Log;
  *   active image embedding version only (§77). Explicit tag_ids are part of
  *   the same WHERE clause as the vector ranking, so they are a hard
  *   constraint (§43) and are applied before, not after, any top-K cut.
- *   Relevance (ADR-0004, 2026-09-30 addendum): images whose caption, OCR text
+ *   Relevance (ADR-0004, 2026-09-30 addendum): images whose file name, caption, OCR text
  *   or tag names contain every query word come first; the rest are returned
  *   only above max(min_similarity, relative × best similarity), with a
  *   stricter relative share when some image matched the words.
@@ -89,6 +89,68 @@ final readonly class ImageSearch
         foreach ($ranked as [$imageId, $similarity]) {
             // Float error can push an identical vector a hair past 1; the contract bounds it to [-1, 1].
             $scores[$imageId] = max(-1.0, min(1.0, $similarity));
+        }
+
+        return new SearchPage(array_keys($scores), $scores, $total);
+    }
+
+    /**
+     * GET /admin/images/{image}/similar (ADR-0012): neighbours of the image's own active
+     * embedding, itself excluded, at or above `photobank.search.similar_min_similarity`.
+     * No active embedding of the configured version yet → an empty page.
+     */
+    public function similar(int $imageId, int $page, int $perPage): SearchPage
+    {
+        $modelKey = (string) config('ai.embedding.active_model_key');
+        $modelVersion = (string) config('ai.embedding.active_model_version');
+        $source = DB::table('image_embeddings')
+            ->where('image_id', $imageId)
+            ->where('active', true)
+            ->where('model_key', $modelKey)
+            ->where('model_version', $modelVersion)
+            ->value('embedding');
+        $vector = $source === null ? null : Vectors::decode((string) $source);
+        if ($vector === null) {
+            return new SearchPage([], [], 0);
+        }
+
+        $query = DB::table('images as i')
+            ->join('image_embeddings as ie', 'ie.image_id', '=', 'i.id')
+            ->whereNull('i.deleted_at')
+            ->whereRaw('ie.active')
+            ->where('ie.model_key', $modelKey)
+            ->where('ie.model_version', $modelVersion)
+            ->where('i.id', '<>', $imageId);
+        $floor = (float) config('photobank.search.similar_min_similarity');
+
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            $literal = EmbeddingVersion::toVectorLiteral($vector);
+            $similarity = '1 - (ie.embedding <=> CAST(? AS vector))';
+            $relevant = $query->whereRaw("{$similarity} >= ?", [$literal, $floor]);
+            $total = (clone $relevant)->count();
+            $rows = $total <= ($page - 1) * $perPage ? collect() : $relevant
+                ->selectRaw("i.id, {$similarity} AS similarity", [$literal])
+                ->orderByDesc('similarity')
+                ->orderBy('i.id')
+                ->forPage($page, $perPage)
+                ->get();
+            $ranked = $rows->map(static fn (object $row): array => [(int) $row->id, (float) $row->similarity])->all();
+        } else {
+            $scored = [];
+            foreach ($query->select(['i.id', 'ie.embedding'])->get() as $row) {
+                $stored = Vectors::decode($row->embedding);
+                if ($stored !== null && count($stored) === count($vector) && ($score = Vectors::cosine($vector, $stored)) >= $floor) {
+                    $scored[] = [(int) $row->id, $score];
+                }
+            }
+            usort($scored, static fn (array $a, array $b): int => [$b[1], $a[0]] <=> [$a[1], $b[0]]);
+            $total = count($scored);
+            $ranked = array_slice($scored, ($page - 1) * $perPage, $perPage);
+        }
+
+        $scores = [];
+        foreach ($ranked as [$id, $score]) {
+            $scores[$id] = max(-1.0, min(1.0, $score));
         }
 
         return new SearchPage(array_keys($scores), $scores, $total);
@@ -167,10 +229,11 @@ final readonly class ImageSearch
     }
 
     /**
-     * Full text over caption, OCR text and the names of the image's tags; `russian` stems both
-     * sides, so «жилищная» matches «ЖИЛИЩНАЯ». plainto_tsquery ANDs the query words.
+     * Full text over the file name, caption, OCR text and the names of the image's tags; `russian` stems both
+     * sides, so «жилищная» matches «ЖИЛИЩНАЯ». plainto_tsquery ANDs the query words. The file
+     * name is split on separators first: the parser reads `IMG_0042.jpg` as one file token.
      */
-    private const string TEXT_MATCH_SQL = "to_tsvector('russian', coalesce(i.caption, '') || ' ' || coalesce(i.ocr_text, '') || ' ' || "
+    private const string TEXT_MATCH_SQL = "to_tsvector('russian', regexp_replace(coalesce(i.original_name, ''), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce(i.caption, '') || ' ' || coalesce(i.ocr_text, '') || ' ' || "
         ."coalesce((SELECT string_agg(t.name, ' ') FROM image_tags it_m JOIN tags t ON t.id = it_m.tag_id WHERE it_m.image_id = i.id), '')) "
         ."@@ plainto_tsquery('russian', ?)";
 
@@ -228,7 +291,7 @@ final readonly class ImageSearch
      */
     private function rankInPhp(Builder $query, array $vector, string $text, int $page, int $perPage): array
     {
-        $rows = $query->select(['i.id', 'ie.embedding', 'i.caption', 'i.ocr_text'])->get();
+        $rows = $query->select(['i.id', 'ie.embedding', 'i.original_name', 'i.caption', 'i.ocr_text'])->get();
         $tagNames = DB::table('image_tags')
             ->join('tags', 'tags.id', '=', 'image_tags.tag_id')
             ->whereIn('image_tags.image_id', $rows->pluck('id'))
@@ -242,7 +305,7 @@ final readonly class ImageSearch
                 continue;
             }
             $names = $tagNames->get($row->id, collect())->pluck('name')->all();
-            $haystack = implode(' ', [(string) $row->caption, (string) $row->ocr_text, ...$names]);
+            $haystack = implode(' ', [(string) $row->original_name, (string) $row->caption, (string) $row->ocr_text, ...$names]);
             $scored[] = [(int) $row->id, Vectors::cosine($vector, $stored), self::wordsMatch($text, $haystack)];
         }
 

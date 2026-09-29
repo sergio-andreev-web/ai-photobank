@@ -126,6 +126,9 @@ return [
         'relative_similarity' => (float) env('SEARCH_RELATIVE_SIMILARITY', 0.5),
         // With a word match the matched images are the answer; only near-best neighbours join.
         'relative_similarity_with_word_match' => (float) env('SEARCH_RELATIVE_SIMILARITY_WITH_WORD_MATCH', 0.8),
+        // Similar images (ADR-0012): image↔image similarity of one series/subject 0.73–0.91,
+        // unrelated pairs 0.40–0.65 on the 21-photo test set.
+        'similar_min_similarity' => (float) env('SIMILAR_MIN_SIMILARITY', 0.7),
     ],
 
     'tagging' => [

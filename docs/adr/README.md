@@ -22,6 +22,7 @@
 | [0009](0009-embedding-versioning.md) | model_key/model_version, активная версия, метрика и индекс | Embedding | Accepted |
 | [0010](0010-ai-service-contract.md) | /health vs /ready, ошибки AI, лимиты, API key, concept type | /health, 1152 | Accepted |
 | [0011](0011-media-serving.md) | Авторизованная отдача media, X-Accel-Redirect | Media | Accepted |
+| [0012](0012-similar-images.md) | Похожие изображения по image embedding | Search, Images | Accepted |
 
 Строка плана «ТЗ показывает массив embedding из 2 чисел» закрыта без ADR — это однозначное требование §5:
 `schemas/image-analysis.json` требует ровно 1152 числа, полный пример — `contracts/examples/ai/analyze-response.json`.

@@ -116,6 +116,27 @@
               </UButton>
             </div>
           </section>
+          <!-- Similar images (ADR-0012) -->
+          <section class="pt-2" aria-label="Похожие фото" data-testid="similar-images">
+            <h3 class="section-title">Похожие фото<template v-if="similarTotal"> ({{ similarTotal }})</template></h3>
+            <p v-if="similarLoading" class="mt-2 text-sm text-gray-500">Ищем похожие…</p>
+            <p v-else-if="image.status !== 'ready' && !similar.length" class="mt-2 text-sm text-gray-500">
+              Появятся после обработки фото.
+            </p>
+            <p v-else-if="!similar.length" class="mt-2 text-sm text-gray-500">Похожих фото не найдено.</p>
+            <div v-else class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              <NuxtLink
+                v-for="item in similar"
+                :key="item.id"
+                :to="`/gallery/${item.id}`"
+                class="block aspect-square overflow-hidden rounded-lg bg-slate-100 hover:ring-2 hover:ring-blue-500"
+                :title="item.original_name"
+              >
+                <img v-if="item.urls.thumbnail" :src="item.urls.thumbnail" :alt="item.original_name" class="h-full w-full object-cover" />
+                <span v-else class="flex h-full items-center justify-center text-2xl text-slate-300"><UIcon name="i-heroicons-photo" /></span>
+              </NuxtLink>
+            </div>
+          </section>
         </div>
 
         <!-- Image Details -->
@@ -224,7 +245,7 @@ definePageMeta({
   middleware: 'auth',
 })
 
-import type { Concept, ImageDetail, ImageStatus, Tag } from '~/types/api'
+import type { Concept, ImageDetail, ImageStatus, ImageSummary, Tag } from '~/types/api'
 import { toApiProblem } from '~/utils/errorHandler'
 import {
   IMAGE_STATUS_LABELS,
@@ -256,6 +277,24 @@ const confirmingDelete = ref(false)
 
 const showAddTag = ref(false)
 const openConcept = ref<Concept | null>(null)
+const similar = ref<ImageSummary[]>([])
+const similarTotal = ref(0)
+const similarLoading = ref(false)
+
+async function loadSimilar(id: number) {
+  similarLoading.value = true
+  try {
+    const data = await imagesApi.listSimilar(id, { per_page: 12 })
+    similar.value = data.data
+    similarTotal.value = data.meta.total
+  } catch {
+    // Secondary block: the page works without it.
+    similar.value = []
+    similarTotal.value = 0
+  } finally {
+    similarLoading.value = false
+  }
+}
 const notice = ref<string | null>(null)
 
 async function onConceptTagged(message: string) {
@@ -432,5 +471,17 @@ async function handleDelete() {
 onMounted(() => {
   loadImage()
   onTagSearch('')
+  loadSimilar(Number(route.params.id))
 })
+
+// Opening a similar image reuses this page component: reload for the new id.
+watch(
+  () => route.params.id,
+  (id) => {
+    if (!id) return
+    openConcept.value = null
+    loadImage()
+    loadSimilar(Number(id))
+  },
+)
 </script>

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Image;
 use App\Services\Processing\BatchStatusUpdater;
 use App\Services\Processing\ProcessingPipeline;
+use App\Services\Search\ImageSearch;
 use App\Support\Api;
 use App\Support\Presenters\ImagePresenter;
 use Illuminate\Http\JsonResponse;
@@ -71,6 +72,33 @@ class ImageController extends Controller
         return response()->json([
             'data' => $images->map(fn (Image $image) => ImagePresenter::summary($image))->all(),
             'meta' => Api::paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    /**
+     * GET /admin/images/{image}/similar (ADR-0012).
+     */
+    public function similar(Request $request, int $image, ImageSearch $search): JsonResponse
+    {
+        $validated = $request->validate([
+            'page' => ['integer', 'min:1'],
+            'per_page' => ['integer', 'min:1', 'max:100'],
+        ]);
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 50);
+
+        $this->findImage($image);
+        $result = $search->similar($image, $page, $perPage);
+        $images = Image::with('tags')->whereIn('id', $result->imageIds)->get()->keyBy('id');
+
+        return response()->json([
+            // Ranked order; an image deleted between ranking and loading is dropped.
+            'data' => collect($result->imageIds)
+                ->filter(fn (int $id): bool => $images->has($id))
+                ->map(fn (int $id): array => ImagePresenter::summary($images[$id]))
+                ->values()
+                ->all(),
+            'meta' => Api::paginationMeta($page, $perPage, $result->total),
         ]);
     }
 

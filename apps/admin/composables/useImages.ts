@@ -67,6 +67,12 @@ export function useImages() {
     return data
   }
 
+  /** GET /admin/images/{image}/similar (ADR-0012): neighbours by image embedding, best first. */
+  async function listSimilar(id: number, params?: PaginationParams) {
+    const { data } = await api.get<ImageList>(`/admin/images/${id}/similar`, { params })
+    return data
+  }
+
   async function reprocessImage(id: number) {
     const { data } = await api.post<ImageDetail>(`/admin/images/${id}/reprocess`)
     return data
@@ -92,6 +98,7 @@ export function useImages() {
     getImage,
     updateImage,
     deleteImage,
+    listSimilar,
     uploadImage,
     reprocessImage,
     retryImage,

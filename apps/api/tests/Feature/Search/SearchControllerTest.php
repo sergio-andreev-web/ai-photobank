@@ -271,6 +271,17 @@ class SearchControllerTest extends TestCase
         $this->assertEqualsWithDelta(0.3, $response->json('data.0.semantic_score'), 1e-5);
     }
 
+    public function test_file_name_counts_as_words_of_the_image(): void
+    {
+        $this->ai->embedAs('выезд', ScriptedEmbeddingsAiClient::vector(self::AXIS));
+        $named = $this->imageWith(similarity: 0.01, attributes: ['original_name' => 'выезд_на_объект_042.jpg']);
+        $this->imageWith(similarity: 0.9);
+
+        $ids = $this->ids($this->search(['mode' => 'semantic', 'query' => 'выезд'])->assertOk());
+
+        $this->assertSame($named->id, $ids[0]);
+    }
+
     public function test_tag_names_count_as_words_of_the_image(): void
     {
         $this->ai->embedAs('таблички', ScriptedEmbeddingsAiClient::vector(self::AXIS));
