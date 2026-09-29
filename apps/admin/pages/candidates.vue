@@ -1,14 +1,15 @@
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-3xl font-bold text-gray-900">Tag Candidates</h1>
-      <p class="mt-2 text-gray-600">Review AI-suggested concepts that are not yet canonical tags.</p>
+    <div class="page-heading">
+      <span class="subtle-label">REVIEW QUEUE</span>
+      <h1>Tag Candidates</h1>
+      <p>Review AI-suggested concepts that are not yet canonical tags.</p>
     </div>
 
     <!-- Filters -->
-    <div class="rounded-lg bg-white p-4 shadow">
+    <div class="surface-card p-5">
       <UFormField label="Status">
-        <USelect v-model="selectedStatus" :items="statusOptions" />
+        <USelect v-model="selectedStatus" :items="statusOptions" class="w-full max-w-xs" />
       </UFormField>
     </div>
 
@@ -18,13 +19,13 @@
     <!-- Candidates List -->
     <div v-if="loading" class="text-center text-gray-600">Loading candidates...</div>
 
-    <div v-else-if="candidates.length === 0" class="rounded-lg bg-white p-12 text-center shadow">
+    <div v-else-if="candidates.length === 0" class="surface-card p-12 text-center">
       <p class="text-gray-600">No candidates found for this filter.</p>
     </div>
 
     <div v-else class="space-y-4">
-      <div v-for="candidate in candidates" :key="candidate.id" class="rounded-lg bg-white p-6 shadow">
-        <div class="flex items-start justify-between gap-4">
+      <div v-for="candidate in candidates" :key="candidate.id" class="surface-card p-6">
+        <div class="flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div class="flex-1">
             <p class="text-2xl font-bold text-gray-900">{{ candidate.display_name }}</p>
             <p class="mt-1 text-sm text-gray-600">
@@ -52,9 +53,9 @@
             </div>
           </div>
 
-          <div v-if="candidate.status === 'pending'" class="flex shrink-0 flex-col gap-2">
+          <div v-if="candidate.status === 'pending'" class="flex shrink-0 flex-wrap gap-2 sm:flex-col">
             <UButton
-              color="green"
+              color="success"
               variant="soft"
               size="sm"
               :loading="pendingAction(candidate.id) === 'approve'"
@@ -63,7 +64,7 @@
               Create Tag
             </UButton>
             <UButton
-              color="orange"
+              color="warning"
               variant="soft"
               size="sm"
               @click="openMerge(candidate)"
@@ -71,7 +72,7 @@
               Merge Into...
             </UButton>
             <UButton
-              color="red"
+              color="error"
               variant="soft"
               size="sm"
               :loading="pendingAction(candidate.id) === 'reject'"
@@ -83,7 +84,7 @@
         </div>
 
         <!-- Inline merge form -->
-        <div v-if="mergeTargetId === candidate.id" class="mt-4 flex items-end gap-2 border-t pt-4">
+        <div v-if="mergeTargetId === candidate.id" class="mt-4 flex flex-wrap items-end gap-3 border-t pt-4">
           <UFormField label="Target tag" class="flex-1">
             <USelectMenu
               v-model="mergeTag"
@@ -97,7 +98,7 @@
           <UButton :disabled="!mergeTag" :loading="pendingAction(candidate.id) === 'merge'" @click="handleMerge(candidate)">
             Confirm Merge
           </UButton>
-          <UButton variant="ghost" @click="mergeTargetId = null">Cancel</UButton>
+          <UButton variant="ghost" @click="() => { mergeTargetId = null }">Cancel</UButton>
         </div>
       </div>
     </div>
@@ -120,11 +121,6 @@ definePageMeta({
 
 import type { PaginationMeta, Tag, TagCandidate, TagCandidateStatus } from '~/types/api'
 
-// Nuxt UI v3 reserves an empty string `value` on a SelectItem to mean "clear
-// selection" and throws if an item uses it, so "no filter" needs its own
-// sentinel instead of ''.
-const ALL = 'all' as const
-
 const candidatesApi = useCandidates()
 const tagsApi = useTags()
 
@@ -133,20 +129,21 @@ const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const pagination = ref<PaginationMeta | null>(null)
-const selectedStatus = ref<TagCandidateStatus | typeof ALL>('pending')
+const selectedStatus = ref<TagCandidateStatus>('pending')
 const actionInFlight = ref<{ id: number; action: 'approve' | 'merge' | 'reject' } | null>(null)
 
 const mergeTargetId = ref<number | null>(null)
-const mergeTag = ref<number | null>(null)
+const mergeTag = ref<number | undefined>()
 const mergeCreateAlias = ref(true)
 const mergeOptions = ref<{ label: string; value: number }[]>([])
 
-const statusOptions: { label: string; value: TagCandidateStatus | typeof ALL }[] = [
+// The API has no "all statuses" filter: a request without `status` returns only
+// `pending` (contract: default pending), so an "All" option would be misleading.
+const statusOptions: { label: string; value: TagCandidateStatus }[] = [
   { label: 'Pending', value: 'pending' },
   { label: 'Created', value: 'created' },
   { label: 'Merged', value: 'merged' },
   { label: 'Rejected', value: 'rejected' },
-  { label: 'All', value: ALL },
 ]
 
 function pendingAction(id: number) {
@@ -160,7 +157,7 @@ async function loadCandidates(page = 1) {
     const data = await candidatesApi.listCandidates({
       page,
       per_page: 20,
-      status: selectedStatus.value === ALL ? undefined : selectedStatus.value,
+      status: selectedStatus.value,
     })
     candidates.value = data.data
     pagination.value = data.meta
@@ -199,7 +196,7 @@ async function handleReject(candidate: TagCandidate) {
 
 function openMerge(candidate: TagCandidate) {
   mergeTargetId.value = candidate.id
-  mergeTag.value = null
+  mergeTag.value = undefined
   mergeCreateAlias.value = true
   onMergeSearch('')
 }

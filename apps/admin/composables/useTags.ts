@@ -1,4 +1,5 @@
 import type { Tag, TagAlias, TagCreateRequest, TagList, TagPatchRequest, TagStatus, TagType } from '~/types/api'
+import { fetchAllPages } from '~/utils/pagination'
 
 export function useTags() {
   const api = useApi()
@@ -14,6 +15,11 @@ export function useTags() {
   }) {
     const { data } = await api.get<TagList>('/admin/tags', { params })
     return data
+  }
+
+  /** The whole catalog (a tree needs every tag): pages of 500, the maximum the contract allows for tags. */
+  async function listAllTags(params?: { q?: string; type?: TagType; status?: TagStatus; parent_id?: number }) {
+    return fetchAllPages<Tag>((page) => listTags({ ...params, per_page: 500, page }))
   }
 
   async function getTag(id: number) {
@@ -48,6 +54,7 @@ export function useTags() {
 
   return {
     listTags,
+    listAllTags,
     getTag,
     createTag,
     updateTag,

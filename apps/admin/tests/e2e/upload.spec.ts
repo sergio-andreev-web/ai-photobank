@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test'
-import { apiError, gotoReady, json, loginAsAdmin } from './helpers'
+import { test, expect, type Locator, type Page } from '@playwright/test'
+import { apiError, gotoReady, imageSummary, json, loginAsAdmin, pageOf } from './helpers'
 
 const TINY_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=',
   'base64'
 )
 
-async function createBatch(page: import('@playwright/test').Page) {
+async function createBatch(page: Page) {
   await page.route('**/api/admin/batches', (route) => {
     if (route.request().method() !== 'POST') return route.fallback()
     return json(route, 201, {
@@ -21,10 +21,48 @@ async function createBatch(page: import('@playwright/test').Page) {
   })
 }
 
+/** The uploader polls the batch's images (§52); by default the batch has none. */
+async function mockBatchImages(
+  page: Page,
+  answer: (request: URL, poll: number) => unknown | Promise<unknown> = () => pageOf([], { per_page: 100 })
+) {
+  const requests: URL[] = []
+  await page.route(
+    (url) => url.pathname === '/api/admin/images',
+    async (route) => {
+      const url = new URL(route.request().url())
+      requests.push(url)
+      return json(route, 200, await answer(url, requests.length))
+    }
+  )
+  return requests
+}
+
+function rowFor(page: Page, fileName: string): Locator {
+  return page
+    .getByTestId('upload-list')
+    .locator('[data-testid^="upload-row-"]')
+    .filter({ has: page.getByText(fileName, { exact: true }) })
+}
+
+function stateOf(row: Locator): Locator {
+  return row.locator('[data-testid^="upload-state-"]')
+}
+
+const BATCH_42 = {
+  id: 42,
+  name: null,
+  progress: { total: 2, processed: 0, failed: 0 },
+  created_at: '2026-09-25T13:43:55Z',
+  updated_at: '2026-09-25T13:50:05Z',
+  completed_at: null,
+}
+
 test.describe('batch upload', () => {
   test('uploads several files in parallel and reports success, duplicate and error per file', async ({ page }) => {
     await loginAsAdmin(page)
     await createBatch(page)
+    await mockBatchImages(page)
 
     let nextImageId = 100
     await page.route('**/api/admin/batches/42/images', (route) => {
@@ -83,6 +121,11 @@ test.describe('batch upload', () => {
     await expect(list.getByText(/Skipped: duplicate of image #999/)).toBeVisible()
     await expect(list.getByText('Unsupported media type')).toBeVisible()
 
+    // Every file carries one of the per-file states of §52.
+    await expect(stateOf(rowFor(page, 'ok.jpg'))).toHaveText('uploaded')
+    await expect(stateOf(rowFor(page, 'dup.jpg'))).toHaveText('duplicate')
+    await expect(stateOf(rowFor(page, 'bad.jpg'))).toHaveText('failed')
+
     // Failed row exposes a retry action; the duplicate row does not.
     await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(1)
   })
@@ -90,6 +133,7 @@ test.describe('batch upload', () => {
   test('completing a batch polls progress until a final status', async ({ page }) => {
     await loginAsAdmin(page)
     await createBatch(page)
+    await mockBatchImages(page)
 
     await page.route('**/api/admin/batches/42/images', (route) =>
       json(route, 201, {
@@ -157,5 +201,132 @@ test.describe('batch upload', () => {
     await page.getByRole('button', { name: /Mark upload finished/ }).click()
     await expect(page.getByTestId('batch-progress')).toBeVisible()
     await expect(page.getByText('Status: completed', { exact: true })).toBeVisible({ timeout: 10000 })
+  })
+  test('shows every file moving from uploaded to processing to ready or failed, then stops polling', async ({ page }) => {
+    await loginAsAdmin(page)
+    await createBatch(page)
+
+    // Two stored files: ok.jpg becomes image 300, broken.jpg image 301.
+    await page.route('**/api/admin/batches/42/images', (route) => {
+      const broken = (route.request().postData() || '').includes('broken.jpg')
+      return json(
+        route,
+        201,
+        imageSummary({
+          id: broken ? 301 : 300,
+          original_name: broken ? 'broken.jpg' : 'ok.jpg',
+          status: 'queued',
+          urls: { thumbnail: null, preview: null, original: `/api/media/images/${broken ? 301 : 300}/original` },
+        })
+      )
+    })
+
+    // The batch is `uploading` until "Mark upload finished"; afterwards everything is already final.
+    let completed = false
+    let batchPolls = 0
+    await page.route('**/api/admin/batches/42/complete', (route) => {
+      completed = true
+      return json(route, 200, { ...BATCH_42, status: 'completed_with_errors', progress: { total: 2, processed: 2, failed: 1 } })
+    })
+    await page.route('**/api/admin/batches/42', (route) => {
+      batchPolls++
+      return json(
+        route,
+        200,
+        completed
+          ? { ...BATCH_42, status: 'completed_with_errors', progress: { total: 2, processed: 2, failed: 1 } }
+          : { ...BATCH_42, status: 'uploading' }
+      )
+    })
+
+    // Image list: the first poll sees the AI queue, the second (held back until the test has looked at
+    // the first) sees the outcome.
+    let releaseOutcome: () => void = () => {}
+    const outcomeReleased = new Promise<void>((resolve) => (releaseOutcome = resolve))
+    const imageRequests = await mockBatchImages(page, async (_url, poll) => {
+      const status = (id: number) => {
+        if (poll === 1) return id === 300 ? 'queued' : 'processing'
+        return id === 300 ? 'ready' : 'failed'
+      }
+      if (poll > 1) await outcomeReleased
+      return pageOf(
+        [300, 301].map((id) => imageSummary({ id, status: status(id) })),
+        { per_page: 100 }
+      )
+    })
+
+    await gotoReady(page, '/uploader')
+    await page.getByRole('button', { name: 'Create Batch' }).click()
+    await expect(page.getByText('Batch #42')).toBeVisible()
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: 'ok.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
+      { name: 'broken.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
+    ])
+
+    const ok = rowFor(page, 'ok.jpg')
+    const broken = rowFor(page, 'broken.jpg')
+
+    // Straight after the 201 the files are only "uploaded".
+    await expect(stateOf(ok)).toHaveText('uploaded')
+    await expect(stateOf(broken)).toHaveText('uploaded')
+    await expect(ok).toContainText('Uploaded, queued for processing')
+
+    // First poll: the images are in the AI queue / being analysed.
+    await expect(stateOf(ok)).toHaveText('processing', { timeout: 10_000 })
+    await expect(stateOf(broken)).toHaveText('processing')
+    await expect(ok).toContainText('Waiting for AI analysis')
+    await expect(broken).toContainText('AI analysis in progress')
+    await expect(page.getByTestId('processing-summary')).toContainText('2 in progress')
+    expect(imageRequests[0]!.searchParams.get('batch_id')).toBe('42')
+    expect(imageRequests[0]!.searchParams.get('per_page')).toBe('100')
+
+    // Second poll: one image is ready, the other failed.
+    releaseOutcome()
+    await expect(stateOf(ok)).toHaveText('ready', { timeout: 10_000 })
+    await expect(stateOf(broken)).toHaveText('failed')
+    await expect(ok).toContainText('Analysis complete')
+    await expect(ok.getByRole('link', { name: 'View image' })).toHaveAttribute('href', '/gallery/300')
+    await expect(broken).toContainText('Processing failed')
+    await expect(broken.getByRole('link', { name: 'See error details' })).toHaveAttribute('href', '/gallery/301')
+    await expect(page.getByTestId('processing-summary')).toContainText('0 in progress')
+    await expect(page.getByTestId('processing-summary')).toContainText('1 ready')
+    await expect(page.getByTestId('processing-summary')).toContainText('1 failed')
+    // The upload line of the row is still there next to the new state.
+    await expect(ok).toContainText('Uploaded, queued for processing')
+
+    // Everything is final: the batch keeps being polled (it is not complete yet) but the image list is not.
+    const imagePollsWhenSettled = imageRequests.length
+    const batchPollsWhenSettled = batchPolls
+    await expect.poll(() => batchPolls, { timeout: 10_000 }).toBeGreaterThan(batchPollsWhenSettled)
+    expect(imageRequests).toHaveLength(imagePollsWhenSettled)
+
+    await page.getByRole('button', { name: /Mark upload finished/ }).click()
+    await expect(page.getByText('Status: completed_with_errors', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('batch-progress')).toBeVisible()
+  })
+
+  test('keeps polling images after the batch is final until the last file is settled', async ({ page }) => {
+    await loginAsAdmin(page)
+    await createBatch(page)
+
+    await page.route('**/api/admin/batches/42/images', (route) =>
+      json(route, 201, imageSummary({ id: 400, original_name: 'slow.jpg', status: 'uploaded' }))
+    )
+    // The batch counters are already final, but the image list still lags behind for one poll.
+    await page.route('**/api/admin/batches/42', (route) =>
+      json(route, 200, { ...BATCH_42, status: 'completed', progress: { total: 1, processed: 1, failed: 0 } })
+    )
+    const imageRequests = await mockBatchImages(page, (_url, poll) =>
+      pageOf([imageSummary({ id: 400, status: poll === 1 ? 'processing' : 'ready' })], { per_page: 100 })
+    )
+
+    await gotoReady(page, '/uploader')
+    await page.getByRole('button', { name: 'Create Batch' }).click()
+    await page.locator('input[type="file"]').setInputFiles([{ name: 'slow.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG }])
+
+    const row = rowFor(page, 'slow.jpg')
+    await expect(stateOf(row)).toHaveText('processing', { timeout: 10_000 })
+    await expect(stateOf(row)).toHaveText('ready', { timeout: 10_000 })
+    expect(imageRequests).toHaveLength(2)
   })
 })

@@ -1,18 +1,31 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-gray-50">
-    <div class="w-full max-w-md space-y-8">
-      <div class="text-center">
-        <h1 class="text-4xl font-bold text-blue-600">📷 Photobank</h1>
-        <h2 class="mt-6 text-2xl font-bold text-gray-900">Admin Login</h2>
+  <div class="login-shell">
+    <section class="login-intro" aria-label="About Photobank">
+      <div class="login-brand"><span class="login-brand-mark"><UIcon name="i-heroicons-photo" /></span><strong>Photobank</strong></div>
+      <div class="login-intro-copy">
+        <span class="login-kicker">YOUR MEDIA WORKSPACE</span>
+        <h1>Everything in focus.</h1>
+        <p>Organize your image library, review AI suggestions, and keep every asset ready to find.</p>
       </div>
+      <span class="login-intro-footer">PHOTOBANK ADMIN STUDIO</span>
+    </section>
 
-      <form class="space-y-6" @submit.prevent="handleLogin">
+    <div class="login-form-side">
+      <div class="login-card">
+        <span class="login-form-mark"><UIcon name="i-heroicons-lock-closed" /></span>
+        <p class="login-kicker">WELCOME BACK</p>
+        <h2>Admin Login</h2>
+        <p class="login-subtitle">Sign in to manage your photobank.</p>
+
+      <form class="login-form" @submit.prevent="handleLogin">
         <UFormField label="Email" name="email" required>
           <UInput
             v-model="form.email"
             type="email"
             placeholder="admin@example.com"
             autocomplete="email"
+            size="lg"
+            class="w-full"
           />
         </UFormField>
 
@@ -22,10 +35,12 @@
             type="password"
             placeholder="••••••••"
             autocomplete="current-password"
+            size="lg"
+            class="w-full"
           />
         </UFormField>
 
-        <div v-if="auth.error" class="rounded-md bg-red-50 p-4 text-sm text-red-700">
+        <div v-if="auth.error" role="alert" class="rounded-md bg-red-50 p-4 text-sm text-red-700">
           {{ auth.error }}
         </div>
 
@@ -36,10 +51,10 @@
           :loading="auth.loading"
           :disabled="!form.email || !form.password"
         >
-          Sign in
+          Sign in to Photobank
         </UButton>
       </form>
-
+      </div>
     </div>
   </div>
 </template>

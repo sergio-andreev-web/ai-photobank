@@ -24,12 +24,12 @@ def test_analyze_happy_path_matches_schema_shape(client):
     assert len(body["embedding"]) == 1152
     assert body["embedding_dimensions"] == 1152
     assert body["models"] == {
-        "vision": "Qwen/Qwen3-VL-4B-Instruct",
-        "embedding": "google/siglip2-so400m-patch14-384",
+        "vision": "mock-vision",
+        "embedding": "mock-embedding",
         "vision_revision": "mock-vision-v1",
         "embedding_revision": "mock-embedding-v1",
     }
-    assert body["prompt_version"] == "image-analysis-v1"
+    assert body["prompt_version"] == "image-analysis-v2"
     assert body["processing_ms"] >= 0
     assert response.headers["X-Request-ID"] == VALID_REQUEST_ID
 

@@ -97,4 +97,70 @@ test.describe('search', () => {
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
     await expect(page.getByText('Select at least one tag.')).toBeVisible()
   })
+
+  test('opens from a link with mode and q, prefills the form and runs the semantic search', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, { data: [], meta: { page: 1, per_page: 20, total: 0, last_page: 1 } })
+    )
+    const requests: unknown[] = []
+    await page.route('**/api/search', (route) => {
+      requests.push(route.request().postDataJSON())
+      return json(route, 200, {
+        data: [RESULT_IMAGE],
+        meta: { page: 1, per_page: 24, total: 1, last_page: 1, mode: 'semantic' },
+      })
+    })
+
+    await gotoReady(page, `/search?mode=semantic&q=${encodeURIComponent('мужчина в каске & без очков')}`)
+
+    await expect(page.getByTestId('search-results')).toBeVisible()
+    await expect(page.getByText('IMG_0001.jpg')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Search Mode' })).toContainText('Semantic query')
+    await expect(page.getByPlaceholder(/workers in hard hats/)).toHaveValue('мужчина в каске & без очков')
+    // Exactly one request, in the shape of the contract's semantic mode.
+    expect(requests).toEqual([
+      { mode: 'semantic', query: 'мужчина в каске & без очков', page: 1, per_page: 24, debug: false },
+    ])
+  })
+
+  test('a link with a query but without a runnable form only prefills it', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, { data: [], meta: { page: 1, per_page: 20, total: 0, last_page: 1 } })
+    )
+    let searches = 0
+    await page.route('**/api/search', (route) => {
+      searches++
+      return json(route, 200, { data: [], meta: { page: 1, per_page: 24, total: 0, last_page: 1, mode: 'hybrid' } })
+    })
+
+    // An unknown mode falls back to the default (hybrid), which cannot run without tags.
+    await gotoReady(page, '/search?mode=fulltext&q=helmet')
+
+    await expect(page.getByPlaceholder(/workers in hard hats/)).toHaveValue('helmet')
+    await expect(page.getByRole('combobox', { name: 'Search Mode' })).toContainText('Hybrid')
+    await expect(page.getByText('Hybrid search needs both a query and at least one tag.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+    await page.waitForTimeout(300)
+    expect(searches).toBe(0)
+  })
+
+  test('a plain /search does not run anything', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, { data: [], meta: { page: 1, per_page: 20, total: 0, last_page: 1 } })
+    )
+    let searches = 0
+    await page.route('**/api/search', (route) => {
+      searches++
+      return json(route, 200, { data: [], meta: { page: 1, per_page: 24, total: 0, last_page: 1, mode: 'hybrid' } })
+    })
+
+    await gotoReady(page, '/search')
+
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+    await page.waitForTimeout(300)
+    expect(searches).toBe(0)
+  })
 })

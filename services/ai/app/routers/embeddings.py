@@ -33,7 +33,7 @@ def create_text_embeddings(
             embeddings = registry.embedding_model.text_embeddings(body.texts)
 
     payload = {
-        "model": settings.embedding_model,
+        "model": registry.embedding_model.name,
         "revision": registry.embedding_model.revision,
         "dimensions": len(embeddings[0]) if embeddings else 1152,
         "embeddings": embeddings,

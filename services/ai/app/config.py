@@ -9,6 +9,8 @@ from functools import lru_cache
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .schemas.analysis import PROMPT_VERSION_MAX_LENGTH, PROMPT_VERSION_PATTERN
+
 VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
 VALID_DTYPES = {"auto", "float32", "float16", "bfloat16"}
 VALID_PROVIDERS = {"mock", "transformers"}
@@ -29,7 +31,9 @@ class Settings(BaseSettings):
     vision_model_revision: str = Field(default="main", alias="VISION_MODEL_REVISION")
     embedding_model_revision: str = Field(default="main", alias="EMBEDDING_MODEL_REVISION")
     hf_home: str | None = Field(default=None, alias="HF_HOME")
-    prompt_version: str = Field(default="image-analysis-v1", alias="PROMPT_VERSION")
+    # §34 versioned VLM prompt: prompts/<PROMPT_VERSION>.txt, reported as
+    # prompt_version by /ready and every analysis. v1 stays selectable.
+    prompt_version: str = Field(default="image-analysis-v2", alias="PROMPT_VERSION")
 
     # §63 security
     ai_service_api_key: str = Field(default="", alias="AI_SERVICE_API_KEY")
@@ -94,6 +98,19 @@ class Settings(BaseSettings):
     def _non_empty(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("must not be empty")
+        return value
+
+    @field_validator("prompt_version")
+    @classmethod
+    def _validate_prompt_version(cls, value: str) -> str:
+        # Contract shape of prompt_version (schemas/image-analysis.json). Checked at
+        # startup: an invalid value would otherwise pass /ready and then fail every
+        # analysis response; it also keeps the prompt file lookup inside prompts/.
+        if len(value) > PROMPT_VERSION_MAX_LENGTH or not PROMPT_VERSION_PATTERN.fullmatch(value):
+            raise ValueError(
+                f"PROMPT_VERSION must match {PROMPT_VERSION_PATTERN.pattern} "
+                f"and be at most {PROMPT_VERSION_MAX_LENGTH} characters, got {value!r}"
+            )
         return value
 
     @property

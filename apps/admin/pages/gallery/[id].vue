@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
-    <NuxtLink to="/gallery" class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700">
-      ← Back to Gallery
+    <NuxtLink to="/gallery" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700">
+      <UIcon name="i-heroicons-arrow-left" /> Back to Gallery
     </NuxtLink>
 
     <ErrorAlert v-if="loadError" title="Failed to load image" :message="loadError" @dismiss="loadError = null" />
@@ -9,22 +9,42 @@
 
     <div v-if="loading && !image" class="text-center text-gray-600">Loading image details...</div>
 
-    <div v-else-if="image" class="rounded-lg bg-white p-6 shadow">
-      <div class="grid gap-6 md:grid-cols-2">
+    <div v-else-if="image" class="surface-card p-6 md:p-8">
+      <div class="grid gap-8 lg:grid-cols-2">
         <!-- Image Preview -->
         <div class="space-y-4">
-          <div class="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-200">
+          <div class="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-slate-100">
             <img
               v-if="image.urls.preview"
               :src="image.urls.preview"
               :alt="image.original_name"
               class="h-full w-full object-contain"
             />
-            <div v-else class="text-6xl">📷</div>
+            <div v-else class="text-6xl text-slate-300"><UIcon name="i-heroicons-photo" /></div>
           </div>
           <div>
-            <p class="text-sm text-gray-600">Filename</p>
-            <p class="text-lg font-medium text-gray-900">{{ image.original_name }}</p>
+            <p class="subtle-label">FILENAME</p>
+            <div v-if="!renaming" class="mt-1 flex items-start gap-2">
+              <p class="flex-1 break-all text-xl font-semibold text-gray-900" data-testid="image-name">{{ image.original_name }}</p>
+              <UButton
+                size="sm"
+                color="neutral"
+                variant="ghost"
+                icon="i-heroicons-pencil-square"
+                aria-label="Rename image"
+                title="Rename image"
+                @click="startRename"
+              />
+            </div>
+            <form v-else class="mt-2 space-y-3" novalidate @submit.prevent="handleRename">
+              <UFormField label="Filename" name="original_name" :error="renameError ?? draftError ?? undefined">
+                <UInput v-model="nameDraft" class="w-full" maxlength="1024" autofocus />
+              </UFormField>
+              <div class="flex gap-2">
+                <UButton type="submit" :loading="actionLoading === 'rename'" :disabled="!canSaveName">Save name</UButton>
+                <UButton variant="ghost" color="neutral" @click="cancelRename">Cancel</UButton>
+              </div>
+            </form>
           </div>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -50,10 +70,10 @@
             <p v-if="image.error_message">{{ image.error_message }}</p>
           </div>
 
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <UButton
               v-if="image.status === 'failed'"
-              color="orange"
+              color="warning"
               :loading="actionLoading === 'retry'"
               @click="handleRetry"
             >
@@ -67,13 +87,39 @@
             >
               Reprocess
             </UButton>
+            <UButton
+              v-if="!confirmingDelete"
+              color="error"
+              variant="soft"
+              icon="i-heroicons-trash"
+              @click="() => { confirmingDelete = true }"
+            >
+              Delete image
+            </UButton>
           </div>
+
+          <section
+            v-if="confirmingDelete"
+            class="rounded-xl border border-red-200 bg-red-50 p-4"
+            aria-label="Delete confirmation"
+          >
+            <h3 class="font-semibold text-red-900">Delete this image?</h3>
+            <p class="mt-1 text-sm text-red-700">
+              It disappears from the gallery, search and counters. The stored file and its analysis history are kept.
+            </p>
+            <div class="mt-3 flex gap-2">
+              <UButton color="error" :loading="actionLoading === 'delete'" @click="handleDelete">Confirm delete</UButton>
+              <UButton variant="ghost" color="neutral" :disabled="actionLoading === 'delete'" @click="() => { confirmingDelete = false }">
+                Cancel
+              </UButton>
+            </div>
+          </section>
         </div>
 
         <!-- Image Details -->
         <div class="space-y-6">
-          <div v-if="image.caption || image.ocr_text">
-            <h3 class="font-semibold text-gray-900">Metadata</h3>
+          <div v-if="image.caption || image.ocr_text" class="rounded-xl bg-slate-50 p-5">
+            <h3 class="section-title">Metadata</h3>
             <div class="mt-2 space-y-2 text-sm text-gray-600">
               <p v-if="image.caption">Caption: {{ image.caption }}</p>
               <p v-if="image.ocr_text">OCR text: {{ image.ocr_text }}</p>
@@ -81,10 +127,10 @@
           </div>
 
           <!-- Image Tags -->
-          <div>
+          <div class="rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-gray-900">Tags</h3>
-              <UButton size="sm" variant="soft" @click="showAddTag = !showAddTag"> Add Tag </UButton>
+              <h3 class="section-title">Tags</h3>
+              <UButton size="sm" variant="soft" @click="() => { showAddTag = !showAddTag }"> Add Tag </UButton>
             </div>
 
             <div v-if="showAddTag" class="mt-2 flex gap-2">
@@ -106,7 +152,7 @@
                 v-for="imageTag in image.image_tags"
                 :key="imageTag.tag.id"
                 variant="soft"
-                :color="imageTag.source === 'manual' ? 'green' : 'blue'"
+                :color="imageTag.source === 'manual' ? 'success' : 'info'"
                 class="flex items-center gap-1"
               >
                 {{ imageTag.tag.name }}
@@ -126,9 +172,9 @@
 
           <!-- AI concepts -->
           <div v-if="image.latest_analysis?.concepts?.length">
-            <h3 class="font-semibold text-gray-900">AI Concepts</h3>
+            <h3 class="section-title">AI Concepts</h3>
             <div class="mt-2 flex flex-wrap gap-2">
-              <UBadge v-for="concept in image.latest_analysis.concepts" :key="concept.label" variant="subtle">
+              <UBadge v-for="concept in image.latest_analysis.concepts" :key="`${concept.type}:${concept.label}`" variant="subtle">
                 {{ concept.label }} ({{ Math.round(concept.confidence * 100) }}%)
               </UBadge>
             </div>
@@ -136,7 +182,7 @@
 
           <!-- Processing Tasks -->
           <div v-if="image.processing_tasks.length">
-            <h3 class="font-semibold text-gray-900">Processing Tasks</h3>
+            <h3 class="section-title">Processing Tasks</h3>
             <div class="mt-2 space-y-2">
               <div v-for="task in image.processing_tasks" :key="task.type" class="text-sm">
                 <p class="font-medium text-gray-900">{{ task.type }}</p>
@@ -159,6 +205,10 @@ definePageMeta({
 })
 
 import type { ImageDetail, ImageStatus, Tag } from '~/types/api'
+import { toApiProblem } from '~/utils/errorHandler'
+
+// ImagePatchRequest.original_name in contracts/public-api.openapi.yaml.
+const NAME_MAX_LENGTH = 1024
 
 const route = useRoute()
 const imagesApi = useImages()
@@ -168,22 +218,35 @@ const image = ref<ImageDetail | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
-const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | null>(null)
+const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | 'rename' | 'delete' | null>(null)
+
+const renaming = ref(false)
+const nameDraft = ref('')
+const renameError = ref<string | null>(null)
+const confirmingDelete = ref(false)
 
 const showAddTag = ref(false)
-const tagToAdd = ref<number | null>(null)
+const tagToAdd = ref<number | undefined>()
 const tagOptions = ref<{ label: string; value: number }[]>([])
 
-function statusColor(status: ImageStatus): string {
-  const colors: Record<ImageStatus, string> = {
-    uploaded: 'gray',
-    queued: 'amber',
-    processing: 'blue',
-    ready: 'green',
-    failed: 'red',
-  }
-  return colors[status] || 'gray'
+function statusColor(status: ImageStatus) {
+  const colors = {
+    uploaded: 'neutral',
+    queued: 'warning',
+    processing: 'info',
+    ready: 'success',
+    failed: 'error',
+  } as const
+  return colors[status]
 }
+
+const canSaveName = computed(() => {
+  const name = nameDraft.value.trim()
+  return name.length > 0 && name !== image.value?.original_name
+})
+// The Save button stays disabled for a blank draft (and disabled buttons don't submit on Enter),
+// so say why right in the field.
+const draftError = computed(() => (nameDraft.value.trim() ? null : 'Enter a file name.'))
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleString()
@@ -223,7 +286,7 @@ async function handleAddTag() {
   actionError.value = null
   try {
     await imagesApi.addTag(image.value.id, tagToAdd.value)
-    tagToAdd.value = null
+    tagToAdd.value = undefined
     showAddTag.value = false
     await loadImage()
   } catch (e) {
@@ -269,6 +332,59 @@ async function handleReprocess() {
   } catch (e) {
     actionError.value = useApiError(e).message
   } finally {
+    actionLoading.value = null
+  }
+}
+
+function startRename() {
+  if (!image.value) return
+  nameDraft.value = image.value.original_name
+  renameError.value = null
+  renaming.value = true
+}
+
+function cancelRename() {
+  renaming.value = false
+  renameError.value = null
+}
+
+async function handleRename() {
+  if (!image.value) return
+  const name = nameDraft.value.trim()
+  if (!name) return
+  if (name.length > NAME_MAX_LENGTH) {
+    renameError.value = `Use at most ${NAME_MAX_LENGTH} characters.`
+    return
+  }
+  if (name === image.value.original_name) return
+
+  actionLoading.value = 'rename'
+  actionError.value = null
+  renameError.value = null
+  try {
+    // ADR-0006: original_name is the only editable field; the response is the full ImageDetail.
+    image.value = await imagesApi.updateImage(image.value.id, { original_name: name })
+    renaming.value = false
+  } catch (e) {
+    const problem = toApiProblem(e)
+    renameError.value = problem.fields.original_name?.join(' ') ?? null
+    actionError.value = problem.message
+  } finally {
+    actionLoading.value = null
+  }
+}
+
+async function handleDelete() {
+  if (!image.value) return
+  actionLoading.value = 'delete'
+  actionError.value = null
+  try {
+    // Soft delete (204). The gallery, search and dashboard counters load fresh on mount,
+    // so there is no client-side list to invalidate.
+    await imagesApi.deleteImage(image.value.id)
+    await navigateTo('/gallery')
+  } catch (e) {
+    actionError.value = useApiError(e).message
     actionLoading.value = null
   }
 }

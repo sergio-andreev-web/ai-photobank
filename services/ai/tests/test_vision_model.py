@@ -92,6 +92,15 @@ def test_empty_analysis_is_retried_then_rejected():
     assert [call["sample"] for call in generator.calls] == [False, True]
 
 
+def test_concepts_that_all_break_the_schema_are_retried_with_sampling():
+    # Greedy output whose every concept lacks "confidence" (seen on a real photo).
+    no_confidence = json.dumps({"caption": "A race car.", "concepts": [{"type": "object", "label": "race car"}], "ocr": []})
+    generator = ScriptedGenerator([no_confidence, GOOD_OUTPUT])
+    result = make_model(generator, attempts=2).analyze(Image.new("RGB", (8, 8)))
+    assert [c.label for c in result.concepts] == ["gray"]
+    assert [call["sample"] for call in generator.calls] == [False, True]
+
+
 def test_deadline_is_shared_across_attempts():
     clock = FakeClock()
     generator = ScriptedGenerator(["garbage", GOOD_OUTPUT], clock=clock, step=31.0)

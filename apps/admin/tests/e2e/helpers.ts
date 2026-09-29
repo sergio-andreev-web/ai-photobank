@@ -13,6 +13,29 @@ export function apiError(route: Route, status: number, code: string, message: st
   return json(route, status, { error: { code, message, details, trace_id: 'e2e-trace-id' } })
 }
 
+/** A list item of `GET /api/admin/images` (contract ImageSummary). */
+export function imageSummary(overrides: Record<string, unknown> & { id: number }) {
+  const { id } = overrides
+  return {
+    batch_id: 42,
+    original_name: `IMG_${id}.jpg`,
+    status: 'ready',
+    tags: [],
+    urls: {
+      thumbnail: `/api/media/images/${id}/thumbnail`,
+      preview: `/api/media/images/${id}/preview`,
+      original: `/api/media/images/${id}/original`,
+    },
+    created_at: '2026-09-25T13:50:00Z',
+    ...overrides,
+  }
+}
+
+/** A collection answer `{ data, meta }` (contract ADR-0002). */
+export function pageOf<T>(data: T[], meta: Record<string, unknown> = {}) {
+  return { data, meta: { page: 1, per_page: 24, total: data.length, last_page: 1, ...meta } }
+}
+
 /** Mocks the Sanctum CSRF cookie + login/me endpoints so pages behind the `auth` middleware load. */
 export async function mockAuth(page: Page) {
   await page.route('**/sanctum/csrf-cookie', (route) =>

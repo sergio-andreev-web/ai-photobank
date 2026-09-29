@@ -10,6 +10,7 @@ from .common import REQUEST_ID_PATTERN, StrictModel, TagType
 
 EMBEDDING_DIMENSIONS = 1152
 PROMPT_VERSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+PROMPT_VERSION_MAX_LENGTH = 64
 
 
 class OcrItem(StrictModel):
@@ -47,7 +48,7 @@ class ImageAnalysisResponse(StrictModel):
     embedding: list[float] = Field(min_length=EMBEDDING_DIMENSIONS, max_length=EMBEDDING_DIMENSIONS)
     embedding_dimensions: Literal[1152] = EMBEDDING_DIMENSIONS
     models: AnalysisModels
-    prompt_version: str = Field(min_length=1, max_length=64)
+    prompt_version: str = Field(min_length=1, max_length=PROMPT_VERSION_MAX_LENGTH)
     processing_ms: int = Field(ge=0)
 
     @field_validator("request_id")

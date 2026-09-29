@@ -45,7 +45,7 @@ def test_analyze_returns_502_when_embedding_model_output_is_malformed(app_settin
     assert response.status_code == 502
     body = response.json()
     assert body["error"]["code"] == "MODEL_OUTPUT_INVALID"
-    assert body["error"]["details"]["prompt_version"] == "image-analysis-v1"
+    assert body["error"]["details"]["prompt_version"] == "image-analysis-v2"
 
 
 def test_analyze_returns_502_when_vision_model_output_is_malformed(app_settings):

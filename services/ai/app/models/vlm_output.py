@@ -7,10 +7,12 @@ Rules:
   nested objects such as a single concept are never taken for the root;
 - output cut off by AI_VLM_MAX_NEW_TOKENS keeps the caption and the fully
   formed OCR items / concepts that precede the cut;
-- no such object, wrong field shapes, or neither caption nor concepts ->
-  VisionOutputInvalid (caller retries, then 502 MODEL_OUTPUT_INVALID);
+- no such object, wrong field shapes, neither caption nor concepts, or a
+  concepts list none of whose items fits the schema -> VisionOutputInvalid
+  (caller retries, then 502 MODEL_OUTPUT_INVALID);
 - concept.type outside the TagType enum -> "other" (ADR-0010);
-- individual OCR items / concepts that cannot satisfy the schema are dropped;
+- individual OCR items / concepts that cannot satisfy the schema are dropped
+  (never completed with invented values, e.g. a missing confidence);
 - caption and OCR text are truncated to the contract maxLength;
 - concepts capped at 50, OCR items at 100; exact duplicates removed.
 """
@@ -221,6 +223,10 @@ def _parse_ocr(data: dict) -> list[OcrItem]:
         items.append(OcrItem(text=text, confidence=confidence))
         if len(items) == MAX_OCR_ITEMS:
             break
+
+    if len(items) < len(raw_items):
+        # Malformed items (e.g. plain strings) and repeats of a decoding loop.
+        logger.info("ai_service.vlm_ocr_dropped", extra={"dropped": len(raw_items) - len(items)})
     return items
 
 
@@ -255,6 +261,11 @@ def _parse_concepts(data: dict) -> list[Concept]:
         if len(concepts) == MAX_CONCEPTS:
             break
 
+    if raw_items and not concepts:
+        # Every item broke the schema the same way (say, all lack "confidence"):
+        # a format failure of this generation, not an image without concepts.
+        # Retrying beats a 200 that leaves the image untagged.
+        raise VisionOutputInvalid("no concept fits the schema")
     if len(concepts) < len(raw_items):
         logger.info("ai_service.vlm_concepts_dropped", extra={"dropped": len(raw_items) - len(concepts)})
     return concepts
