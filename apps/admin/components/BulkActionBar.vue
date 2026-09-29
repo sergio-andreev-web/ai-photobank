@@ -36,6 +36,18 @@
         >
           Обработать заново ({{ eligible('reprocess').length }})
         </UButton>
+        <UButton
+          size="sm"
+          variant="soft"
+          color="neutral"
+          icon="i-heroicons-arrow-down-tray"
+          :loading="downloading"
+          :disabled="images.length > 100"
+          :title="images.length > 100 ? 'Не больше 100 фото за раз' : undefined"
+          @click="download"
+        >
+          Скачать ({{ images.length }})
+        </UButton>
         <UButton size="sm" variant="soft" color="error" icon="i-heroicons-trash" @click="openMode('delete')">
           Удалить
         </UButton>
@@ -144,6 +156,20 @@ const mode = ref<'delete' | 'add-tag' | 'remove-tag' | null>(null)
 const tagId = ref<number | undefined>()
 const tagOptions = ref<{ label: string; value: number }[]>([])
 const running = ref<{ kind: BulkActionKind; finished: number; total: number } | null>(null)
+const downloading = ref(false)
+
+/** ZIP of the originals (ADR-0014); the selection stays as it is. */
+async function download() {
+  downloading.value = true
+  try {
+    const filename = await imagesApi.downloadImages(props.images.map(image => image.id))
+    emit('finished', `Архив ${filename} скачивается.`, props.images.map(image => image.id), 'success')
+  } catch (e) {
+    emit('finished', `Не удалось скачать: ${toApiProblem(e).message}`, props.images.map(image => image.id), 'warning')
+  } finally {
+    downloading.value = false
+  }
+}
 
 const selectionTags = computed(() => tagsOfSelection(props.images))
 

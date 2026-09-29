@@ -24,6 +24,7 @@
 | [0011](0011-media-serving.md) | Авторизованная отдача media, X-Accel-Redirect | Media | Accepted |
 | [0012](0012-similar-images.md) | Похожие изображения по image embedding | Search, Images | Accepted |
 | [0013](0013-trash-and-restore.md) | Корзина и восстановление изображений | Images, Media | Accepted |
+| [0014](0014-download-originals.md) | Скачивание оригиналов архивом | Images, Media | Accepted |
 
 Строка плана «ТЗ показывает массив embedding из 2 чисел» закрыта без ADR — это однозначное требование §5:
 `schemas/image-analysis.json` требует ровно 1152 числа, полный пример — `contracts/examples/ai/analyze-response.json`.
