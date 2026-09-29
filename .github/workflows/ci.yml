@@ -64,6 +64,15 @@ jobs:
           python3 -m pip install -q -r requirements-validation.txt
           python3 tools/validate_contracts.py
 
+      # QA contract guard (docs/qa/integration-qa.md): accepted operations,
+      # strict AI analysis schema, search rules, Nuxt API paths. Uses PyYAML/
+      # jsonschema installed by the step above.
+      - name: Contract guard tests (tests/contracts)
+        run: python3 -m unittest discover -s tests/contracts -v
+
+      - name: Orchestrator tests (tests/orchestrator)
+        run: python3 -m unittest discover -s tests/orchestrator -v
+
   lint:
     name: Linting
     runs-on: ubuntu-latest
@@ -119,6 +128,13 @@ jobs:
       - name: Run PHPUnit (SQLite, per phpunit.xml)
         working-directory: apps/api
         run: vendor/bin/phpunit
+
+      # QA-owned HTTP-to-queue §75 acceptance with FakeAiClient. It lives in
+      # tests/e2e (outside apps/api/tests), so phpunit.xml's suites don't pick
+      # it up; run it explicitly with the same config.
+      - name: MVP acceptance (tests/e2e/MvpAcceptanceTest.php, SQLite)
+        working-directory: apps/api
+        run: vendor/bin/phpunit -c phpunit.xml ../../tests/e2e/MvpAcceptanceTest.php
 
   backend-tests-pgsql:
     name: Backend Tests (PostgreSQL)
@@ -247,73 +263,92 @@ jobs:
         working-directory: apps/admin
         run: npx playwright test --project=chromium
 
-  # Full Compose stack smoke test, informational/non-blocking: the module test
-  # jobs above are the enforced gate. Its steps are skipped until both
-  # apps/api/Dockerfile and apps/admin/Dockerfile exist, so the job stays green
-  # instead of reporting a red check on every run.
-  integration:
-    name: Integration Smoke (informational)
+  # ТЗ §75 acceptance proof, informational/non-blocking for now (gating is the
+  # coordinator's call): on a fresh runner and clean checkout, literally
+  # `make setup` (§66), then the browser e2e in tests/e2e/stack against nginx
+  # — real Nuxt, Laravel, worker, PostgreSQL/pgvector and the mock AI (ai-cpu).
+  acceptance:
+    name: "§75 Acceptance: make setup + browser e2e (informational)"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check service Dockerfiles
-        id: dockerfiles
-        run: |
-          if [ -f apps/api/Dockerfile ] && [ -f apps/admin/Dockerfile ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::apps/api/Dockerfile or apps/admin/Dockerfile is missing; skipping the stack smoke test"
-          fi
-
-      - name: Set up Docker Buildx
-        if: steps.dockerfiles.outputs.present == 'true'
-        uses: docker/setup-buildx-action@v3
-
+      # Built up front so a build failure is its own step; `make setup` then
+      # finds the images and only creates containers.
       - name: Build images
-        if: steps.dockerfiles.outputs.present == 'true'
-        run: docker compose build --no-cache
+        run: docker compose --profile ai build
 
-      # `--wait` blocks until every started service's own healthcheck
-      # reports healthy (postgres/redis/rabbitmq, api's `curl .../up`,
-      # admin's `curl :3000`, nginx's `wget .../health`) or the timeout
-      # elapses, instead of a fixed sleep — nginx's `depends_on: condition:
-      # service_healthy` on api/admin means it won't even start listening
-      # until those are healthy, so this also validates that chain.
-      - name: Start services
-        if: steps.dockerfiles.outputs.present == 'true'
+      - name: make setup
+        run: make setup
+
+      # make setup already waits on the healthchecks (--wait); this states the
+      # expectations explicitly and checks the edge from the host.
+      - name: Check stack health
         run: |
-          cp .env.example .env
-          sed -i "s|^APP_KEY=$|APP_KEY=base64:$(openssl rand -base64 32)|" .env
-          # Same order as `make setup`: dependencies and api, migrations, then the rest.
-          docker compose up -d --wait --wait-timeout 180 postgres redis rabbitmq api
-          docker compose exec -T api php artisan migrate --force
-          docker compose up -d --wait --wait-timeout 180 admin nginx
-          # The worker has no healthcheck (it serves no HTTP), so --wait cannot gate it:
-          # start it separately and require it to still be running a few seconds later.
-          docker compose up -d api-worker
-          sleep 10
+          for service in postgres redis rabbitmq api admin nginx ai-cpu; do
+            status="$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose --profile ai ps -q "$service")")"
+            echo "$service: $status"
+            test "$status" = healthy
+          done
+          # The worker serves no HTTP and has no healthcheck: it must simply be running.
           test "$(docker compose ps api-worker --format '{{.State}}')" = running
+          curl -fsS http://localhost/health
+          curl -fsS -o /dev/null http://localhost/login
+          curl -fsS http://localhost:8001/ready
 
-      # nginx's own /health is a static stub (always 200 once nginx is up);
-      # api/admin health is already verified by `--wait` above via their own
-      # healthchecks. This just confirms the edge is reachable from the host
-      # on the upstream ports nginx's conf.d expects (api:8000, admin:3000
-      # internally) and proxies through to the admin UI at `/`.
-      - name: Check nginx edge health
-        if: steps.dockerfiles.outputs.present == 'true'
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/e2e/stack/package-lock.json
+
+      - name: Install e2e dependencies
+        working-directory: tests/e2e/stack
+        run: npm ci
+
+      - name: Type-check e2e specs
+        working-directory: tests/e2e/stack
+        run: npx tsc --noEmit
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('tests/e2e/stack/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        working-directory: tests/e2e/stack
+        run: npx playwright install --with-deps chromium
+
+      # unit (PNG generator) + acceptance (§75) + ai-outage (§46: stops and
+      # restarts ai-cpu through docker compose from the test).
+      - name: Run §75 acceptance e2e
+        working-directory: tests/e2e/stack
+        env:
+          E2E_AI_OUTAGE: '1'
+        run: npx playwright test
+
+      - name: Collect stack logs
+        if: failure()
         run: |
-          curl -f http://localhost/health
-          curl -f http://localhost/ > /dev/null
+          mkdir -p stack-logs
+          docker compose --profile ai ps -a > stack-logs/ps.txt 2>&1 || true
+          docker compose --profile ai logs --no-color --timestamps > stack-logs/compose.log 2>&1 || true
+          # Laravel logs to storage/logs (not stdout) in this image.
+          docker compose exec -T api sh -c 'cat storage/logs/*.log' > stack-logs/laravel.log 2>&1 || true
 
-      - name: Check database connectivity
-        if: steps.dockerfiles.outputs.present == 'true'
-        run: docker compose exec -T postgres pg_isready -U photobank
-
-      - name: View logs
-        if: failure() && steps.dockerfiles.outputs.present == 'true'
-        run: docker compose logs
+      - name: Upload e2e report and stack logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: section-75-acceptance
+          path: |
+            tests/e2e/stack/playwright-report/
+            tests/e2e/stack/test-results/
+            stack-logs/
+          retention-days: 14
+          if-no-files-found: ignore
