@@ -107,7 +107,7 @@
           >
             <h3 class="font-semibold text-red-900">Удалить изображение?</h3>
             <p class="mt-1 text-sm text-red-700">
-              Оно исчезнет из галереи, поиска и счётчиков. Сам файл и история анализа сохранятся.
+              Оно исчезнет из галереи, поиска и счётчиков. Его можно будет восстановить из корзины.
             </p>
             <div class="mt-3 flex gap-2">
               <UButton color="error" :loading="actionLoading === 'delete'" @click="handleDelete">Удалить</UButton>

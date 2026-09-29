@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.5.0` |
+| Версия | `1.6.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -125,6 +125,9 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    порога релевантности (ADR-0004, дополнение 2026-09-30). Схемы запроса и ответа не меняются; потребитель — backend.
    `1.5.0` — `GET /api/admin/images/{image}/similar` (похожие изображения, ADR-0012); поиск по словам учитывает и имя
    файла. Новая операция — совместимое изменение; потребители — backend и frontend.
+   `1.6.0` — корзина (ADR-0013): `GET /api/admin/images/trash`, `POST /api/admin/images/{image}/restore`,
+   `details.existing_image_deleted` у `IMAGE_ALREADY_EXISTS`, media отдается и для изображений в корзине.
+   Совместимо (новые операции и поле); потребители — backend и frontend.
 
 ## Проверка
 

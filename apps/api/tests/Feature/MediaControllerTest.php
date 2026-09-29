@@ -40,6 +40,15 @@ class MediaControllerTest extends TestCase
         ]);
     }
 
+    public function test_media_of_an_image_in_the_trash_is_served(): void
+    {
+        $user = $this->loginAsAdmin();
+        $image = $this->makeImage($user);
+        $image->delete();
+
+        $this->get("/api/media/images/{$image->id}/original")->assertOk();
+    }
+
     public function test_media_requires_authentication(): void
     {
         $this->getJson('/api/media/images/1/original')->assertStatus(401);
@@ -66,18 +75,6 @@ class MediaControllerTest extends TestCase
         $contentDisposition = $response->headers->get('Content-Disposition');
         $this->assertStringContainsString('inline', $contentDisposition);
         $this->assertStringContainsString('photo one.jpg', $contentDisposition);
-    }
-
-    public function test_soft_deleted_image_returns_404(): void
-    {
-        $user = $this->loginAsAdmin();
-        $image = $this->makeImage($user);
-        $image->delete();
-
-        $response = $this->getJson("/api/media/images/{$image->id}/original");
-
-        $response->assertStatus(404);
-        $response->assertJsonPath('error.code', 'IMAGE_NOT_FOUND');
     }
 
     public function test_thumbnail_not_yet_available_returns_404(): void
