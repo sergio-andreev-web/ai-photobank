@@ -119,3 +119,16 @@ body { margin: 0; background: #f5f7fb; color: #172033; }
 .bulk-bar { padding: 12px 16px; box-shadow: 0 8px 28px #14294a1f; }
 .bulk-panel { margin-top: 12px; padding: 12px; border: 1px solid #e6ecf4; border-radius: 12px; }
 .surface-card.is-selected { border-color: #2862d7; box-shadow: 0 0 0 2px #2862d7; }
+
+/* Full-screen image viewer */
+.lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: #0b1220f2; color: #fff; outline: none; }
+.lightbox-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; }
+.lightbox-stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px 72px 24px; }
+.lightbox-image { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px #0008; }
+.lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 48px; height: 48px; border-radius: 999px; background: #ffffff1f; color: #fff; font-size: 24px; }
+.lightbox-nav:hover:not(:disabled) { background: #ffffff38; }
+.lightbox-nav:disabled { opacity: .25; cursor: default; }
+@media (max-width: 640px) { .lightbox-stage { padding: 8px 8px 72px; } .lightbox-nav { top: auto; bottom: 14px; transform: none; } }
+.gallery-card-zoom { position: absolute; top: 10px; right: 10px; z-index: 10; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #ffffffe6; color: #1d2d48; box-shadow: 0 1px 4px #14294a26; opacity: 0; transition: opacity .15s; }
+.relative:hover > .gallery-card-zoom, .gallery-card-zoom:focus-visible { opacity: 1; }
+@media (hover: none) { .gallery-card-zoom { opacity: 1; } }
