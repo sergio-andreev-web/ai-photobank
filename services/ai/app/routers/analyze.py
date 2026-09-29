@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 
-from ..concurrency import InferenceLimiter
+from ..concurrency import InferenceLimiters
 from ..config import Settings
 from ..inference import translate_model_errors
 from ..models.registry import ModelRegistry
@@ -27,7 +27,7 @@ def analyze_image(
 ) -> ImageAnalysisResponse:
     settings: Settings = request.app.state.settings
     registry: ModelRegistry = request.app.state.registry
-    limiter: InferenceLimiter = request.app.state.limiter
+    limiters: InferenceLimiters = request.app.state.limiters
 
     missing_fields = {}
     if image is None:
@@ -59,7 +59,7 @@ def analyze_image(
         request_id=request_id,
     )
 
-    with limiter.slot(request_id=request_id):
+    with limiters.vision.slot(request_id=request_id):
         started = time.monotonic()
         with translate_model_errors(request_id=request_id, prompt_version=settings.prompt_version):
             vision_result = registry.vision_model.analyze(processed)

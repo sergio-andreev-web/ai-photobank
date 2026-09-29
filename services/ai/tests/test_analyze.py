@@ -179,13 +179,10 @@ def test_analyze_service_busy_when_concurrency_exhausted(app_settings, monkeypat
     from fastapi.testclient import TestClient
 
     from app.app import create_app
-    from app.concurrency import InferenceLimiter
-
     app = create_app(app_settings)
     with TestClient(app) as busy_client:
         # Simulate every slot already taken by holding the single permit open.
-        app.state.limiter = InferenceLimiter(1)
-        with app.state.limiter.slot():
+        with app.state.limiters.vision.slot():
             response = busy_client.post(
                 "/v1/images/analyze",
                 data={"request_id": VALID_REQUEST_ID},

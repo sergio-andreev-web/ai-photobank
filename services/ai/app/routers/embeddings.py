@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
 
-from ..concurrency import InferenceLimiter
+from ..concurrency import InferenceLimiters
 from ..config import Settings
 from ..inference import translate_model_errors
 from ..models.registry import ModelRegistry
@@ -22,13 +22,14 @@ def create_text_embeddings(
 ) -> TextEmbeddingsResponse:
     settings: Settings = request.app.state.settings
     registry: ModelRegistry = request.app.state.registry
-    limiter: InferenceLimiter = request.app.state.limiter
+    limiters: InferenceLimiters = request.app.state.limiters
     request_id = getattr(request.state, "request_id", None)
 
     if not registry.ready:
         raise ModelNotReadyError(request_id=request_id)
 
-    with limiter.slot(request_id=request_id):
+    # Separate from the analysis pool: a search query must not wait for Qwen.
+    with limiters.text.slot(request_id=request_id, wait_seconds=settings.ai_text_embedding_wait_seconds):
         with translate_model_errors(request_id=request_id, prompt_version=settings.prompt_version):
             embeddings = registry.embedding_model.text_embeddings(body.texts)
 

@@ -56,8 +56,10 @@ def _fake_backend() -> types.ModuleType:
 
     class Encoder:
         @classmethod
-        def load(cls, path, *, device, dtype):
-            return _Loaded(os.environ.get(ASYNC_LOAD_ENV))
+        def load(cls, path, *, device, dtype, text_device):
+            loaded = _Loaded(os.environ.get(ASYNC_LOAD_ENV))
+            loaded.text_device = text_device
+            return loaded
 
     class Generator:
         @classmethod
@@ -85,3 +87,33 @@ def test_environment_is_set_before_weights_load(monkeypatch, device, expected):
 
     assert embedding._encoder.env_at_load == expected
     assert vision._generator.env_at_load == expected
+
+
+@pytest.mark.parametrize(
+    ("device", "configured", "expected"),
+    [
+        (AiDevice.MPS, "auto", AiDevice.CPU),
+        (AiDevice.CUDA, "auto", AiDevice.CUDA),
+        (AiDevice.CPU, "auto", AiDevice.CPU),
+        (AiDevice.CUDA, "cpu", AiDevice.CPU),
+    ],
+)
+def test_text_embedding_device(device, configured, expected):
+    from app.models.providers import text_embedding_device
+
+    settings = make_settings(AI_TEXT_EMBEDDING_DEVICE=configured)
+    assert text_embedding_device(settings, device) is expected
+
+
+def test_mps_text_tower_is_built_on_cpu(monkeypatch):
+    monkeypatch.setitem(sys.modules, "app.models.transformers_backend", _fake_backend())
+    monkeypatch.setattr(
+        providers,
+        "resolve_weights",
+        lambda name, revision, hf_home: ResolvedWeights(path=Path("/weights"), revision="sha"),
+    )
+    settings = make_settings(AI_MODEL_PROVIDER="transformers", DTYPE="float32")
+
+    _, embedding = build_transformers_models(settings, AiDevice.MPS, "PROMPT")
+
+    assert embedding._encoder.text_device == "cpu"
