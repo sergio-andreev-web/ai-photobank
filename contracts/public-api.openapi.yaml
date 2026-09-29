@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.7.0
+  version: 1.8.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -560,6 +560,48 @@ paths:
           $ref: '#/components/responses/ImageNotFound'
         '419':
           $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/download:
+    post:
+      tags: [images]
+      operationId: downloadImages
+      summary: Скачать оригиналы архивом
+      x-adr: ADR-0014
+      description: |
+        ZIP с оригиналами выбранных изображений (без сжатия: JPEG/PNG/WebP уже сжаты). Имена файлов в архиве —
+        `original_name`; совпадающие получают суффикс « (2)», « (3)». До 100 изображений и 2 GiB суммарно, иначе
+        422 `VALIDATION_ERROR` (`details.fields.image_ids`). Несуществующие и удаленные изображения — тоже 422 с
+        их ID. Оригинал отсутствует в хранилище — 404 `MEDIA_NOT_AVAILABLE`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageDownloadRequest'
+      responses:
+        '200':
+          description: 'Архив; `Content-Disposition: attachment; filename="photobank-<дата>.zip"`.'
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`MEDIA_NOT_AVAILABLE` — оригинала нет в хранилище.'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/error-response.json'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/admin/images/trash:
     get:
       tags: [images]
@@ -1971,6 +2013,19 @@ components:
             $ref: '#/components/schemas/ImageSummary'
         meta:
           $ref: '#/components/schemas/PaginationMeta'
+    ImageDownloadRequest:
+      type: object
+      additionalProperties: false
+      required: [image_ids]
+      x-adr: ADR-0014
+      properties:
+        image_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Id'
     TrashedImageSummary:
       x-adr: ADR-0013
       allOf:

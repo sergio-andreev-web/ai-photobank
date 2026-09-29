@@ -168,6 +168,8 @@ return [
     'unexpected_fields' => 'Неизвестные поля: :fields.',
     'at_least_one_field' => 'Укажите хотя бы одно поле: :fields.',
     'unknown_tag_ids' => 'Неизвестные теги: :ids.',
+    'unknown_image_ids' => 'Изображения не найдены или удалены: :ids.',
+    'download_too_large' => 'Архив больше 2 ГБ — выберите меньше фото.',
 
     'custom' => [],
 

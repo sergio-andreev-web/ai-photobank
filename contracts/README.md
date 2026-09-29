@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Версия | `1.7.0` |
+| Версия | `1.8.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
@@ -130,6 +130,8 @@ Semantic versioning для каталога `contracts/` целиком (одн�
    Совместимо (новые операции и поле); потребители — backend и frontend.
    `1.7.0` — редактирование подписи: `caption` в `ImagePatchRequest`, `caption_edited` в `ImageDetail`; ручная подпись
    переживает reprocess (ADR-0006, дополнение 2026-09-30). Потребители — backend и frontend.
+   `1.8.0` — `POST /api/admin/images/download`: ZIP с оригиналами выбранных изображений (ADR-0014). Потребители — backend
+   и frontend.
 
 ## Проверка
 

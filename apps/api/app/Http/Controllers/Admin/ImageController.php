@@ -8,6 +8,10 @@ use App\Models\Image;
 use App\Services\Processing\BatchStatusUpdater;
 use App\Services\Processing\ProcessingPipeline;
 use App\Services\Search\ImageSearch;
+use App\Contracts\Storage\PhotoStorageInterface;
+use App\Http\Controllers\Concerns\RejectsUnknownFields;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use ZipArchive;
 use App\Support\Api;
 use App\Support\Presenters\ImagePresenter;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +27,8 @@ use Illuminate\Validation\ValidationException;
  */
 class ImageController extends Controller
 {
+    use RejectsUnknownFields;
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -73,6 +79,81 @@ class ImageController extends Controller
             'data' => $images->map(fn (Image $image) => ImagePresenter::summary($image))->all(),
             'meta' => Api::paginationMeta($page, $perPage, $total),
         ]);
+    }
+
+    /** ADR-0014: at most this many images and bytes per archive. */
+    private const int DOWNLOAD_MAX_IMAGES = 100;
+
+    private const int DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+    /**
+     * POST /admin/images/download (ADR-0014): the originals as an uncompressed ZIP, built in a
+     * temporary file (no memory for the payload) and deleted once sent.
+     */
+    public function download(Request $request, PhotoStorageInterface $storage): BinaryFileResponse
+    {
+        $this->rejectUnknownFields($request, ['image_ids']);
+        $validated = $request->validate([
+            'image_ids' => ['required', 'array', 'min:1', 'max:'.self::DOWNLOAD_MAX_IMAGES],
+            'image_ids.*' => ['integer', 'min:1', 'distinct'],
+        ]);
+        $ids = array_map(intval(...), $validated['image_ids']);
+
+        $images = Image::whereIn('id', $ids)->get()->keyBy('id');
+        $missing = array_values(array_diff($ids, $images->keys()->all()));
+        if ($missing !== []) {
+            throw ValidationException::withMessages([
+                'image_ids' => [__('validation.unknown_image_ids', ['ids' => implode(', ', $missing)])],
+            ]);
+        }
+        if ($images->sum('file_size') > self::DOWNLOAD_MAX_BYTES) {
+            throw ValidationException::withMessages(['image_ids' => [__('validation.download_too_large')]]);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'photobank-zip-');
+        $zip = new ZipArchive;
+        $zip->open($path, ZipArchive::OVERWRITE);
+        $used = [];
+        try {
+            foreach ($ids as $id) {
+                $image = $images[$id];
+                if (! $storage->exists($image->storage_key)) {
+                    throw new ApiException('MEDIA_NOT_AVAILABLE', 404, 'Original is not available', ['image_id' => $id]);
+                }
+                $name = self::uniqueEntryName($image->original_name, $used);
+                $zip->addFile($storage->path($image->storage_key), $name);
+                $zip->setCompressionName($name, ZipArchive::CM_STORE);
+            }
+            $zip->close();
+        } catch (\Throwable $e) {
+            @unlink($path);
+            throw $e;
+        }
+
+        return response()
+            ->download($path, 'photobank-'.now()->format('Ymd-His').'.zip', ['Content-Type' => 'application/zip'])
+            ->deleteFileAfterSend();
+    }
+
+    /**
+     * «photo.jpg», then «photo (2).jpg», «photo (3).jpg» for repeats (case-insensitive: archives are
+     * unpacked on case-insensitive file systems too).
+     *
+     * @param  array<string, true>  $used
+     */
+    private static function uniqueEntryName(string $name, array &$used): string
+    {
+        $name = str_replace(['/', '\\'], '_', $name);
+        $dot = strrpos($name, '.');
+        [$base, $extension] = $dot > 0 ? [substr($name, 0, $dot), substr($name, $dot)] : [$name, ''];
+
+        $candidate = $name;
+        for ($n = 2; isset($used[mb_strtolower($candidate)]); $n++) {
+            $candidate = "{$base} ({$n}){$extension}";
+        }
+        $used[mb_strtolower($candidate)] = true;
+
+        return $candidate;
     }
 
     /**

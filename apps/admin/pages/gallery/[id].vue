@@ -74,6 +74,16 @@
 
           <div class="flex flex-wrap gap-2">
             <UButton
+              :to="image.urls.original"
+              :download="image.original_name"
+              external
+              variant="soft"
+              color="neutral"
+              icon="i-heroicons-arrow-down-tray"
+            >
+              Скачать оригинал
+            </UButton>
+            <UButton
               v-if="image.status === 'failed'"
               color="warning"
               :loading="actionLoading === 'retry'"

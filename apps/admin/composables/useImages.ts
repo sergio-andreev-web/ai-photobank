@@ -68,6 +68,38 @@ export function useImages() {
     return data
   }
 
+  /**
+   * POST /admin/images/download (ADR-0014): the originals as a ZIP, saved through a temporary
+   * object URL. An error body arrives as a Blob too; it is parsed back to JSON so the usual
+   * error texts (useApiError) apply.
+   */
+  async function downloadImages(ids: number[]) {
+    try {
+      const response = await api.post<Blob>('/admin/images/download', { image_ids: ids }, { responseType: 'blob' })
+      const disposition = String(response.headers['content-disposition'] ?? '')
+      const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? 'photobank.zip'
+      const url = URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      return filename
+    } catch (e) {
+      const response = (e as { response?: { data?: unknown } })?.response
+      if (response?.data instanceof Blob) {
+        try {
+          response.data = JSON.parse(await response.data.text())
+        } catch {
+          // Not JSON: keep the generic HTTP-status text.
+        }
+      }
+      throw e
+    }
+  }
+
   /** GET /admin/images/trash (ADR-0013): soft-deleted images, most recently deleted first. */
   async function listTrash(params?: PaginationParams) {
     const { data } = await api.get<TrashedImageList>('/admin/images/trash', { params })
@@ -113,6 +145,7 @@ export function useImages() {
     deleteImage,
     listSimilar,
     listTrash,
+    downloadImages,
     restoreImage,
     uploadImage,
     reprocessImage,
