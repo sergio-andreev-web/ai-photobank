@@ -91,6 +91,7 @@
               <USelectMenu
                 v-model="tagToAdd"
                 :items="tagOptions"
+                value-key="value"
                 placeholder="Select a tag"
                 class="flex-1"
                 @update:search-term="onTagSearch"
