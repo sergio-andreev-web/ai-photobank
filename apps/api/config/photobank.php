@@ -108,6 +108,26 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Search relevance (ADR-0004, 2026-09-30 addendum)
+    |--------------------------------------------------------------------------
+    |
+    | semantic/hybrid return images whose caption, OCR text or tag names contain
+    | every query word first; the rest only when their similarity reaches
+    | max(min_similarity, relative_similarity × the best similarity of the query).
+    | SigLIP2 text→image similarity on the 21-photo test set (2026-09-30):
+    | relevant 0.10–0.14, unrelated ≤ 0.07.
+    |
+    */
+
+    'search' => [
+        'min_similarity' => (float) env('SEARCH_MIN_SIMILARITY', 0.05),
+        'relative_similarity' => (float) env('SEARCH_RELATIVE_SIMILARITY', 0.5),
+        // With a word match the matched images are the answer; only near-best neighbours join.
+        'relative_similarity_with_word_match' => (float) env('SEARCH_RELATIVE_SIMILARITY_WITH_WORD_MATCH', 0.8),
+    ],
+
     'tagging' => [
         'auto_attach_threshold' => (float) env('TAG_AUTO_ATTACH_THRESHOLD', 0.92),
         'candidate_threshold' => (float) env('TAG_CANDIDATE_THRESHOLD', 0.68),

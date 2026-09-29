@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.3.0
+  version: 1.4.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -1296,8 +1296,11 @@ paths:
       description: |
         Режимы §45 (поле `mode` и правила валидации — утверждено, ADR-0004):
         - `tags` — только `tag_ids` (≥1), AI не вызывается; сортировка created_at desc, id desc.
-        - `semantic` — только `query`; сортировка по similarity desc, затем id asc.
-        - `hybrid` — `query` + `tag_ids` (≥1); теги — жесткий фильтр (§43), query — ранжирование.
+        - `semantic` — только `query`. Выдача (ADR-0004, дополнение 2026-09-30): сначала изображения, у которых слова
+          запроса встречаются в caption, распознанном тексте или именах тегов (с учетом русской морфологии), затем
+          остальные с similarity не ниже порога релевантности (`max(абсолютный минимум, доля от лучшей similarity)`,
+          настраивается на backend); внутри групп — similarity desc, затем id asc. `total` — число таких изображений.
+        - `hybrid` — `query` + `tag_ids` (≥1); теги — жесткий фильтр (§43), query — ранжирование и отбор, как в `semantic`.
         Несколько tag_ids — изображение должно иметь все (AND); дочерние теги не раскрываются (утверждено).
         Векторы ищутся только среди embeddings активной версии модели (§77, ADR-0009).
         `semantic_score = 1 - cosine_distance` возвращается только при `debug=true` (§44).
