@@ -10,10 +10,18 @@
 # it from the project-root .env in the base file, and `make ai-mac` sources
 # the same .env for the native process, so both sides stay in sync (§63).
 
+# The native service runs the real SigLIP2 weights, so semantic search must activate their
+# vectors (ADR-0009), not the mock-embedding default of .env.example: model key without the
+# org prefix, version = the pinned EMBEDDING_MODEL_REVISION the service reports.
+x-real-embedding: &real-embedding
+  EMBEDDING_ACTIVE_MODEL_KEY: siglip2-so400m-patch14-384
+  EMBEDDING_ACTIVE_MODEL_VERSION: "${EMBEDDING_MODEL_REVISION}"
+
 services:
   api:
     environment:
       AI_BASE_URL: http://host.docker.internal:8001
+      <<: *real-embedding
 
   # Processing stages (images.ai / images.reprocess queues) run in
   # api-worker, not api — without this override the worker keeps the base
@@ -22,6 +30,7 @@ services:
   api-worker:
     environment:
       AI_BASE_URL: http://host.docker.internal:8001
+      <<: *real-embedding
 
   admin:
     environment:

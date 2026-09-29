@@ -84,7 +84,25 @@ give you (no Nuxt hot-reload — that still needs `npm run dev` on the host).
 For local Mac development with GPU acceleration (§8, §58). The rest of the
 stack (Postgres, Redis, RabbitMQ, Laravel, Nuxt, Nginx) still runs in Docker;
 only the AI service runs natively so it can use Apple's MPS backend, which
-isn't available inside Docker Desktop's Linux VM:
+isn't available inside Docker Desktop's Linux VM.
+
+**One command** (after the one-time venv install below):
+
+```bash
+make start    # AI service (Qwen3-VL + SigLIP2) in the background + the Docker stack; waits until ready
+make status   # containers and AI state
+make stop     # stops both; data volumes are kept
+```
+
+`make start` runs `infra/scripts/ai-mac.sh start` (pid and log in `.run/`,
+the process survives the terminal), then `make up-mac`: the stack with
+`docker-compose.mac.yml`, rebuilt if the source changed, migrations and the
+local admin seed. The overlay also sets `EMBEDDING_ACTIVE_MODEL_KEY/VERSION`
+to the real SigLIP2 weights, so semantic search works without editing `.env`.
+The prompt comes from `PROMPT_VERSION` in `.env`. `AI_MAC_DEVICE=cpu make start`
+uses the CPU fallback.
+
+Step by step instead:
 
 ```bash
 # Start services (without AI)
