@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.4.0
+  version: 1.5.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -558,6 +558,38 @@ paths:
           $ref: '#/components/responses/ImageNotFound'
         '419':
           $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/{image}/similar:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    get:
+      tags: [images]
+      operationId: listSimilarImages
+      summary: Похожие изображения
+      x-adr: ADR-0012
+      description: |
+        Изображения, похожие на данное по image embedding активной версии модели (§77, ADR-0009), AI не вызывается.
+        Возвращаются только не удаленные изображения с активным embedding, само изображение исключается,
+        similarity ≥ порога (backend, `SIMILAR_MIN_SIMILARITY`, стартовое значение 0.7 — ADR-0012).
+        Сортировка similarity desc, id asc. Если у изображения нет активного embedding (еще не обработано) —
+        пустая страница, не ошибка.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Страница похожих изображений.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/admin/images/{image}/reprocess:
     parameters:
       - $ref: '#/components/parameters/ImageId'
@@ -1297,7 +1329,7 @@ paths:
         Режимы §45 (поле `mode` и правила валидации — утверждено, ADR-0004):
         - `tags` — только `tag_ids` (≥1), AI не вызывается; сортировка created_at desc, id desc.
         - `semantic` — только `query`. Выдача (ADR-0004, дополнение 2026-09-30): сначала изображения, у которых слова
-          запроса встречаются в caption, распознанном тексте или именах тегов (с учетом русской морфологии), затем
+          запроса встречаются в имени файла, caption, распознанном тексте или именах тегов (с учетом русской морфологии), затем
           остальные с similarity не ниже порога релевантности (`max(абсолютный минимум, доля от лучшей similarity)`,
           настраивается на backend); внутри групп — similarity desc, затем id asc. `total` — число таких изображений.
         - `hybrid` — `query` + `tag_ids` (≥1); теги — жесткий фильтр (§43), query — ранжирование и отбор, как в `semantic`.

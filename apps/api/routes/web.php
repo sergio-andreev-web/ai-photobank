@@ -45,6 +45,7 @@ Route::prefix('api')->group(function () {
 
             Route::get('/images', [ImageController::class, 'index']);
             Route::get('/images/{image}', [ImageController::class, 'show'])->whereNumber('image');
+            Route::get('/images/{image}/similar', [ImageController::class, 'similar'])->whereNumber('image');
             Route::patch('/images/{image}', [ImageController::class, 'update'])->whereNumber('image');
             Route::delete('/images/{image}', [ImageController::class, 'destroy'])->whereNumber('image');
             Route::post('/images/{image}/reprocess', [ImageController::class, 'reprocess'])->whereNumber('image');
