@@ -91,24 +91,56 @@ migrate:
 seed:
 	docker compose exec api php artisan db:seed
 
-# Run all tests
+# Run all tests (§66). Each suite runs in a throwaway toolchain container
+# against the checked-out source, so it works right after `git clone` without
+# PHP/Node/Python on the host and without the stack running: the runtime images
+# ship no dev dependencies (composer --no-dev, Nuxt .output only, no pytest).
+# The whole checkout is mounted because tests read contracts/ from the repo
+# root; anonymous volumes keep the container's vendor/node_modules/.nuxt off
+# the host tree, and named volumes cache downloads between runs.
 test: test-backend test-frontend test-ai
 
+# apps/api image = PHP 8.4 with the same extensions as production; built
+# straight from its Dockerfile so no .env/compose project is needed.
+API_TOOLCHAIN_IMAGE := photobank-api-toolchain
+
+# PHPUnit on SQLite with FakeAiClient (phpunit.xml), invoked like CI does:
+# `php artisan test` would also want an apps/api/.env. APP_ENV is reset because
+# the image sets APP_ENV=production and phpunit.xml does not force its value.
 test-backend:
-	docker compose exec api php artisan test
+	docker build -t $(API_TOOLCHAIN_IMAGE) apps/api
+	docker run --rm --user root --entrypoint sh -e APP_ENV=testing \
+		-v "$(CURDIR):/repo" -v /repo/apps/api/vendor \
+		-v photobank_composer_cache:/root/.cache/composer \
+		-w /repo/apps/api $(API_TOOLCHAIN_IMAGE) \
+		-c 'composer install --no-interaction --no-progress --quiet && vendor/bin/phpunit'
 
+# Vitest unit tests; the mock-API Playwright suite runs in CI (apps/admin: npx playwright test).
 test-frontend:
-	docker compose exec admin npm run test
+	docker run --rm \
+		-v "$(CURDIR):/repo" -v /repo/apps/admin/node_modules -v /repo/apps/admin/.nuxt \
+		-v photobank_npm_cache:/root/.npm \
+		-w /repo/apps/admin node:22-alpine \
+		sh -c 'npm ci --no-audit --no-fund --loglevel=error && npx nuxi prepare && npx vitest run'
 
+# pytest with mock models only; real-model tests are opt-in via `-m model` (§73).
 test-ai:
-	docker compose --profile ai exec ai-cpu pytest -v
+	docker run --rm -e PYTHONDONTWRITEBYTECODE=1 \
+		-v "$(CURDIR):/repo" -v photobank_pip_cache:/root/.cache/pip \
+		-w /repo/services/ai python:3.12-slim \
+		sh -c 'pip install --quiet --disable-pip-version-check --root-user-action=ignore -r requirements-dev.txt && python -m pytest -q -p no:cacheprovider'
 
 # Code quality checks
 lint: lint-backend lint-frontend lint-ai
 
+# Pint (laravel/pint is the backend's only configured linter; phpstan is not installed).
 lint-backend:
-	docker compose exec api ./vendor/bin/pint --test
-	docker compose exec api ./vendor/bin/phpstan analyse
+	docker build -t $(API_TOOLCHAIN_IMAGE) apps/api
+	docker run --rm --user root --entrypoint sh \
+		-v "$(CURDIR):/repo" -v /repo/apps/api/vendor \
+		-v photobank_composer_cache:/root/.cache/composer \
+		-w /repo/apps/api $(API_TOOLCHAIN_IMAGE) \
+		-c 'composer install --no-interaction --no-progress --quiet && vendor/bin/pint --test'
 
 lint-frontend:
 	docker compose exec admin npm run lint

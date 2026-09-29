@@ -45,7 +45,7 @@ make down            # Stop all services
 make logs            # View logs
 make migrate         # Run migrations
 make seed            # Seed database
-make test            # Run all tests
+make test            # Run all tests (backend, admin, AI) in throwaway containers; needs only Docker, not the running stack
 make ai-mac          # Run AI natively on Mac with MPS
 make ai-mac-cpu      # Same, but CPU fallback (dev/smoke only)
 make ai-test         # Run AI with CPU for testing
