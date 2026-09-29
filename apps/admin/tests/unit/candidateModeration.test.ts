@@ -26,7 +26,8 @@ describe('draftError', () => {
 describe('isStrongMatch', () => {
   const tag = { id: 1, name: 'white', type: 'color' as const, status: 'active' as const }
   it('needs a closest tag with high similarity', () => {
-    expect(isStrongMatch({ closest_tag: tag, similarity: 0.82 })).toBe(true)
+    expect(isStrongMatch({ closest_tag: tag, similarity: 0.905 })).toBe(true)
+    expect(isStrongMatch({ closest_tag: tag, similarity: 0.86 })).toBe(false)
     expect(isStrongMatch({ closest_tag: tag, similarity: 0.6 })).toBe(false)
     expect(isStrongMatch({ closest_tag: null, similarity: null })).toBe(false)
   })

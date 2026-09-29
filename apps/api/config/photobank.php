@@ -96,8 +96,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | Stage 3 thresholds on cosine similarity (1 - cosine distance, ADR-0009)
-    | between a concept's text embedding and tag_embeddings. Starting values
-    | from §37, to be tuned on a validation dataset:
+    | between a concept's text embedding and tag_embeddings. §37 starts at
+    | 0.82; measured on SigLIP2 text embeddings (2026-09-30) that value attaches
+    | unrelated words (стадион~замок 0.845, ключ~замок 0.866), while forms of the
+    | same concept score ≥ 0.927 (здания~здание 0.939, защитная каска~каска 0.963)
+    | and different concepts ≤ 0.905. So auto-attach is kept for word forms only;
+    | everything else goes to moderation as a candidate with its closest tag:
     |   >= auto_attach            → assign the canonical tag;
     |   >= candidate, < auto      → tag_candidate with closest_tag;
     |   <  candidate              → new tag_candidate.
@@ -105,7 +109,7 @@ return [
     */
 
     'tagging' => [
-        'auto_attach_threshold' => (float) env('TAG_AUTO_ATTACH_THRESHOLD', 0.82),
+        'auto_attach_threshold' => (float) env('TAG_AUTO_ATTACH_THRESHOLD', 0.92),
         'candidate_threshold' => (float) env('TAG_CANDIDATE_THRESHOLD', 0.68),
         'semantic_top_k' => 5,
     ],
