@@ -1,4 +1,5 @@
 .PHONY: help setup up up-dev up-ai down migrate seed test lint ai-mac ai-mac-cpu _ai-mac-run ai-test ai-health logs reset \
+	start stop status up-mac \
 	prod-config prod-up prod-down prod-logs prod-health backup restore test-e2e
 
 help:
@@ -6,6 +7,11 @@ help:
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup       Initialize development environment (one-time)"
+	@echo ""
+	@echo "Mac, real models (one command):"
+	@echo "  make start       Stack in Docker + Qwen3-VL and SigLIP2 natively on MPS, waits until ready"
+	@echo "  make stop        Stop both (data is kept)"
+	@echo "  make status      Containers and AI service state"
 	@echo ""
 	@echo "Running:"
 	@echo "  make up          Start all services"
@@ -82,6 +88,42 @@ setup: .env
 # See tests/e2e/stack/README.md for the variables.
 test-e2e:
 	cd tests/e2e/stack && npm ci --no-audit --no-fund && npx playwright install chromium && npx playwright test
+
+# --- Mac, real models: the whole project with one command ------------------------------
+# The Docker stack (docker-compose.mac.yml overlay: api/api-worker talk to the host AI and use
+# the real SigLIP2 vectors) plus the native AI service (Qwen3-VL + SigLIP2 on MPS) in the
+# background. Images are rebuilt when the source changed; migrations are idempotent.
+# First time on a machine: `make setup` is not needed, but the real-model venv is —
+# see infra/README.md "macOS with MPS". AI_MAC_DEVICE=cpu for the CPU fallback (§58).
+MAC_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.mac.yml
+
+start: .env
+	infra/scripts/ai-mac.sh start
+	$(MAKE) up-mac
+	@echo ""
+	@echo "✓ Photobank is running with real models"
+	@echo "Admin UI:  http://localhost"
+	@echo "AI:        http://localhost:8001 (log: .run/ai-mac.log)"
+	@echo "Stop:      make stop"
+
+up-mac: .env
+	# Build once: a --build on every step makes a fresh image id and recreates api midway.
+	$(MAC_COMPOSE) build api api-worker admin
+	$(MAC_COMPOSE) up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT) postgres redis rabbitmq api
+	$(MAC_COMPOSE) exec -T api php artisan migrate --force
+	# Seeds the local admin only if missing (firstOrCreate, APP_ENV=local).
+	$(MAC_COMPOSE) exec -T api php artisan db:seed --force
+	$(MAC_COMPOSE) up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT) admin nginx
+	# api-worker has no healthcheck, so it is started without --wait (see setup).
+	$(MAC_COMPOSE) up -d api-worker
+
+stop:
+	$(MAC_COMPOSE) --profile ai down
+	infra/scripts/ai-mac.sh stop
+
+status:
+	@$(MAC_COMPOSE) ps --format 'table {{.Name}}\t{{.Status}}'
+	@infra/scripts/ai-mac.sh status
 
 # Start all services
 up:

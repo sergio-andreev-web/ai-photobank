@@ -1,4 +1,6 @@
 .orchestrator/
+# `make start` (infra/scripts/ai-mac.sh): pid and log of the native AI service.
+/.run/
 __pycache__/
 *.pyc
 
