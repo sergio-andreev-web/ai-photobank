@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { ApiError, Paginated, SearchResponse, Tag } from '../lib/api'
-import { apiGet, compose, gotoReady, login, pickOption, waitForAiReady, waitForApi } from '../lib/app'
+import { apiGet, compose, gotoReady, login, pickOption, tagOptionLabel, waitForAiReady, waitForApi } from '../lib/app'
 import { env } from '../lib/env'
 
 /**
@@ -30,9 +30,9 @@ test.afterAll(async () => {
   await restoreAi()
 })
 
-async function openSearch(page: Page, mode: 'Tags only' | 'Semantic query'): Promise<void> {
+async function openSearch(page: Page, mode: 'Только теги' | 'По смыслу запроса'): Promise<void> {
   await gotoReady(page, '/search')
-  await pickOption(page, page.getByRole('combobox', { name: 'Search Mode' }), mode)
+  await pickOption(page, page.getByRole('combobox', { name: 'Режим поиска' }), mode)
 }
 
 test('§46: AI down → semantic search offers retry, tag search still works; AI back → retry succeeds', async ({ page, context }) => {
@@ -51,11 +51,11 @@ test('§46: AI down → semantic search offers retry, tag search still works; AI
   })
 
   await test.step('Semantic search: AI service unavailable + Retry search', async () => {
-    await openSearch(page, 'Semantic query')
-    await page.getByPlaceholder('e.g., workers in hard hats near industrial equipment').fill(QUERY)
+    await openSearch(page, 'По смыслу запроса')
+    await page.getByPlaceholder('Например: рабочие в касках возле промышленного оборудования').fill(QUERY)
     const [response] = await Promise.all([
       waitForApi(page, 'POST', '/api/search'),
-      page.getByRole('button', { name: 'Search', exact: true }).click(),
+      page.getByRole('button', { name: 'Найти', exact: true }).click(),
     ])
     expect(response.status(), 'semantic search with the AI stopped').toBe(503)
     const body = (await response.json()) as ApiError
@@ -63,19 +63,19 @@ test('§46: AI down → semantic search offers retry, tag search still works; AI
     // Contract: every response carries X-Request-ID, equal to error.trace_id for errors (§64).
     expect(response.headers()['x-request-id']).toBe(body.error.trace_id)
 
-    await expect(page.getByRole('alert')).toContainText('AI service unavailable')
-    await expect(page.getByRole('button', { name: 'Retry search' })).toBeVisible()
+    await expect(page.getByRole('alert')).toContainText('ИИ-сервис недоступен')
+    await expect(page.getByRole('button', { name: 'Повторить поиск' })).toBeVisible()
   })
 
   await test.step('Tag search keeps working without AI', async () => {
     const tagPage = await context.newPage()
     try {
-      await openSearch(tagPage, 'Tags only')
-      await pickOption(tagPage, tagPage.getByText('Select tags (all must match)', { exact: true }), `${tag!.name} (${tag!.type})`, tag!.name)
+      await openSearch(tagPage, 'Только теги')
+      await pickOption(tagPage, tagPage.getByText('Выберите теги (нужны все)', { exact: true }), tagOptionLabel(tag!), tag!.name)
       await tagPage.keyboard.press('Escape')
       const [response] = await Promise.all([
         waitForApi(tagPage, 'POST', '/api/search'),
-        tagPage.getByRole('button', { name: 'Search', exact: true }).click(),
+        tagPage.getByRole('button', { name: 'Найти', exact: true }).click(),
       ])
       expect(response.status(), 'tag search with the AI stopped').toBe(200)
       const result = (await response.json()) as SearchResponse
@@ -94,7 +94,7 @@ test('§46: AI down → semantic search offers retry, tag search still works; AI
   await test.step('Retry search returns results', async () => {
     const [response] = await Promise.all([
       waitForApi(page, 'POST', '/api/search'),
-      page.getByRole('button', { name: 'Retry search' }).click(),
+      page.getByRole('button', { name: 'Повторить поиск' }).click(),
     ])
     expect(response.status(), 'semantic search after the AI is back').toBe(200)
     const result = (await response.json()) as SearchResponse
@@ -102,6 +102,6 @@ test('§46: AI down → semantic search offers retry, tag search still works; AI
     expect(result.data.length).toBeGreaterThan(0)
     await expect(page.getByTestId('search-results')).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Retry search' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Повторить поиск' })).toHaveCount(0)
   })
 })

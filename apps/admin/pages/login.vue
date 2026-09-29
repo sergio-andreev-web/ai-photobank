@@ -1,24 +1,24 @@
 <template>
   <div class="login-shell">
-    <section class="login-intro" aria-label="About Photobank">
-      <div class="login-brand"><span class="login-brand-mark"><UIcon name="i-heroicons-photo" /></span><strong>Photobank</strong></div>
+    <section class="login-intro" aria-label="О фотобанке">
+      <div class="login-brand"><span class="login-brand-mark"><UIcon name="i-heroicons-photo" /></span><strong>Фотобанк</strong></div>
       <div class="login-intro-copy">
-        <span class="login-kicker">YOUR MEDIA WORKSPACE</span>
-        <h1>Everything in focus.</h1>
-        <p>Organize your image library, review AI suggestions, and keep every asset ready to find.</p>
+        <span class="login-kicker">ВАША МЕДИАТЕКА</span>
+        <h1>Всё в фокусе.</h1>
+        <p>Упорядочивайте библиотеку изображений, проверяйте подсказки ИИ и находите любой снимок за секунды.</p>
       </div>
-      <span class="login-intro-footer">PHOTOBANK ADMIN STUDIO</span>
+      <span class="login-intro-footer">ФОТОБАНК · АДМИН-ПАНЕЛЬ</span>
     </section>
 
     <div class="login-form-side">
       <div class="login-card">
         <span class="login-form-mark"><UIcon name="i-heroicons-lock-closed" /></span>
-        <p class="login-kicker">WELCOME BACK</p>
-        <h2>Admin Login</h2>
-        <p class="login-subtitle">Sign in to manage your photobank.</p>
+        <p class="login-kicker">С ВОЗВРАЩЕНИЕМ</p>
+        <h2>Вход администратора</h2>
+        <p class="login-subtitle">Войдите, чтобы управлять фотобанком.</p>
 
       <form class="login-form" @submit.prevent="handleLogin">
-        <UFormField label="Email" name="email" required>
+        <UFormField label="Электронная почта" name="email" required>
           <UInput
             v-model="form.email"
             type="email"
@@ -29,7 +29,7 @@
           />
         </UFormField>
 
-        <UFormField label="Password" name="password" required>
+        <UFormField label="Пароль" name="password" required>
           <UInput
             v-model="form.password"
             type="password"
@@ -51,7 +51,7 @@
           :loading="auth.loading"
           :disabled="!form.email || !form.password"
         >
-          Sign in to Photobank
+          Войти
         </UButton>
       </form>
       </div>

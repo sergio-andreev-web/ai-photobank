@@ -45,8 +45,8 @@ export function buildTagPatch(tag: Pick<Tag, 'name' | 'type' | 'parent_id'>, val
 /** Client-side check that mirrors the request schema; the server stays the authority (422). */
 export function validateTagName(name: string): string | null {
   const trimmed = name.trim()
-  if (!trimmed) return 'Enter a tag name.'
-  if (trimmed.length > TAG_NAME_MAX_LENGTH) return `Use at most ${TAG_NAME_MAX_LENGTH} characters.`
+  if (!trimmed) return 'Введите название тега.'
+  if (trimmed.length > TAG_NAME_MAX_LENGTH) return `Не больше ${TAG_NAME_MAX_LENGTH} символов.`
   return null
 }
 
@@ -65,12 +65,12 @@ export function validateAliasInput(input: AliasInput): AliasValidation {
   const locale = input.locale.trim()
 
   let aliasError: string | null = null
-  if (!alias) aliasError = 'Enter an alias.'
-  else if (alias.length > ALIAS_MAX_LENGTH) aliasError = `Use at most ${ALIAS_MAX_LENGTH} characters.`
+  if (!alias) aliasError = 'Введите синоним.'
+  else if (alias.length > ALIAS_MAX_LENGTH) aliasError = `Не больше ${ALIAS_MAX_LENGTH} символов.`
 
   let localeError: string | null = null
   if (locale && (locale.length > LOCALE_MAX_LENGTH || !LOCALE_PATTERN.test(locale))) {
-    localeError = 'Use a language code such as en, ru or pt-BR.'
+    localeError = 'Укажите код языка, например ru, en или pt-BR.'
   }
 
   return { alias: aliasError, locale: localeError }

@@ -1,22 +1,22 @@
 <template>
   <div class="space-y-6">
     <div class="page-heading">
-      <span class="subtle-label">ADD TO YOUR LIBRARY</span>
-      <h1>Upload Images</h1>
-      <p>Create a batch and upload multiple images at once.</p>
+      <span class="subtle-label">ПОПОЛНЕНИЕ БИБЛИОТЕКИ</span>
+      <h1>Загрузка изображений</h1>
+      <p>Создайте партию и загрузите сразу несколько изображений.</p>
     </div>
 
     <ErrorAlert v-if="createError" :message="createError" @dismiss="createError = null" />
 
     <!-- Create Batch Form -->
     <div v-if="!currentBatch" class="surface-card p-7">
-      <h2 class="section-title">New Batch</h2>
+      <h2 class="section-title">Новая партия</h2>
       <form class="mt-4 space-y-4" @submit.prevent="createBatch">
-        <UFormField label="Batch Name (optional)" name="name">
-          <UInput v-model="batchName" placeholder="e.g., Site visit - September 2026" class="w-full max-w-md" />
+        <UFormField label="Название партии (необязательно)" name="name">
+          <UInput v-model="batchName" placeholder="Например: Выезд на объект, сентябрь 2026" class="w-full max-w-md" />
         </UFormField>
 
-        <UButton type="submit" :loading="creating"> Create Batch </UButton>
+        <UButton type="submit" :loading="creating"> Создать партию </UButton>
       </form>
     </div>
 
@@ -25,17 +25,17 @@
       <div class="mb-4 flex items-center justify-between">
         <div>
           <h2 class="text-lg font-semibold text-gray-900">
-            Batch #{{ currentBatch.id }}: {{ currentBatch.name || 'Untitled' }}
+            Партия #{{ currentBatch.id }}: {{ currentBatch.name || 'Без названия' }}
           </h2>
-          <p class="mt-1 text-sm text-gray-600">Status: {{ currentBatch.status }}</p>
+          <p class="mt-1 text-sm text-gray-600">Статус: {{ labelOf(BATCH_STATUS_LABELS, currentBatch.status) }}</p>
         </div>
-        <UButton variant="ghost" @click="resetBatch"> New Batch </UButton>
+        <UButton variant="ghost" @click="resetBatch"> Новая партия </UButton>
       </div>
 
       <!-- Batch progress (server-side, polled) -->
       <div v-if="currentBatch.status !== 'created'" class="mb-6" data-testid="batch-progress">
         <div class="mb-2 flex justify-between text-sm text-gray-600">
-          <span>Batch progress</span>
+          <span>Обработка партии</span>
           <span>{{ currentBatch.progress.processed }} / {{ currentBatch.progress.total }}</span>
         </div>
         <div class="h-4 w-full rounded-full bg-gray-200">
@@ -45,7 +45,7 @@
           />
         </div>
         <div v-if="currentBatch.progress.failed > 0" class="mt-2 text-sm text-red-600">
-          {{ currentBatch.progress.failed }} failed
+          С ошибками: {{ currentBatch.progress.failed }}
         </div>
       </div>
 
@@ -59,8 +59,8 @@
         @drop.prevent="handleDrop"
       >
         <UIcon name="i-heroicons-cloud-arrow-up" class="mb-3 text-4xl text-blue-500" />
-        <p class="font-medium text-slate-700">Drag and drop images here or click to select</p>
-        <p class="mt-1 text-xs text-slate-500">JPEG, PNG or WebP</p>
+        <p class="font-medium text-slate-700">Перетащите изображения сюда или выберите файлы</p>
+        <p class="mt-1 text-xs text-slate-500">JPEG, PNG или WebP</p>
         <input
           ref="fileInput"
           type="file"
@@ -69,24 +69,24 @@
           class="hidden"
           @change="handleFileSelect"
         />
-        <UButton variant="soft" class="mt-4" @click="fileInput?.click()"> Select Files </UButton>
+        <UButton variant="soft" class="mt-4" @click="fileInput?.click()"> Выбрать файлы </UButton>
       </div>
       <p v-else class="text-sm text-gray-600">
-        This batch is no longer accepting uploads (status: {{ currentBatch.status }}).
+        Партия больше не принимает файлы (статус: {{ labelOf(BATCH_STATUS_LABELS, currentBatch.status) }}).
       </p>
 
       <!-- Uploading files -->
       <div v-if="uploads.length > 0" class="mt-6">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-x-4">
-          <h3 class="font-semibold text-gray-900">Files ({{ uploads.length }})</h3>
+          <h3 class="font-semibold text-gray-900">Файлы ({{ uploads.length }})</h3>
           <span class="text-sm text-gray-600">
-            {{ uploadingCount }} uploading &middot; {{ uploadedCount }} uploaded &middot;
-            {{ duplicateCount }} duplicate &middot; {{ errorCount }} failed
+            загружается: {{ uploadingCount }} &middot; загружено: {{ uploadedCount }} &middot;
+            дубликатов: {{ duplicateCount }} &middot; ошибок: {{ errorCount }}
           </span>
         </div>
         <p v-if="uploadedCount > 0" class="mb-3 text-sm text-gray-600" data-testid="processing-summary">
-          AI processing: {{ processingCount }} in progress &middot; {{ readyCount }} ready &middot;
-          {{ processingFailedCount }} failed
+          ИИ-обработка: в работе {{ processingCount }} &middot; готово {{ readyCount }} &middot;
+          с ошибками {{ processingFailedCount }}
         </p>
         <div class="space-y-2" data-testid="upload-list">
           <div
@@ -118,7 +118,7 @@
             </div>
             <div class="flex items-center gap-2">
               <UBadge :color="statusColor(upload)" :data-testid="`upload-state-${upload.clientId}`">
-                {{ fileState(upload) }}
+                {{ FILE_STATE_LABELS[fileState(upload)] }}
               </UBadge>
               <UButton
                 v-if="upload.state === 'error' && acceptingUploads"
@@ -126,7 +126,7 @@
                 variant="soft"
                 @click="retryUpload(upload)"
               >
-                Retry
+                Повторить
               </UButton>
             </div>
           </div>
@@ -140,10 +140,10 @@
           :loading="completing"
           @click="handleComplete"
         >
-          Mark upload finished ({{ uploadedTotal }} files)
+          Завершить загрузку ({{ uploadedTotal }} {{ pluralRu(uploadedTotal, FILE_FORMS) }})
         </UButton>
         <p class="mt-2 text-xs text-gray-600">
-          Stops accepting new files and starts/finishes AI processing for this batch.
+          Партия перестанет принимать новые файлы, ИИ-обработка запустится или завершится.
         </p>
       </div>
     </div>
@@ -156,6 +156,7 @@ definePageMeta({
 })
 
 import type { Batch } from '~/types/api'
+import { BATCH_STATUS_LABELS, FILE_FORMS, FILE_STATE_LABELS, labelOf, pluralRu } from '~/utils/labels'
 import { runWithConcurrency } from '~/utils/concurrency'
 import {
   applyImageStatuses,
@@ -216,17 +217,17 @@ const processingFailedCount = computed(
 function statusLabel(upload: UploadItem): string {
   switch (upload.state) {
     case 'queued':
-      return 'Waiting to upload'
+      return 'Ожидает загрузки'
     case 'uploading':
-      return 'Uploading...'
+      return 'Загружается…'
     case 'uploaded':
-      return 'Uploaded, queued for processing'
+      return 'Загружен, ждёт обработки'
     case 'duplicate':
       return upload.existingImageId
-        ? `Skipped: duplicate of image #${upload.existingImageId}`
-        : 'Skipped: duplicate'
+        ? `Пропущен: дубликат изображения #${upload.existingImageId}`
+        : 'Пропущен: дубликат'
     case 'error':
-      return upload.errorMessage || 'Upload failed'
+      return upload.errorMessage || 'Не удалось загрузить'
     default:
       return ''
   }
@@ -236,22 +237,22 @@ function processingLabel(upload: UploadItem): string {
   if (upload.state !== 'uploaded') return ''
   switch (upload.imageStatus) {
     case 'queued':
-      return 'Waiting for AI analysis'
+      return 'Ждёт ИИ-анализа'
     case 'processing':
-      return 'AI analysis in progress'
+      return 'Идёт ИИ-анализ'
     case 'ready':
-      return 'Analysis complete'
+      return 'Анализ завершён'
     case 'failed':
       // The list item carries no error fields (ImageSummary); code and message are on the image page.
-      return 'Processing failed'
+      return 'Ошибка обработки'
     default:
       return ''
   }
 }
 
 function processingLinkLabel(upload: UploadItem): string {
-  if (upload.imageStatus === 'ready') return 'View image'
-  if (upload.imageStatus === 'failed') return 'See error details'
+  if (upload.imageStatus === 'ready') return 'Открыть изображение'
+  if (upload.imageStatus === 'failed') return 'Подробнее об ошибке'
   return ''
 }
 

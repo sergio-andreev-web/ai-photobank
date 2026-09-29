@@ -1,4 +1,5 @@
 import type { ApiError } from '~/types/api'
+import { errorText } from '~/utils/labels'
 
 export function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error
@@ -6,14 +7,11 @@ export function getErrorMessage(error: unknown): string {
   if (error && typeof error === 'object') {
     if ('response' in error && error.response) {
       const data = (error.response as any).data as ApiError | undefined
-      return data?.error?.message || 'An error occurred'
-    }
-    if ('message' in error) {
-      return String(error.message)
+      return errorText(data?.error?.code, (error.response as any).status ?? null)
     }
   }
 
-  return 'An unexpected error occurred'
+  return errorText(null, null)
 }
 
 export function getErrorCode(error: unknown): string {
@@ -47,9 +45,21 @@ export interface ApiProblem {
   message: string
   /** `error.details` as sent by the server (`existing_tag_id`, `existing_image_id`, ...). */
   details: Record<string, unknown>
-  /** `VALIDATION_ERROR` details: field name -> messages (`error.details.fields`). */
+  /** `VALIDATION_ERROR` details: field name -> messages (`error.details.fields`), Russian only (see fieldMessages). */
   fields: Record<string, string[]>
   traceId: string | null
+}
+
+const CYRILLIC = /[а-яё]/i
+const FIELD_FALLBACK = 'Недопустимое значение.'
+
+/**
+ * The interface is Russian-only: a server field message is shown only when it is already Russian
+ * (Laravel localized), otherwise the field gets a generic Russian hint.
+ */
+function fieldMessages(messages: string[]): string[] {
+  const russian = messages.filter(message => CYRILLIC.test(message))
+  return russian.length ? russian : [FIELD_FALLBACK]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,20 +74,35 @@ export function toApiProblem(error: unknown): ApiProblem {
   const fields: Record<string, string[]> = {}
   if (isRecord(details.fields)) {
     for (const [field, messages] of Object.entries(details.fields)) {
-      if (Array.isArray(messages)) fields[field] = messages.map(String)
-      else if (typeof messages === 'string') fields[field] = [messages]
+      if (Array.isArray(messages)) fields[field] = fieldMessages(messages.map(String))
+      else if (typeof messages === 'string') fields[field] = fieldMessages([messages])
     }
   }
 
-  const fallbackMessage = error instanceof Error ? error.message : getErrorMessage(error)
+  const code = typeof body?.code === 'string' ? body.code : 'UNKNOWN_ERROR'
+  const status = typeof response?.status === 'number' ? response.status : null
   return {
-    code: typeof body?.code === 'string' ? body.code : 'UNKNOWN_ERROR',
-    status: typeof response?.status === 'number' ? response.status : null,
-    message: typeof body?.message === 'string' && body.message ? body.message : fallbackMessage,
+    code,
+    status,
+    message: errorText(code, status),
     details,
     fields,
     traceId: typeof body?.trace_id === 'string' ? body.trace_id : null,
   }
+}
+
+/** Request fields (contracts/public-api.openapi.yaml) as the forms call them. */
+const FIELD_NAMES: Record<string, string> = {
+  name: 'Название',
+  type: 'Тип',
+  parent_id: 'Родительский тег',
+  status: 'Статус',
+  alias: 'Синоним',
+  locale: 'Язык',
+  original_name: 'Имя файла',
+  tag_id: 'Тег',
+  query: 'Запрос',
+  tag_ids: 'Теги',
 }
 
 export interface DescribeProblemOptions {
@@ -88,25 +113,24 @@ export interface DescribeProblemOptions {
 }
 
 /**
- * One line of technical context for an error banner: the error code, the tag
- * a conflict points to, field errors the form cannot show, and the trace id
- * to quote when reporting the problem (§64). Never parses `message`.
+ * One line of context for an error banner: the tag a conflict points to, field
+ * errors the form cannot show, and the trace id to quote when reporting the
+ * problem (§64). Never parses `message`.
  */
 export function describeProblem(problem: ApiProblem, options: DescribeProblemOptions = {}): string {
   const parts: string[] = []
-  if (problem.code !== 'UNKNOWN_ERROR') parts.push(problem.code)
 
   const existingTagId = problem.details.existing_tag_id
   if (typeof existingTagId === 'number') {
     const name = options.lookupTag?.(existingTagId)
-    parts.push(`existing tag: ${name ? `${name} (#${existingTagId})` : `#${existingTagId}`}`)
+    parts.push(`существующий тег: ${name ? `${name} (#${existingTagId})` : `#${existingTagId}`}`)
   }
 
   const known = new Set(options.knownFields ?? [])
   for (const [field, messages] of Object.entries(problem.fields)) {
-    if (!known.has(field)) parts.push(`${field}: ${messages.join(' ')}`)
+    if (!known.has(field)) parts.push(`${FIELD_NAMES[field] ?? field}: ${messages.join(' ')}`)
   }
 
-  if (problem.traceId) parts.push(`trace ${problem.traceId}`)
+  if (problem.traceId) parts.push(`код запроса ${problem.traceId}`)
   return parts.join(' · ')
 }

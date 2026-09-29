@@ -1,13 +1,13 @@
 <template>
   <div>
     <div class="page-heading flex flex-wrap items-end justify-between gap-4">
-      <div><span class="subtle-label">LIBRARY STRUCTURE</span><h1>Tags Management</h1><p>Keep canonical tags, aliases, and the hierarchy organized.</p></div>
-      <UButton icon="i-heroicons-plus" size="lg" @click="openCreate()">New Tag</UButton>
+      <div><span class="subtle-label">СТРУКТУРА БИБЛИОТЕКИ</span><h1>Управление тегами</h1><p>Канонические теги, синонимы и иерархия в одном месте.</p></div>
+      <UButton icon="i-heroicons-plus" size="lg" @click="openCreate()">Новый тег</UButton>
     </div>
 
     <div v-if="loadError" class="mb-5">
-      <ErrorAlert title="Could not load tags" :message="loadError.message" :details="describeProblem(loadError)" @dismiss="loadError = null" />
-      <UButton class="mt-3" size="sm" variant="soft" :loading="loading" @click="loadTags">Try again</UButton>
+      <ErrorAlert title="Не удалось загрузить теги" :message="loadError.message" :details="describeProblem(loadError)" @dismiss="loadError = null" />
+      <UButton class="mt-3" size="sm" variant="soft" :loading="loading" @click="loadTags">Повторить</UButton>
     </div>
     <ErrorAlert
       v-if="actionProblem"
@@ -22,26 +22,26 @@
     </div>
 
     <div class="grid items-start gap-5" :class="panelOpen ? 'lg:grid-cols-[minmax(0,1fr)_26rem]' : ''">
-      <section class="surface-card p-6" aria-label="Tag tree">
+      <section class="surface-card p-6" aria-label="Дерево тегов">
         <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div><span class="subtle-label">TAXONOMY</span><h2 class="section-title mt-1">All tags</h2></div>
+          <div><span class="subtle-label">СЛОВАРЬ</span><h2 class="section-title mt-1">Все теги</h2></div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span class="text-gray-500" data-testid="tags-total">{{ tags.length }} total<template v-if="archivedCount > 0"> · {{ archivedCount }} archived</template></span>
-            <UCheckbox v-model="showArchived" label="Show archived" />
-            <UButton size="xs" variant="ghost" color="neutral" @click="expandAll">Expand all</UButton>
-            <UButton size="xs" variant="ghost" color="neutral" @click="collapseAll">Collapse all</UButton>
+            <span class="text-gray-500" data-testid="tags-total">Всего: {{ tags.length }}<template v-if="archivedCount > 0"> · в архиве: {{ archivedCount }}</template></span>
+            <UCheckbox v-model="showArchived" label="Показывать архивные" />
+            <UButton size="xs" variant="ghost" color="neutral" @click="expandAll">Развернуть все</UButton>
+            <UButton size="xs" variant="ghost" color="neutral" @click="collapseAll">Свернуть все</UButton>
           </div>
         </div>
 
-        <div v-if="loading" class="text-sm text-gray-500">Loading tags...</div>
+        <div v-if="loading" class="text-sm text-gray-500">Загрузка тегов…</div>
         <div v-else-if="tags.length === 0" class="rounded-xl bg-gray-50 p-9 text-center">
           <UIcon name="i-heroicons-tag" class="text-3xl text-gray-400" />
-          <p class="mt-2 text-sm text-gray-600">No tags yet. Create one to get started.</p>
+          <p class="mt-2 text-sm text-gray-600">Тегов пока нет. Создайте первый.</p>
         </div>
         <div v-else-if="visibleTree.length === 0" class="rounded-xl bg-gray-50 p-9 text-center">
-          <p class="text-sm text-gray-600">Every tag is archived. Turn on “Show archived” to see them.</p>
+          <p class="text-sm text-gray-600">Все теги в архиве. Включите «Показывать архивные», чтобы их увидеть.</p>
         </div>
-        <ul v-else class="space-y-2" aria-label="Tag hierarchy">
+        <ul v-else class="space-y-2" aria-label="Иерархия тегов">
           <TagTreeNode
             v-for="node in visibleTree"
             :key="node.id"
@@ -60,12 +60,12 @@
       </section>
 
       <div v-if="panelOpen" class="order-first space-y-5 lg:order-none lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:p-1">
-        <section v-if="deleteTarget" class="surface-card border-red-200 bg-red-50 p-5" aria-label="Delete confirmation">
-          <h2 class="font-semibold text-red-900">Delete {{ deleteTarget.name }}?</h2>
+        <section v-if="deleteTarget" class="surface-card border-red-200 bg-red-50 p-5" aria-label="Подтверждение удаления">
+          <h2 class="font-semibold text-red-900">Удалить «{{ deleteTarget.name }}»?</h2>
           <p class="mt-1 text-sm text-red-700">{{ deleteHint }}</p>
           <div class="mt-4 flex gap-2">
-            <UButton color="error" :loading="deleting" @click="confirmDelete">Delete tag</UButton>
-            <UButton variant="ghost" color="neutral" @click="() => { deleteTarget = null }">Cancel</UButton>
+            <UButton color="error" :loading="deleting" @click="confirmDelete">Удалить тег</UButton>
+            <UButton variant="ghost" color="neutral" @click="() => { deleteTarget = null }">Отмена</UButton>
           </div>
         </section>
 
@@ -91,6 +91,7 @@ definePageMeta({ middleware: 'auth' })
 import type { Tag, TagStatus } from '~/types/api'
 import { describeProblem, toApiProblem } from '~/utils/errorHandler'
 import type { ApiProblem } from '~/utils/errorHandler'
+import { labelOf, pluralRu, TAG_TYPE_LABELS } from '~/utils/labels'
 import { ancestorIds, buildTagTree, expandableIds, filterTagTree } from '~/utils/tagTree'
 
 type EditorState = { mode: 'create'; seq: number; parentId: number | null } | { mode: 'edit'; id: number }
@@ -130,16 +131,16 @@ const deleteHint = computed(() => {
   if (!target) return ''
   const hasChildren = tags.value.some(tag => tag.parent_id === target.id)
   if (target.images_count > 0) {
-    const noun = target.images_count === 1 ? 'image' : 'images'
-    return `It is linked to ${target.images_count} ${noun}, so it will be archived instead of deleted and stay on them.`
+    const noun = pluralRu(target.images_count, ['изображению', 'изображениям', 'изображениям'])
+    return `Тег привязан к ${target.images_count} ${noun}, поэтому он не удалится, а уйдёт в архив и останется на них.`
   }
-  if (hasChildren) return 'It has child tags, so it will be archived instead of deleted.'
-  return 'An unused tag is deleted permanently. If it turns out to be in use (images, child tags or moderation candidates), it is archived instead.'
+  if (hasChildren) return 'У тега есть дочерние теги, поэтому он не удалится, а уйдёт в архив.'
+  return 'Неиспользуемый тег удаляется навсегда. Если окажется, что он используется (изображения, дочерние теги или кандидаты модерации), он уйдёт в архив.'
 })
 
 function lookupTag(id: number): string | null {
   const found = tagsById.value.get(id)
-  return found ? `${found.name}, ${found.type}` : null
+  return found ? `${found.name}, ${labelOf(TAG_TYPE_LABELS, found.type)}` : null
 }
 
 async function loadTags() {
@@ -197,7 +198,7 @@ function onCreated(tag: Tag) {
   reveal(tag.id)
   // Stay on the new tag so aliases can be added right away.
   editor.value = { mode: 'edit', id: tag.id }
-  notice.value = `Tag “${tag.name}” created. You can add aliases below.`
+  notice.value = `Тег «${tag.name}» создан. Ниже можно добавить синонимы.`
   actionProblem.value = null
 }
 
@@ -229,9 +230,9 @@ async function setStatus(tag: Tag, status: TagStatus) {
   actionProblem.value = null
   try {
     upsert(await tagsApi.updateTag(tag.id, { status }))
-    notice.value = status === 'archived' ? `“${tag.name}” archived.` : `“${tag.name}” restored.`
+    notice.value = status === 'archived' ? `«${tag.name}» перенесён в архив.` : `«${tag.name}» восстановлен.`
   } catch (e) {
-    failAction(status === 'archived' ? 'Could not archive the tag' : 'Could not restore the tag', e)
+    failAction(status === 'archived' ? 'Не удалось перенести тег в архив' : 'Не удалось восстановить тег', e)
   } finally {
     busyId.value = null
   }
@@ -252,15 +253,15 @@ async function confirmDelete() {
     const archived = await tagsApi.deleteTag(target.id)
     if (archived) {
       upsert(archived)
-      notice.value = `“${target.name}” is still in use, so it was archived instead of deleted.`
+      notice.value = `«${target.name}» используется, поэтому перенесён в архив, а не удалён.`
     } else {
       tags.value = tags.value.filter(tag => tag.id !== target.id)
-      notice.value = `“${target.name}” deleted.`
+      notice.value = `«${target.name}» удалён.`
       if (editor.value?.mode === 'edit' && editor.value.id === target.id) editor.value = null
     }
     deleteTarget.value = null
   } catch (e) {
-    failAction('Could not delete the tag', e)
+    failAction('Не удалось удалить тег', e)
   } finally {
     deleting.value = false
   }

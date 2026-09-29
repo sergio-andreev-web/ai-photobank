@@ -5,7 +5,7 @@
         <span class="text-2xl">⚠️</span>
       </div>
       <div class="ml-4 flex-1">
-        <h3 class="text-sm font-semibold text-red-800">{{ title || 'Error' }}</h3>
+        <h3 class="text-sm font-semibold text-red-800">{{ title || 'Ошибка' }}</h3>
         <div v-if="message" class="mt-2 text-sm text-red-700">
           {{ message }}
         </div>
@@ -17,7 +17,7 @@
         v-if="dismissible"
         type="button"
         class="ml-4 flex-shrink-0 text-red-500 hover:text-red-700"
-        aria-label="Dismiss"
+        aria-label="Закрыть"
         @click="$emit('dismiss')"
       >
         ✕
@@ -35,7 +35,7 @@ withDefaults(
     dismissible?: boolean
   }>(),
   {
-    title: 'Error',
+    title: 'Ошибка',
     dismissible: true,
   }
 )

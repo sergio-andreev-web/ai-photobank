@@ -12,7 +12,7 @@
         type="button"
         class="flex h-5 w-5 shrink-0 items-center justify-center text-gray-600 hover:text-gray-900"
         :aria-expanded="expanded"
-        :aria-label="expanded ? `Collapse ${tag.name}` : `Expand ${tag.name}`"
+        :aria-label="expanded ? `Свернуть ${tag.name}` : `Развернуть ${tag.name}`"
         @click="$emit('toggle', tag.id)"
       >
         <UIcon :name="expanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" />
@@ -22,18 +22,18 @@
       <div class="min-w-[9rem] flex-1">
         <p class="flex flex-wrap items-center gap-2">
           <span class="font-medium" :class="archived ? 'text-gray-500' : 'text-gray-900'">{{ tag.name }}</span>
-          <UBadge v-if="archived" color="warning" variant="soft" size="sm">Archived</UBadge>
+          <UBadge v-if="archived" color="warning" variant="soft" size="sm">В архиве</UBadge>
         </p>
-        <p class="text-xs text-gray-600">{{ tag.type }}</p>
+        <p class="text-xs text-gray-600">{{ labelOf(TAG_TYPE_LABELS, tag.type) }}</p>
         <p v-if="tag.aliases.length" class="truncate text-xs text-gray-500" data-testid="tag-aliases">
-          Aliases: {{ aliasSummary }}
+          Синонимы: {{ aliasSummary }}
         </p>
       </div>
 
       <div class="ml-auto flex items-center gap-3">
         <span class="flex items-center gap-1 whitespace-nowrap text-sm tabular-nums text-gray-600" data-testid="tag-images-count">
           <UIcon name="i-heroicons-photo" class="text-gray-400" />
-          {{ tag.images_count }} {{ tag.images_count === 1 ? 'image' : 'images' }}
+          {{ tag.images_count }} {{ pluralRu(tag.images_count, IMAGE_FORMS) }}
         </span>
 
         <div class="flex items-center gap-1">
@@ -43,8 +43,8 @@
             variant="ghost"
             icon="i-heroicons-plus"
             :disabled="archived || busy"
-            :aria-label="`Add child to ${tag.name}`"
-            :title="archived ? 'Restore the tag to add children' : `Add child to ${tag.name}`"
+            :aria-label="`Добавить дочерний тег к ${tag.name}`"
+            :title="archived ? 'Восстановите тег, чтобы добавлять дочерние' : `Добавить дочерний тег к ${tag.name}`"
             @click="$emit('addChild', tag)"
           />
           <UButton
@@ -53,8 +53,8 @@
             variant="ghost"
             icon="i-heroicons-pencil-square"
             :disabled="busy"
-            :aria-label="`Edit ${tag.name}`"
-            :title="`Edit ${tag.name}`"
+            :aria-label="`Изменить ${tag.name}`"
+            :title="`Изменить ${tag.name}`"
             @click="$emit('edit', tag)"
           />
           <UButton
@@ -64,8 +64,8 @@
             variant="ghost"
             icon="i-heroicons-arrow-uturn-left"
             :loading="busy"
-            :aria-label="`Restore ${tag.name}`"
-            :title="`Restore ${tag.name}`"
+            :aria-label="`Восстановить ${tag.name}`"
+            :title="`Восстановить ${tag.name}`"
             @click="$emit('restore', tag)"
           />
           <UButton
@@ -75,8 +75,8 @@
             variant="ghost"
             icon="i-heroicons-archive-box"
             :loading="busy"
-            :aria-label="`Archive ${tag.name}`"
-            :title="`Archive ${tag.name}`"
+            :aria-label="`В архив ${tag.name}`"
+            :title="`В архив ${tag.name}`"
             @click="$emit('archive', tag)"
           />
           <UButton
@@ -85,8 +85,8 @@
             variant="ghost"
             icon="i-heroicons-trash"
             :disabled="busy"
-            :aria-label="`Delete ${tag.name}`"
-            :title="`Delete ${tag.name}`"
+            :aria-label="`Удалить ${tag.name}`"
+            :title="`Удалить ${tag.name}`"
             @click="$emit('delete', tag)"
           />
         </div>
@@ -114,6 +114,7 @@
 
 <script setup lang="ts">
 import type { Tag } from '~/types/api'
+import { IMAGE_FORMS, labelOf, pluralRu, TAG_TYPE_LABELS } from '~/utils/labels'
 import type { TagNode } from '~/utils/tagTree'
 
 const props = defineProps<{

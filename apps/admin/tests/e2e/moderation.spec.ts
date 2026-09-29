@@ -42,8 +42,8 @@ test.describe('tag candidate moderation', () => {
     await gotoReady(page, '/candidates')
     await expect(page.getByText('drilling platform')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Create Tag' }).click()
-    await expect(page.getByText('No candidates found for this filter.')).toBeVisible()
+    await page.getByRole('button', { name: 'Создать тег' }).click()
+    await expect(page.getByText('По этому фильтру кандидатов нет.')).toBeVisible()
   })
 
   test('merging a candidate sends the target tag id as an integer', async ({ page }) => {
@@ -77,14 +77,14 @@ test.describe('tag candidate moderation', () => {
     })
 
     await gotoReady(page, '/candidates')
-    await page.getByRole('button', { name: 'Merge Into...' }).click()
-    await page.getByText('Search tags...').click()
-    await page.getByRole('option', { name: 'Буровая (object)' }).click()
-    await page.getByRole('button', { name: 'Confirm Merge' }).click()
+    await page.getByRole('button', { name: 'Объединить с…' }).click()
+    await page.getByText('Поиск тегов…').click()
+    await page.getByRole('option', { name: 'Буровая (Объект)' }).click()
+    await page.getByRole('button', { name: 'Объединить', exact: true }).click()
 
     // The contract requires an integer tag_id; the select must not submit its option object.
     await expect.poll(() => requestBody).toEqual({ tag_id: 87, create_alias: true })
-    await expect(page.getByText('No candidates found for this filter.')).toBeVisible()
+    await expect(page.getByText('По этому фильтру кандидатов нет.')).toBeVisible()
   })
 
   test('rejecting an already-resolved candidate surfaces the contract error', async ({ page }) => {
@@ -101,9 +101,9 @@ test.describe('tag candidate moderation', () => {
     )
 
     await gotoReady(page, '/candidates')
-    await page.getByRole('button', { name: 'Reject' }).click()
+    await page.getByRole('button', { name: 'Отклонить' }).click()
 
-    await expect(page.getByText('Candidate is already resolved')).toBeVisible()
+    await expect(page.getByText('По этому кандидату уже принято решение.')).toBeVisible()
     // The candidate stays in the list since the action failed.
     await expect(page.getByText('drilling platform')).toBeVisible()
   })

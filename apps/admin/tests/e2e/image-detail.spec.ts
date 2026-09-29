@@ -77,8 +77,8 @@ test.describe('image detail', () => {
     const tags = page.getByTestId('image-tags')
     await expect(tags.getByText('Инженер')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Remove Инженер' }).click()
-    await expect(page.getByText('No tags assigned yet.')).toBeVisible()
+    await page.getByRole('button', { name: 'Убрать тег Инженер' }).click()
+    await expect(page.getByText('Тегов пока нет.')).toBeVisible()
   })
 
   test('adding a tag sends the selected tag id as an integer', async ({ page }) => {
@@ -117,10 +117,10 @@ test.describe('image detail', () => {
     })
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Add Tag' }).click()
-    await page.getByText('Select a tag').click()
-    await page.getByRole('option', { name: 'Каска (object)' }).click()
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
+    await page.getByRole('button', { name: 'Добавить тег' }).click()
+    await page.getByText('Выберите тег').click()
+    await page.getByRole('option', { name: 'Каска (Объект)' }).click()
+    await page.getByRole('button', { name: 'Добавить', exact: true }).click()
 
     // The contract requires an integer id; the select must not submit its option object.
     await expect.poll(() => requestBody?.tag_id).toBe(14)
@@ -140,10 +140,10 @@ test.describe('image detail', () => {
     })
 
     await gotoReady(page, '/gallery/153')
-    await expect(page.getByText('AI_SERVICE_UNAVAILABLE', { exact: true })).toBeVisible()
+    await expect(page.getByText('ИИ-сервис сейчас недоступен. Попробуйте ещё раз чуть позже.', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Retry Processing' }).click()
-    await expect(page.getByText('queued', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Повторить обработку' }).click()
+    await expect(page.getByText('В очереди', { exact: true })).toBeVisible()
   })
 })
 
@@ -181,14 +181,14 @@ test.describe('image detail: rename and delete', () => {
     await gotoReady(page, '/gallery/152')
     await expect(page.getByTestId('image-name')).toHaveText('IMG_0001.jpg')
 
-    await page.getByRole('button', { name: 'Rename image' }).click()
-    const field = page.getByLabel('Filename', { exact: true })
+    await page.getByRole('button', { name: 'Переименовать' }).click()
+    const field = page.getByLabel('Имя файла', { exact: true })
     await expect(field).toHaveValue('IMG_0001.jpg')
     // Nothing to save until the name actually changes.
-    await expect(page.getByRole('button', { name: 'Save name' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Сохранить' })).toBeDisabled()
 
     await field.fill('  site-visit-042.jpg ')
-    await page.getByRole('button', { name: 'Save name' }).click()
+    await page.getByRole('button', { name: 'Сохранить' }).click()
 
     await expect(page.getByTestId('image-name')).toHaveText('site-visit-042.jpg')
     await expect(field).toHaveCount(0)
@@ -205,9 +205,9 @@ test.describe('image detail: rename and delete', () => {
     })
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Rename image' }).click()
-    await page.getByLabel('Filename', { exact: true }).fill('something-else.jpg')
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Переименовать' }).click()
+    await page.getByLabel('Имя файла', { exact: true }).fill('something-else.jpg')
+    await page.getByRole('button', { name: 'Отмена' }).click()
 
     await expect(page.getByTestId('image-name')).toHaveText('IMG_0001.jpg')
     expect(writes).toBe(0)
@@ -222,12 +222,12 @@ test.describe('image detail: rename and delete', () => {
     })
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Rename image' }).click()
-    await page.getByLabel('Filename', { exact: true }).fill('   ')
+    await page.getByRole('button', { name: 'Переименовать' }).click()
+    await page.getByLabel('Имя файла', { exact: true }).fill('   ')
 
-    await expect(page.getByText('Enter a file name.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Save name' })).toBeDisabled()
-    await page.getByLabel('Filename', { exact: true }).press('Enter')
+    await expect(page.getByText('Введите имя файла.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+    await page.getByLabel('Имя файла', { exact: true }).press('Enter')
     expect(writes).toBe(0)
   })
 
@@ -245,13 +245,13 @@ test.describe('image detail: rename and delete', () => {
     )
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Rename image' }).click()
-    await page.getByLabel('Filename', { exact: true }).fill('renamed.jpg')
-    await page.getByRole('button', { name: 'Save name' }).click()
+    await page.getByRole('button', { name: 'Переименовать' }).click()
+    await page.getByLabel('Имя файла', { exact: true }).fill('renamed.jpg')
+    await page.getByRole('button', { name: 'Сохранить' }).click()
 
-    await expect(page.getByText('The original name field must not be greater than 1024 characters.')).toBeVisible()
-    await expect(page.getByRole('alert')).toContainText('The given data was invalid')
-    await expect(page.getByLabel('Filename', { exact: true })).toHaveValue('renamed.jpg')
+    await expect(page.getByText('Недопустимое значение.')).toBeVisible()
+    await expect(page.getByRole('alert')).toContainText('Проверьте введённые данные.')
+    await expect(page.getByLabel('Имя файла', { exact: true })).toHaveValue('renamed.jpg')
   })
 
   test('renaming an image that was deleted elsewhere shows IMAGE_NOT_FOUND', async ({ page }) => {
@@ -259,11 +259,11 @@ test.describe('image detail: rename and delete', () => {
     await mockImage(page, (route) => apiError(route, 404, 'IMAGE_NOT_FOUND', 'Image not found'))
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Rename image' }).click()
-    await page.getByLabel('Filename', { exact: true }).fill('renamed.jpg')
-    await page.getByRole('button', { name: 'Save name' }).click()
+    await page.getByRole('button', { name: 'Переименовать' }).click()
+    await page.getByLabel('Имя файла', { exact: true }).fill('renamed.jpg')
+    await page.getByRole('button', { name: 'Сохранить' }).click()
 
-    await expect(page.getByRole('alert')).toContainText('Image not found')
+    await expect(page.getByRole('alert')).toContainText('Изображение не найдено.')
     await expect(page.getByTestId('image-name')).toHaveCount(0)
   })
 
@@ -291,20 +291,20 @@ test.describe('image detail: rename and delete', () => {
     )
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Delete image' }).click()
+    await page.getByRole('button', { name: 'Удалить изображение' }).click()
 
-    const confirmation = page.getByRole('region', { name: 'Delete confirmation' })
-    await expect(confirmation.getByRole('heading', { name: 'Delete this image?' })).toBeVisible()
+    const confirmation = page.getByRole('region', { name: 'Подтверждение удаления' })
+    await expect(confirmation.getByRole('heading', { name: 'Удалить изображение?' })).toBeVisible()
     // The opener gives way to the confirmation, and nothing is sent yet.
-    await expect(page.getByRole('button', { name: 'Delete image' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Удалить изображение' })).toHaveCount(0)
     expect(deleteCalls).toEqual([])
 
-    await confirmation.getByRole('button', { name: 'Confirm delete' }).click()
+    await confirmation.getByRole('button', { name: 'Удалить', exact: true }).click()
 
     await page.waitForURL('**/gallery')
     expect(deleteCalls).toEqual(['DELETE /api/admin/images/152'])
-    await expect(page.getByRole('heading', { name: 'Gallery' })).toBeVisible()
-    await expect(page.getByText('No images found. Start by uploading a batch.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Галерея' })).toBeVisible()
+    await expect(page.getByText('Изображений пока нет. Начните с загрузки партии.')).toBeVisible()
     expect(listRequests).toBeGreaterThan(0)
   })
 
@@ -317,11 +317,11 @@ test.describe('image detail: rename and delete', () => {
     })
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Delete image' }).click()
-    await page.getByRole('region', { name: 'Delete confirmation' }).getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Удалить изображение' }).click()
+    await page.getByRole('region', { name: 'Подтверждение удаления' }).getByRole('button', { name: 'Отмена' }).click()
 
-    await expect(page.getByRole('region', { name: 'Delete confirmation' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Delete image' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Подтверждение удаления' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Удалить изображение' })).toBeVisible()
     await expect(page.getByTestId('image-name')).toHaveText('IMG_0001.jpg')
     expect(writes).toBe(0)
   })
@@ -331,13 +331,13 @@ test.describe('image detail: rename and delete', () => {
     await mockImage(page, (route) => apiError(route, 404, 'IMAGE_NOT_FOUND', 'Image not found'))
 
     await gotoReady(page, '/gallery/152')
-    await page.getByRole('button', { name: 'Delete image' }).click()
-    await page.getByRole('button', { name: 'Confirm delete' }).click()
+    await page.getByRole('button', { name: 'Удалить изображение' }).click()
+    await page.getByRole('button', { name: 'Удалить', exact: true }).click()
 
-    await expect(page.getByRole('alert')).toContainText('Image not found')
+    await expect(page.getByRole('alert')).toContainText('Изображение не найдено.')
     await expect(page).toHaveURL(/\/gallery\/152$/)
     // Still on the page, and the admin can back out of the confirmation.
-    await page.getByRole('button', { name: 'Cancel' }).click()
-    await expect(page.getByRole('button', { name: 'Delete image' })).toBeVisible()
+    await page.getByRole('button', { name: 'Отмена' }).click()
+    await expect(page.getByRole('button', { name: 'Удалить изображение' })).toBeVisible()
   })
 })

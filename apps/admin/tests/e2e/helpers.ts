@@ -71,6 +71,6 @@ export async function loginAsAdmin(page: Page) {
   await gotoReady(page, '/login')
   await page.getByPlaceholder('admin@example.com').fill('admin@example.com')
   await page.getByPlaceholder('••••••••').fill('secret-password')
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: 'Войти' }).click()
   await page.waitForURL('**/dashboard')
 }

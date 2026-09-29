@@ -21,13 +21,13 @@ test.describe('login', () => {
     await gotoReady(page, '/login')
     await page.getByPlaceholder('admin@example.com').fill('admin@example.com')
     await page.getByPlaceholder('••••••••').fill('secret-password')
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('button', { name: 'Войти' }).click()
 
     await page.waitForURL('**/dashboard')
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Обзор' })).toBeVisible()
   })
 
-  test('invalid credentials show the contract error message and keep the user on login', async ({ page }) => {
+  test('invalid credentials show a Russian error for the contract code and keep the user on login', async ({ page }) => {
     await page.route('**/sanctum/csrf-cookie', (route) => route.fulfill({ status: 204 }))
     await page.route('**/api/auth/login', (route) =>
       apiError(route, 422, 'INVALID_CREDENTIALS', 'Invalid email or password')
@@ -36,9 +36,11 @@ test.describe('login', () => {
     await gotoReady(page, '/login')
     await page.getByPlaceholder('admin@example.com').fill('admin@example.com')
     await page.getByPlaceholder('••••••••').fill('wrong-password')
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('button', { name: 'Войти' }).click()
 
-    await expect(page.getByText('Invalid email or password')).toBeVisible()
+    await expect(page.getByText('Неверный email или пароль.')).toBeVisible()
+    // The API's own (English) message is not shown: the UI is Russian-only.
+    await expect(page.getByText('Invalid email or password')).toHaveCount(0)
     await expect(page).toHaveURL(/\/login$/)
   })
 })
