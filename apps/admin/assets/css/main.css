@@ -132,3 +132,9 @@ body { margin: 0; background: #f5f7fb; color: #172033; }
 .gallery-card-zoom { position: absolute; top: 10px; right: 10px; z-index: 10; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #ffffffe6; color: #1d2d48; box-shadow: 0 1px 4px #14294a26; opacity: 0; transition: opacity .15s; }
 .relative:hover > .gallery-card-zoom, .gallery-card-zoom:focus-visible { opacity: 1; }
 @media (hover: none) { .gallery-card-zoom { opacity: 1; } }
+
+/* Moderation queue */
+.candidate-card { padding: 22px; cursor: default; transition: box-shadow .15s, border-color .15s; }
+.candidate-card.is-active { border-color: #93b4f5; box-shadow: 0 0 0 2px #93b4f566; }
+.candidate-card.is-selected { border-color: #2862d7; box-shadow: 0 0 0 2px #2862d7; }
+kbd { padding: 1px 5px; border: 1px solid #d5deea; border-bottom-width: 2px; border-radius: 4px; background: #fff; font-family: inherit; font-size: 11px; }
