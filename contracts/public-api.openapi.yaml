@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.6.0
+  version: 1.7.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -507,9 +507,10 @@ paths:
       summary: Изменить редактируемые поля изображения
       x-tz: "§50"
       description: |
-        ТЗ не определяет редактируемые поля. Предложение: только отображаемое имя `original_name`.
-        Caption/OCR не редактируются, так как reprocess их перезаписывает (§76). Теги меняются через
-        /tags (§41). Открытый вопрос ADR-0006.
+        Редактируются `original_name` и `caption` (ADR-0006, дополнение 2026-09-30; контракты 1.7.0).
+        `caption` — строка: ручная подпись, `caption_edited=true`, reprocess ее не перезаписывает (как ручные теги);
+        `null` — вернуть подпись ИИ из последнего анализа, `caption_edited=false`. OCR не редактируется. Теги
+        меняются через /tags (§41).
       x-adr: ADR-0006
       security:
         - sessionCookie: []
@@ -1894,7 +1895,7 @@ components:
           format: date-time
     ImageDetail:
       type: object
-      required: [id, batch_id, original_name, status, urls, created_at, updated_at, mime_type, extension, width, height, file_size, sha256, caption, ocr_text, error_code, error_message, image_tags, latest_analysis, processing_tasks]
+      required: [id, batch_id, original_name, status, urls, created_at, updated_at, mime_type, extension, width, height, file_size, sha256, caption, caption_edited, ocr_text, error_code, error_message, image_tags, latest_analysis, processing_tasks]
       x-tz: "§15, §54"
       description: |
         Карточка (§54): preview, original filename, dimensions, size, caption, OCR, tags, AI concepts, processing state.
@@ -1936,6 +1937,9 @@ components:
           pattern: '^[0-9a-f]{64}$'
         caption:
           type: [string, 'null']
+        caption_edited:
+          type: boolean
+          description: Подпись исправлена вручную; reprocess ее не меняет (ADR-0006, дополнение 2026-09-30).
         ocr_text:
           type: [string, 'null']
         error_code:
@@ -1996,6 +2000,11 @@ components:
           type: string
           minLength: 1
           maxLength: 1024
+        caption:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2000
+          description: Строка — ручная подпись; null — вернуть подпись ИИ (ADR-0006, дополнение 2026-09-30).
     ImageTagCreateRequest:
       type: object
       additionalProperties: false
@@ -2536,6 +2545,7 @@ components:
         file_size: 3481122
         sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         caption: Two engineers wearing helmets near industrial equipment.
+        caption_edited: false
         ocr_text: ЛУКОЙЛ
         error_code: null
         error_message: null

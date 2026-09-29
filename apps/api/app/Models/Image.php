@@ -28,6 +28,7 @@ class Image extends Model
         'file_size',
         'sha256',
         'caption',
+        'caption_edited',
         'ocr_text',
         'status',
         'error_code',
@@ -36,6 +37,7 @@ class Image extends Model
     ];
 
     protected $casts = [
+        'caption_edited' => 'boolean',
         'width' => 'integer',
         'height' => 'integer',
         'file_size' => 'integer',

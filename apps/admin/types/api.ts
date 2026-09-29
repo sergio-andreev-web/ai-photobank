@@ -242,6 +242,8 @@ export interface ImageDetail {
   file_size: number
   sha256: string
   caption: string | null
+  /** Fixed by an admin; reprocess keeps it (ADR-0006, contracts 1.7.0). */
+  caption_edited: boolean
   ocr_text: string | null
   error_code: string | null
   error_message: string | null
@@ -252,6 +254,8 @@ export interface ImageDetail {
 
 export interface ImagePatchRequest {
   original_name?: string
+  /** A string sets a manual caption; null reverts to the AI caption (ADR-0006, 2026-09-30). */
+  caption?: string | null
 }
 
 export interface ImageTagCreateRequest {

@@ -81,7 +81,11 @@ final readonly class AiAnalysisStage implements ProcessingStage
         ]);
 
         $ocrText = implode("\n", array_map(static fn (OcrItem $item): string => $item->text, $outcome->ocr));
-        $image->caption = $outcome->caption;
+        // A caption fixed by an admin survives reprocess (ADR-0006, 2026-09-30 addendum);
+        // the analysis record above still keeps what the model said.
+        if (! $image->caption_edited) {
+            $image->caption = $outcome->caption;
+        }
         $image->ocr_text = $ocrText === '' ? null : $ocrText;
         $image->save();
 

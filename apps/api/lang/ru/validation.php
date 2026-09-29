@@ -182,6 +182,7 @@ return [
         'alias' => 'синоним',
         'locale' => 'язык',
         'original_name' => 'имя файла',
+        'caption' => 'подпись',
         'tag_id' => 'тег',
         'tag_ids' => 'теги',
         'tag_ids.*' => 'тег',

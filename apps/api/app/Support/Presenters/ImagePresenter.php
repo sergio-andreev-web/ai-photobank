@@ -56,6 +56,7 @@ final class ImagePresenter
             'file_size' => $image->file_size,
             'sha256' => $image->sha256,
             'caption' => $image->caption,
+            'caption_edited' => (bool) $image->caption_edited,
             'ocr_text' => $image->ocr_text,
             'error_code' => $image->error_code,
             'error_message' => $image->error_message,

@@ -141,10 +141,45 @@
 
         <!-- Image Details -->
         <div class="space-y-6">
-          <div v-if="image.caption || image.ocr_text" class="rounded-xl bg-slate-50 p-5">
-            <h3 class="section-title">Описание</h3>
-            <div class="mt-2 space-y-2 text-sm text-gray-600">
-              <p v-if="image.caption">Подпись: {{ image.caption }}</p>
+          <div class="rounded-xl bg-slate-50 p-5" data-testid="caption-block">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="section-title">Описание</h3>
+              <UButton
+                v-if="!editingCaption"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-heroicons-pencil-square"
+                @click="startCaptionEdit"
+              >
+                Изменить подпись
+              </UButton>
+            </div>
+            <form v-if="editingCaption" class="mt-2 space-y-2" novalidate @submit.prevent="saveCaption()">
+              <UFormField label="Подпись" :error="captionError ?? undefined">
+                <UTextarea v-model="captionDraft" :rows="3" maxlength="2000" autoresize class="w-full" autofocus />
+              </UFormField>
+              <div class="flex flex-wrap gap-2">
+                <UButton type="submit" size="sm" :loading="actionLoading === 'caption'" :disabled="!captionDraft.trim()">Сохранить подпись</UButton>
+                <UButton size="sm" variant="ghost" color="neutral" @click="() => { editingCaption = false }">Отмена</UButton>
+              </div>
+            </form>
+            <div v-else class="mt-2 space-y-2 text-sm text-gray-600">
+              <p v-if="image.caption" data-testid="caption-text">
+                Подпись: {{ image.caption }}
+                <UBadge v-if="image.caption_edited" size="sm" color="neutral" variant="soft" class="ml-1">исправлено вручную</UBadge>
+              </p>
+              <p v-else class="text-gray-400">Подписи пока нет.</p>
+              <UButton
+                v-if="image.caption_edited"
+                size="xs"
+                variant="link"
+                color="neutral"
+                :loading="actionLoading === 'caption'"
+                @click="saveCaption(null)"
+              >
+                Вернуть подпись ИИ
+              </UButton>
               <p v-if="image.ocr_text">Текст на изображении: {{ image.ocr_text }}</p>
             </div>
           </div>
@@ -268,7 +303,35 @@ const image = ref<ImageDetail | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
-const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | 'rename' | 'delete' | null>(null)
+const actionLoading = ref<'retry' | 'reprocess' | 'add-tag' | 'remove-tag' | 'rename' | 'delete' | 'caption' | null>(null)
+const editingCaption = ref(false)
+const captionDraft = ref('')
+const captionError = ref<string | null>(null)
+
+function startCaptionEdit() {
+  captionDraft.value = image.value?.caption ?? ''
+  captionError.value = null
+  editingCaption.value = true
+}
+
+/** A string saves a manual caption; null reverts to the AI caption (ADR-0006, 2026-09-30). */
+async function saveCaption(value: string | null = captionDraft.value.trim()) {
+  if (!image.value) return
+  actionLoading.value = 'caption'
+  actionError.value = null
+  captionError.value = null
+  try {
+    image.value = await imagesApi.updateImage(image.value.id, { caption: value })
+    editingCaption.value = false
+    notice.value = value === null ? 'Возвращена подпись ИИ.' : 'Подпись сохранена. Повторная обработка её не изменит.'
+  } catch (e) {
+    const problem = toApiProblem(e)
+    captionError.value = problem.fields.caption?.join(' ') ?? null
+    actionError.value = problem.message
+  } finally {
+    actionLoading.value = null
+  }
+}
 
 const renaming = ref(false)
 const nameDraft = ref('')
