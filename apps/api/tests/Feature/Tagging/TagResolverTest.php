@@ -125,8 +125,8 @@ class TagResolverTest extends TestCase
         $this->embedTag($helmet, ScriptedEmbeddingsAiClient::vector(1));
         $this->embedTag($drill, ScriptedEmbeddingsAiClient::vector(2));
 
-        $this->ai->embedAs('hard hat', ScriptedEmbeddingsAiClient::vector(1, 0.91));         // ≥ 0.82
-        $this->ai->embedAs('drilling platform', ScriptedEmbeddingsAiClient::vector(2, 0.71)); // [0.68, 0.82)
+        $this->ai->embedAs('hard hat', ScriptedEmbeddingsAiClient::vector(1, 0.95));         // ≥ 0.92
+        $this->ai->embedAs('drilling platform', ScriptedEmbeddingsAiClient::vector(2, 0.71)); // [0.68, 0.92)
         $this->ai->embedAs('seagull', ScriptedEmbeddingsAiClient::vector(2, 0.5));            // < 0.68
 
         $image = $this->makeImage();

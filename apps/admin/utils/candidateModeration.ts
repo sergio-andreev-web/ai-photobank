@@ -37,9 +37,11 @@ export function draftError(draft: CandidateDraft): string | null {
 
 /**
  * Similarity from which the closest existing tag is offered as a one-click merge. The value is the
- * server's cosine similarity of tag embeddings (0..1); below it the hint is shown, but not promoted.
+ * server's cosine similarity of SigLIP2 text embeddings (0..1); different concepts reach ~0.87
+ * (стадион~здание 0.863), related ones start near 0.9 (дом~здание 0.905). Below it the hint is
+ * shown, but not promoted.
  */
-export const STRONG_MATCH = 0.8
+export const STRONG_MATCH = 0.89
 
 export function isStrongMatch(candidate: Pick<TagCandidate, 'closest_tag' | 'similarity'>): boolean {
   return candidate.closest_tag !== null && candidate.similarity !== null && candidate.similarity >= STRONG_MATCH
