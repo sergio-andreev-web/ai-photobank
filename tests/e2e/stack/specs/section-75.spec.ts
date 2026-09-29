@@ -32,8 +32,8 @@ import { makeTestImages, runNonce } from '../lib/png'
  */
 
 const QUERY = 'мужчина в каске на промышленном объекте'
-/** apps/admin/pages/candidates.vue shows page 1, per_page=20, in the API default order. */
-const CANDIDATES_ON_FIRST_PAGE = 20
+/** apps/admin/pages/candidates.vue shows page 1, per_page=30, most frequent first (the API default order). */
+const CANDIDATES_ON_FIRST_PAGE = 30
 
 test.describe.configure({ mode: 'serial' })
 
@@ -209,13 +209,15 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     const tagB = await approve(moderation.createdSecond)
 
     // Merge the third candidate into the first new tag; "Add as alias" is on by default (ADR-0008).
+    // The form preselects the closest existing tag, so the target is picked explicitly.
     const merged = moderation.merged
-    await candidateCard(page, merged.display_name).getByRole('button', { name: 'Объединить с…' }).click()
-    await pickOption(page, page.getByText('Поиск тегов…', { exact: true }), tagOptionLabel(tagA), tagA.name)
-    await expect(page.getByRole('checkbox', { name: 'Добавить как синоним' })).toBeChecked()
+    const mergedCard = candidateCard(page, merged.display_name)
+    await mergedCard.getByRole('button', { name: 'Объединить с…' }).click()
+    await pickOption(page, mergedCard.getByTestId('merge-target').getByRole('button').first(), tagOptionLabel(tagA), tagA.name)
+    await expect(mergedCard.getByRole('checkbox', { name: 'Добавить как синоним' })).toBeChecked()
     const [response] = await Promise.all([
       waitForApi(page, 'POST', `/api/admin/tag-candidates/${merged.id}/merge`),
-      page.getByRole('button', { name: 'Объединить', exact: true }).click(),
+      mergedCard.getByRole('button', { name: 'Объединить', exact: true }).click(),
     ])
     expect(response.request().postDataJSON()).toEqual({ tag_id: tagA.id, create_alias: true })
     expect(response.status(), `merge "${merged.display_name}"`).toBe(200)
@@ -365,16 +367,9 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   })
 })
 
-/**
- * The smallest container holding both the candidate's name and its action
- * buttons: a candidate card without depending on its markup or classes.
- */
+/** The candidate's card (apps/admin/components/CandidateCard.vue), merge form included. */
 function candidateCard(page: Page, displayName: string): Locator {
-  return page
-    .locator('div')
-    .filter({ has: page.getByText(displayName, { exact: true }) })
-    .filter({ has: page.getByRole('button', { name: 'Объединить с…' }) })
-    .last()
+  return page.getByTestId('candidate-card').filter({ has: page.getByText(displayName, { exact: true }) })
 }
 
 /** Tag sources as the admin shows them (apps/admin/utils/labels.ts). */
