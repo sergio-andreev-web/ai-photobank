@@ -108,7 +108,8 @@ const route = useRoute()
 const searchApi = useSearch()
 const tagsApi = useTags()
 
-const mode = ref<SearchMode>('hybrid')
+// Semantic by default: it needs no tags, so it works on a fresh library too.
+const mode = ref<SearchMode>('semantic')
 const query = ref('')
 const selectedTags = ref<number[]>([])
 const tagOptions = ref<{ label: string; value: number }[]>([])
@@ -122,9 +123,9 @@ const searchError = ref<string | null>(null)
 const searchErrorCode = ref<string | null>(null)
 
 const modeOptions: { label: string; value: SearchMode }[] = [
+  { label: 'По смыслу запроса', value: 'semantic' },
   { label: 'Гибридный (теги + смысл)', value: 'hybrid' },
   { label: 'Только теги', value: 'tags' },
-  { label: 'По смыслу запроса', value: 'semantic' },
 ]
 
 const tagsLabel = computed(() => (mode.value === 'hybrid' ? 'Теги (обязательный фильтр)' : 'Теги'))

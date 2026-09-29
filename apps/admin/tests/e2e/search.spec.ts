@@ -135,8 +135,8 @@ test.describe('search', () => {
       return json(route, 200, { data: [], meta: { page: 1, per_page: 24, total: 0, last_page: 1, mode: 'hybrid' } })
     })
 
-    // An unknown mode falls back to the default (hybrid), which cannot run without tags.
-    await gotoReady(page, '/search?mode=fulltext&q=helmet')
+    // Hybrid cannot run without tags.
+    await gotoReady(page, '/search?mode=hybrid&q=helmet')
 
     await expect(page.getByPlaceholder(/рабочие в касках/)).toHaveValue('helmet')
     await expect(page.getByRole('combobox', { name: 'Режим поиска' })).toContainText('Гибридный')
@@ -144,6 +144,23 @@ test.describe('search', () => {
     await expect(page.getByRole('button', { name: 'Найти', exact: true })).toBeDisabled()
     await page.waitForTimeout(300)
     expect(searches).toBe(0)
+  })
+
+  test('opens in semantic mode; an unknown mode in a link falls back to it and runs', async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.route('**/api/admin/tags?*', (route) =>
+      json(route, 200, { data: [], meta: { page: 1, per_page: 20, total: 0, last_page: 1 } })
+    )
+    const requests: unknown[] = []
+    await page.route('**/api/search', (route) => {
+      requests.push(route.request().postDataJSON())
+      return json(route, 200, { data: [RESULT_IMAGE], meta: { page: 1, per_page: 24, total: 1, last_page: 1, mode: 'semantic' } })
+    })
+
+    await gotoReady(page, '/search?mode=fulltext&q=helmet')
+    await expect(page.getByRole('combobox', { name: 'Режим поиска' })).toContainText('По смыслу запроса')
+    await expect(page.getByTestId('search-results')).toBeVisible()
+    expect(requests).toEqual([{ mode: 'semantic', query: 'helmet', page: 1, per_page: 24, debug: false }])
   })
 
   test('a plain /search does not run anything', async ({ page }) => {

@@ -6,6 +6,9 @@
 
     <ErrorAlert v-if="loadError" title="Не удалось загрузить изображение" :message="loadError" @dismiss="loadError = null" />
     <ErrorAlert v-if="actionError" :message="actionError" @dismiss="actionError = null" />
+    <div v-if="notice" role="status" aria-live="polite" data-testid="image-notice">
+      <UAlert color="success" variant="soft" :title="notice" close @update:open="notice = null" />
+    </div>
 
     <div v-if="loading && !image" class="text-center text-gray-600">Загрузка…</div>
 
@@ -172,11 +175,29 @@
           <!-- AI concepts -->
           <div v-if="image.latest_analysis?.concepts?.length">
             <h3 class="section-title">Понятия, найденные ИИ</h3>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <UBadge v-for="concept in image.latest_analysis.concepts" :key="`${concept.type}:${concept.label}`" variant="subtle">
+            <p class="mt-1 text-xs text-gray-500">Нажмите на понятие, чтобы добавить фото тег.</p>
+            <div class="mt-2 flex flex-wrap gap-2" data-testid="concepts">
+              <button
+                v-for="concept in image.latest_analysis.concepts"
+                :key="`${concept.type}:${concept.label}`"
+                type="button"
+                class="concept-chip"
+                :class="{ 'is-open': openConcept === concept }"
+                :aria-expanded="openConcept === concept"
+                @click="openConcept = openConcept === concept ? null : concept"
+              >
                 {{ concept.label }} ({{ Math.round(concept.confidence * 100) }}%)
-              </UBadge>
+              </button>
             </div>
+            <ConceptTagger
+              v-if="openConcept"
+              :key="`${openConcept.type}:${openConcept.label}`"
+              :image-id="image.id"
+              :concept="openConcept"
+              :assigned-tag-ids="image.image_tags.map((it) => it.tag.id)"
+              @done="onConceptTagged"
+              @close="openConcept = null"
+            />
           </div>
 
           <!-- Processing Tasks -->
@@ -203,7 +224,7 @@ definePageMeta({
   middleware: 'auth',
 })
 
-import type { ImageDetail, ImageStatus, Tag } from '~/types/api'
+import type { Concept, ImageDetail, ImageStatus, Tag } from '~/types/api'
 import { toApiProblem } from '~/utils/errorHandler'
 import {
   IMAGE_STATUS_LABELS,
@@ -234,6 +255,14 @@ const renameError = ref<string | null>(null)
 const confirmingDelete = ref(false)
 
 const showAddTag = ref(false)
+const openConcept = ref<Concept | null>(null)
+const notice = ref<string | null>(null)
+
+async function onConceptTagged(message: string) {
+  openConcept.value = null
+  notice.value = message
+  await loadImage()
+}
 const tagToAdd = ref<number | undefined>()
 const tagOptions = ref<{ label: string; value: number }[]>([])
 
