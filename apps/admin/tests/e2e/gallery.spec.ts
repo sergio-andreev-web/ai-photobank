@@ -121,6 +121,8 @@ const lastOf = <T>(items: T[]) => items[items.length - 1]!
 // Nuxt UI's SelectMenu trigger is a plain button (unlike USelect it is not exposed as a labelled combobox).
 const tagFilter = (page: Page) => page.getByTestId('tag-filter')
 const openTagFilter = (page: Page) => tagFilter(page).getByRole('button').click()
+// Tags, batch and dates sit in a collapsible panel.
+const openFilters = (page: Page) => page.getByRole('button', { name: /^Фильтры/ }).click()
 
 test.describe('gallery', () => {
   test('cards show thumbnail, status, tags and created date', async ({ page }) => {
@@ -177,6 +179,7 @@ test.describe('gallery', () => {
     })
 
     await gotoReady(page, '/gallery')
+    await openFilters(page)
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
     // No tag filter, no tag_ids on the first load.
     expect(imageRequests[0]!.searchParams.has('tag_ids[]')).toBe(false)
@@ -209,6 +212,7 @@ test.describe('gallery', () => {
     const { imageRequests, tagRequests } = await mockLibrary(page)
 
     await gotoReady(page, '/gallery')
+    await openFilters(page)
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
     // Filled once when the page opens, without a search term.
     expect(tagRequests[0]!.searchParams.has('q')).toBe(false)
@@ -232,6 +236,7 @@ test.describe('gallery', () => {
     const { imageRequests } = await mockLibrary(page)
 
     await gotoReady(page, '/gallery')
+    await openFilters(page)
     await openTagFilter(page)
     await page.getByRole('option', { name: 'Старый логотип (Объект, в архиве)' }).click()
 
@@ -243,6 +248,7 @@ test.describe('gallery', () => {
     const { imageRequests } = await mockLibrary(page)
 
     await gotoReady(page, '/gallery')
+    await openFilters(page)
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
     expect(imageRequests[0]!.searchParams.has('created_from')).toBe(false)
     expect(imageRequests[0]!.searchParams.has('created_to')).toBe(false)
@@ -268,6 +274,7 @@ test.describe('gallery', () => {
     const { imageRequests } = await mockLibrary(page)
 
     await gotoReady(page, '/gallery')
+    await openFilters(page)
     await expect(page.getByTestId('gallery-card')).toHaveCount(3)
     await expect(page.getByRole('button', { name: 'Сбросить фильтры' })).toHaveCount(0)
 
@@ -388,4 +395,19 @@ test.describe('gallery', () => {
     expect(new URL(page.url()).searchParams.get('q')).toBe('drilling rig at night')
     await expect(page.getByText('Ничего не найдено.')).toBeVisible()
   })
+})
+
+test('the filter panel is collapsed by default, shows the active count and opens for a deep link', async ({ page }) => {
+  await loginAsAdmin(page)
+  await mockLibrary(page)
+
+  await gotoReady(page, '/gallery')
+  await expect(page.getByLabel('Создано с')).toBeHidden()
+  await openFilters(page)
+  await page.getByLabel('Создано с').fill('2026-09-24')
+  await expect(page.getByRole('button', { name: 'Фильтры (1)' })).toBeVisible()
+
+  await gotoReady(page, '/gallery?batch_id=42')
+  await expect(page.getByRole('combobox', { name: 'Партия' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Фильтры (1)' })).toHaveAttribute('aria-expanded', 'true')
 })

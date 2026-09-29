@@ -10,7 +10,8 @@
     </div>
 
     <!-- AI search + filters -->
-    <div class="surface-card space-y-5 p-5">
+    <!-- flex/gap, not space-y: a collapsed (display: none) panel must not leave its margin behind. -->
+    <div class="surface-card flex flex-col gap-5 p-5">
       <!-- Hands the query over to the search page in semantic mode; the gallery grid is not filtered by it. -->
       <form class="flex flex-wrap gap-3" role="search" data-testid="ai-search-form" @submit.prevent="submitAiSearch">
         <UInput
@@ -22,9 +23,19 @@
           class="min-w-[240px] flex-1"
         />
         <UButton type="submit" :disabled="!aiQuery.trim()">ИИ-поиск</UButton>
+        <UButton
+          color="neutral"
+          variant="soft"
+          icon="i-heroicons-adjustments-horizontal"
+          :aria-expanded="filtersOpen"
+          aria-controls="gallery-filters"
+          @click="filtersOpen = !filtersOpen"
+        >
+          Фильтры<template v-if="panelFilterCount"> ({{ panelFilterCount }})</template>
+        </UButton>
       </form>
 
-      <div class="flex flex-wrap gap-4">
+      <div v-show="filtersOpen" id="gallery-filters" class="flex flex-wrap gap-4">
         <UFormField
           label="Теги"
           help="У изображения должны быть все выбранные теги."
@@ -272,6 +283,13 @@ const sortOptions: { label: string; value: ImageSort }[] = [
   { label: 'Сначала новые', value: '-created_at' },
   { label: 'Сначала старые', value: 'created_at' },
 ]
+
+// Tags, batch and dates live in a collapsible panel (status has its own tabs); it starts open when a
+// deep link already set one of them.
+const panelFilterCount = computed(
+  () => (filters.tagIds.length ? 1 : 0) + (filters.batchId !== ALL ? 1 : 0) + (filters.dateFrom || filters.dateTo ? 1 : 0),
+)
+const filtersOpen = ref(panelFilterCount.value > 0)
 
 // Selection lives on the current page only: it is pruned on every reload and cleared on page/filter changes.
 const selected = ref<Set<number>>(new Set())
