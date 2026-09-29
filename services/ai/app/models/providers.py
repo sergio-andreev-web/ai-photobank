@@ -88,6 +88,34 @@ def build_transformers_models(settings: Settings, device: AiDevice, prompt: str)
     return vision, embedding
 
 
+def build_face_model(settings: Settings):
+    """FaceModel for POST /v1/faces/detect, or None when the face contour is off (ADR-0015)."""
+    if not settings.faces_enabled:
+        return None
+    if settings.ai_model_provider != "transformers":
+        from .faces import MockFaceModel
+
+        return MockFaceModel()
+    from pathlib import Path
+
+    from .faces import DETECTOR_FILE, EMBEDDER_FILE, OnnxFaceModel, model_revision
+
+    model_dir = Path(settings.face_model_dir or Path.home() / ".cache" / "photobank-ai" / "insightface" / "buffalo_l").expanduser()
+    if not (model_dir / DETECTOR_FILE).is_file() or not (model_dir / EMBEDDER_FILE).is_file():
+        logger.warning("ai_service.faces_model_missing", extra={"model_dir": str(model_dir)})
+        return None
+    try:
+        return OnnxFaceModel(
+            model_dir,
+            revision=model_revision(model_dir),
+            detection_threshold=settings.face_detection_threshold,
+            min_face_pixels=settings.face_min_pixels,
+        )
+    except Exception:
+        logger.exception("ai_service.faces_model_failed")
+        return None
+
+
 def build_models(settings: Settings, device: AiDevice, prompt: str) -> tuple[VisionModel, EmbeddingModel]:
     if settings.ai_model_provider == "transformers":
         return build_transformers_models(settings, device, prompt)

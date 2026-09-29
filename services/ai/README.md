@@ -132,3 +132,20 @@ docker build --build-arg INSTALL_MODEL_DEPS=true -t ai-photobank-ai:cuda service
 See docs/technical-specification.md §58, §60, §69 for the shared variables
 (`DEVICE`, `DTYPE`, `VISION_MODEL`, `EMBEDDING_MODEL`, `HF_HOME`,
 `PROMPT_VERSION`, `AI_SERVICE_API_KEY`, ...). Defaults live in `app/config.py`.
+
+## Faces (ADR-0015)
+
+`POST /v1/faces/detect` (contract `contracts/schemas/face-detection.json`): faces with a box and 5 landmarks
+(fractions of the image), detector score and an L2-normalized 512-dim ArcFace vector. The service knows no
+people: matching faces to people is the backend's job.
+
+- Model: InsightFace `buffalo_l` (SCRFD-10G `det_10g.onnx` + ArcFace R50 WebFace600K `w600k_r50.onnx`) via
+  onnxruntime on CPU, so it runs next to the VLM on MPS. Non-commercial license. No `insightface`/OpenCV
+  dependency: `app/models/faces.py` decodes SCRFD and aligns faces itself.
+- Weights: `infra/scripts/fetch-face-model.sh` (checksums pinned); `make start` calls it. Default dir
+  `~/.cache/photobank-ai/insightface/buffalo_l`, override `FACE_MODEL_DIR`.
+- `FACES_ENABLED=false` or missing weights → 503 `MODEL_NOT_READY` (`details.stage=faces_unavailable`);
+  `/ready` and analyze are not affected. Mock provider → deterministic `MockFaceModel`.
+- `revision` = sha256 prefixes of both files; vectors of different revisions must not be compared.
+- Measured on the 21-photo set + 8 event photos: 30–310 ms per photo; the same person 0.64–0.87 cosine
+  (incl. profile views), different people ≤ 0.15. Suggested match threshold 0.45.

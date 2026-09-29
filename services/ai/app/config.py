@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     # Generation attempts before MODEL_OUTPUT_INVALID (contract: "после внутренних попыток").
     ai_vlm_output_attempts: int = Field(default=2, ge=1, le=5, alias="AI_VLM_OUTPUT_ATTEMPTS")
 
+    # Faces (ADR-0015): InsightFace buffalo_l over onnxruntime on CPU. Disabled or model files
+    # missing → POST /v1/faces/detect answers 503 MODEL_NOT_READY; the rest works as before.
+    faces_enabled: bool = Field(default=True, alias="FACES_ENABLED")
+    face_model_dir: str | None = Field(default=None, alias="FACE_MODEL_DIR")
+    face_detection_threshold: float = Field(default=0.5, gt=0, lt=1, alias="FACE_DETECTION_THRESHOLD")
+    face_min_pixels: int = Field(default=32, ge=8, alias="FACE_MIN_PIXELS")
+    # Faces run on CPU next to the VLM; one request at a time is plenty for the pipeline.
+    ai_face_concurrency: int = Field(default=1, ge=1, alias="AI_FACE_CONCURRENCY")
+
     # §63 "/docs FastAPI запрещать в production либо защищать".
     ai_environment: str = Field(default="development", alias="AI_ENVIRONMENT")
 

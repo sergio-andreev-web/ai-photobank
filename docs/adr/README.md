@@ -25,6 +25,7 @@
 | [0012](0012-similar-images.md) | Похожие изображения по image embedding | Search, Images | Accepted |
 | [0013](0013-trash-and-restore.md) | Корзина и восстановление изображений | Images, Media | Accepted |
 | [0014](0014-download-originals.md) | Скачивание оригиналов архивом | Images, Media | Accepted |
+| [0015](0015-face-recognition.md) | Распознавание людей по лицам (InsightFace, справочник людей, 152-ФЗ) | Faces | Accepted |
 
 Строка плана «ТЗ показывает массив embedding из 2 чисел» закрыта без ADR — это однозначное требование §5:
 `schemas/image-analysis.json` требует ровно 1152 числа, полный пример — `contracts/examples/ai/analyze-response.json`.

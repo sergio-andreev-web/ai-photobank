@@ -74,6 +74,11 @@ start() {
   set +a
   local hf_home="${AI_MAC_HF_HOME:-$HOME/.cache/photobank-ai/huggingface}"
   mkdir -p "$hf_home"
+  # Faces (ADR-0015) run in the same process; fetch their weights on the first start.
+  local face_dir="${FACE_MODEL_DIR:-$HOME/.cache/photobank-ai/insightface/buffalo_l}"
+  if [ "${FACES_ENABLED:-true}" != "false" ]; then
+    "$ROOT/infra/scripts/fetch-face-model.sh" "$face_dir" || echo "⚠ Face models unavailable: faces are off, the rest works" >&2
+  fi
 
   echo "=== start $(date '+%F %T')" >>"$LOG_FILE"
   # Own session: the service outlives the terminal (and `make`) that started it, and Ctrl+C
@@ -81,7 +86,7 @@ start() {
   (
     cd "$ROOT/services/ai"
     export DEVICE="${AI_MAC_DEVICE:-mps}" AI_MODEL_PROVIDER=transformers \
-      AI_CONCURRENCY="${AI_CONCURRENCY:-1}" HF_HOME="$hf_home" PYTHONUNBUFFERED=1
+      AI_CONCURRENCY="${AI_CONCURRENCY:-1}" HF_HOME="$hf_home" PYTHONUNBUFFERED=1 FACE_MODEL_DIR="$face_dir"
     "$python" - "$LOG_FILE" "$PORT" >"$PID_FILE" <<'PY'
 import subprocess, sys
 log = open(sys.argv[1], "ab")

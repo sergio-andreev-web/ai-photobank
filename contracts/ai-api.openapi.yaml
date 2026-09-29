@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — AI Service API
-  version: 1.8.0
+  version: 1.9.0
   summary: HTTP-контракт Laravel ↔ FastAPI AI service.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -170,6 +170,64 @@ paths:
           $ref: '#/components/responses/InferenceFailed'
         '502':
           $ref: '#/components/responses/ModelOutputInvalid'
+        '503':
+          $ref: '#/components/responses/NotReady'
+  /v1/faces/detect:
+    post:
+      tags: [inference]
+      operationId: detectFaces
+      summary: Лица на изображении и их векторы
+      x-adr: ADR-0015
+      description: |
+        Находит лица (SCRFD) и считает для каждого L2-нормированный 512-мерный вектор (ArcFace), InsightFace
+        `buffalo_l`. Людей и ID не знает: кому принадлежит лицо, решает backend. Требования к изображению — как у
+        analyze (MIME по содержимому, EXIF-поворот, лимит размера). Лица меньше 32 px не возвращаются. Выполняется на
+        CPU, параллельно с analyze. Контур лиц выключен (`FACES_ENABLED=false`) или модель не загружена —
+        503 `MODEL_NOT_READY`.
+      parameters:
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image, request_id]
+              properties:
+                image:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: Бинарное изображение (image/jpeg, image/png, image/webp — по содержимому).
+                request_id:
+                  $ref: '#/components/schemas/RequestId'
+            encoding:
+              image:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '200':
+          description: Лица по `schemas/face-detection.json`.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/face-detection.json'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/ImageTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableImage'
+        '429':
+          $ref: '#/components/responses/ServiceBusy'
+        '500':
+          $ref: '#/components/responses/InferenceFailed'
         '503':
           $ref: '#/components/responses/NotReady'
   /v1/embeddings/text:

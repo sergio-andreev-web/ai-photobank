@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-photobank.local/contracts/schemas/face-detection.json",
+  "title": "Face detection (AI API)",
+  "description": "Ответ POST /v1/faces/detect (ADR-0015): лица на изображении и их векторы. AI не знает людей и ID; кто на фото, решает backend.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "faces", "embedding_dimensions", "model", "image", "processing_ms"],
+  "properties": {
+    "request_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "faces": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "Лица, от крупных к мелким.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["box", "score", "landmarks", "embedding"],
+        "properties": {
+          "box": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "width", "height"],
+            "description": "Рамка лица в долях ширины/высоты изображения (0..1), левый верхний угол + размер.",
+            "properties": {
+              "x": {"type": "number", "minimum": 0, "maximum": 1},
+              "y": {"type": "number", "minimum": 0, "maximum": 1},
+              "width": {"type": "number", "minimum": 0, "maximum": 1},
+              "height": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          },
+          "score": {"type": "number", "minimum": 0, "maximum": 1, "description": "Уверенность детектора."},
+          "landmarks": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "description": "Глаза, кончик носа, углы рта — [x, y] в долях изображения.",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {"type": "number"}
+            }
+          },
+          "embedding": {
+            "type": "array",
+            "minItems": 512,
+            "maxItems": 512,
+            "description": "L2-нормированный вектор ArcFace; cosine = скалярное произведение.",
+            "items": {"type": "number"}
+          }
+        }
+      }
+    },
+    "embedding_dimensions": {"const": 512},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "revision"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 255, "description": "Векторы разных revision не сравниваются (§77)."}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "description": "Размер изображения, в котором искались лица (после EXIF-поворота).",
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "processing_ms": {"type": "integer", "minimum": 0}
+  }
+}
