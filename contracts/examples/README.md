@@ -50,7 +50,7 @@ examples/
 #### `ai/analyze-response.json`
 Полный анализ изображения со следующими элементами:
 - **request_id**: UUID запроса
-- **caption**: Описание изображения на английском (естественный язык)
+- **caption**: Описание изображения (естественный язык). Пример — вывод prompt `image-analysis-v1` (английский); с prompt `image-analysis-v3` caption и label — на русском (ADR-0010, контракты 1.3.0)
 - **ocr**: Массив найденных текстов с confidence
 - **concepts**: Визуальные понятия (person, object, scene, activity) с confidence
 - **embedding**: L2-нормализованный вектор размерностью ровно 1152
