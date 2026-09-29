@@ -12,9 +12,10 @@ from .exception_handlers import (
     unhandled_exception_handler,
     validation_error_handler,
 )
+from .models.providers import build_face_model
 from .models.registry import ModelRegistry
 from .request_id import RequestIdMiddleware
-from .routers import analyze, embeddings, health
+from .routers import analyze, embeddings, faces, health
 from .schemas.errors import AiServiceError
 
 
@@ -42,7 +43,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.limiters = InferenceLimiters(
         vision=InferenceLimiter(settings.ai_concurrency),
         text=InferenceLimiter(settings.ai_text_embedding_concurrency),
+        faces=InferenceLimiter(settings.ai_face_concurrency),
     )
+    # Loads in well under a second (ONNX on CPU), so it is built here, not in the background.
+    app.state.face_model = build_face_model(settings)
 
     app.add_middleware(RequestIdMiddleware)
 
@@ -53,5 +57,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(analyze.router)
     app.include_router(embeddings.router)
+    app.include_router(faces.router)
 
     return app

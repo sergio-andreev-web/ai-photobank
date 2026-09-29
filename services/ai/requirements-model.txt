@@ -10,3 +10,5 @@ transformers>=4.57.0,<6
 accelerate>=1.0,<2
 huggingface_hub>=0.34
 safetensors>=0.4
+# Faces (ADR-0015): InsightFace buffalo_l ONNX models on CPU.
+onnxruntime>=1.18,<2

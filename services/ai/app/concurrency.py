@@ -49,3 +49,5 @@ class InferenceLimiter:
 class InferenceLimiters:
     vision: InferenceLimiter
     text: InferenceLimiter
+    # Face detection/embeddings (ADR-0015) run on CPU (onnxruntime), never on MPS.
+    faces: InferenceLimiter
