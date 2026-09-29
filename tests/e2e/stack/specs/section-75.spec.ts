@@ -10,7 +10,7 @@ import type {
   TagCandidate,
   TagRef,
 } from '../lib/api'
-import { apiGet, escapeRegExp, gotoReady, login, pickOption, waitForApi } from '../lib/app'
+import { apiGet, escapeRegExp, gotoReady, login, pickOption, tagOptionLabel, waitForApi } from '../lib/app'
 import { env } from '../lib/env'
 import { makeTestImages, runNonce } from '../lib/png'
 
@@ -72,21 +72,21 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
 
   await test.step('1. Войти', async () => {
     await login(page)
-    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Обзор', exact: true })).toBeVisible()
   })
 
   const batch = await test.step('2. Создать batch', async () => {
     await gotoReady(page, '/uploader')
-    await page.getByPlaceholder('e.g., Site visit - September 2026').fill(`e2e §75 ${nonce}`)
+    await page.getByPlaceholder('Например: Выезд на объект, сентябрь 2026').fill(`e2e §75 ${nonce}`)
     const [response] = await Promise.all([
       waitForApi(page, 'POST', '/api/admin/batches'),
-      page.getByRole('button', { name: 'Create Batch' }).click(),
+      page.getByRole('button', { name: 'Создать партию' }).click(),
     ])
     expect(response.status(), 'POST /api/admin/batches').toBe(201)
     const created = (await response.json()) as Batch
     expect(created).toMatchObject({ status: 'created', progress: { total: 0, processed: 0, failed: 0 } })
     run.batchId = created.id
-    await expect(page.getByText(`Batch #${created.id}:`)).toBeVisible()
+    await expect(page.getByText(`Партия #${created.id}:`)).toBeVisible()
     return created
   })
 
@@ -125,13 +125,13 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     run.imageIds = bodies.map((body) => body.id)
 
     const list = page.getByTestId('upload-list')
-    await expect(list.getByText('Uploaded, queued for processing')).toHaveCount(count)
+    await expect(list.getByText('Загружен, ждёт обработки')).toHaveCount(count)
     return bodies
   })
   const ourIds = new Set(uploaded.map((image) => image.id))
 
   await test.step('4. Увидеть progress', async () => {
-    const finish = page.getByRole('button', { name: `Mark upload finished (${count} files)` })
+    const finish = page.getByRole('button', { name: new RegExp(`^\\s*Завершить загрузку \\(${count} файл`) })
     await expect(finish).toBeEnabled()
     const [response] = await Promise.all([
       waitForApi(page, 'POST', `/api/admin/batches/${batch.id}/complete`),
@@ -141,17 +141,17 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
 
     const progress = page.getByTestId('batch-progress')
     await expect(progress).toBeVisible()
-    await expect(progress).toContainText('Batch progress')
-    // Playwright concatenates text from adjacent nodes ("Batch progress0 / 20"),
+    await expect(progress).toContainText('Обработка партии')
+    // Playwright concatenates text from adjacent nodes ("Обработка партии0 / 20"),
     // so there is no word boundary before the first digit.
     await expect(progress).toContainText(new RegExp(`\\d+ / ${count}\\b`))
   })
 
   await test.step('5. Дождаться processing', async () => {
     // Vue keeps the template's leading/trailing spaces in text nodes, and regex getByText sees raw text.
-    const finalStatus = page.getByText(/^\s*Status: (completed|completed_with_errors|failed)\s*$/)
+    const finalStatus = page.getByText(/^\s*Статус: (Завершена|Завершена с ошибками|Ошибка)\s*$/)
     await expect(finalStatus).toBeVisible({ timeout: env.processingTimeoutMs })
-    await expect(finalStatus).toHaveText('Status: completed')
+    await expect(finalStatus).toHaveText('Статус: Завершена')
     await expect(page.getByTestId('batch-progress')).toContainText(`${count} / ${count}`)
 
     const state = await apiGet<Batch>(page, `/api/admin/batches/${batch.id}`)
@@ -168,7 +168,7 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   // Steps 11–12 before 6–10: see the header comment.
   const moderation = await test.step('11. Открыть tag candidates', async () => {
     await gotoReady(page, '/candidates')
-    await expect(page.getByRole('heading', { name: 'Tag Candidates', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Кандидаты в теги', exact: true })).toBeVisible()
 
     const pending = await apiGet<Paginated<TagCandidate>>(page, '/api/admin/tag-candidates?status=pending&per_page=100')
     const ours = pending.data
@@ -182,9 +182,9 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     for (const candidate of ours.slice(0, 3)) {
       const card = candidateCard(page, candidate.display_name)
       await expect(page.getByText(candidate.display_name, { exact: true })).toHaveCount(1)
-      await expect(card).toContainText(`seen in ${candidate.occurrences_count} image(s)`)
+      await expect(card).toContainText(`встречается на ${candidate.occurrences_count} изображени`)
       const sample = candidate.sample_images.find((image) => ourIds.has(image.id))!
-      await expectImageLoaded(card.getByAltText(`Sample image #${sample.id}`, { exact: true }))
+      await expectImageLoaded(card.getByAltText(`Пример: изображение #${sample.id}`, { exact: true }))
     }
     const [first, second, third] = ours as [TagCandidate, TagCandidate, TagCandidate]
     return { created: first, createdSecond: second, merged: third }
@@ -194,7 +194,7 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     const approve = async (candidate: TagCandidate): Promise<TagRef> => {
       const [response] = await Promise.all([
         waitForApi(page, 'POST', `/api/admin/tag-candidates/${candidate.id}/approve`),
-        candidateCard(page, candidate.display_name).getByRole('button', { name: 'Create Tag' }).click(),
+        candidateCard(page, candidate.display_name).getByRole('button', { name: 'Создать тег' }).click(),
       ])
       expect(response.status(), `approve "${candidate.display_name}"`).toBe(200)
       const resolution = (await response.json()) as CandidateResolution
@@ -210,12 +210,12 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
 
     // Merge the third candidate into the first new tag; "Add as alias" is on by default (ADR-0008).
     const merged = moderation.merged
-    await candidateCard(page, merged.display_name).getByRole('button', { name: 'Merge Into...' }).click()
-    await pickOption(page, page.getByText('Search tags...', { exact: true }), `${tagA.name} (${tagA.type})`, tagA.name)
-    await expect(page.getByRole('checkbox', { name: 'Add as alias' })).toBeChecked()
+    await candidateCard(page, merged.display_name).getByRole('button', { name: 'Объединить с…' }).click()
+    await pickOption(page, page.getByText('Поиск тегов…', { exact: true }), tagOptionLabel(tagA), tagA.name)
+    await expect(page.getByRole('checkbox', { name: 'Добавить как синоним' })).toBeChecked()
     const [response] = await Promise.all([
       waitForApi(page, 'POST', `/api/admin/tag-candidates/${merged.id}/merge`),
-      page.getByRole('button', { name: 'Confirm Merge' }).click(),
+      page.getByRole('button', { name: 'Объединить', exact: true }).click(),
     ])
     expect(response.request().postDataJSON()).toEqual({ tag_id: tagA.id, create_alias: true })
     expect(response.status(), `merge "${merged.display_name}"`).toBe(200)
@@ -250,7 +250,7 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   })
 
   await test.step('7. Увидеть caption', async () => {
-    await expect(page.getByText(`Caption: ${image.caption}`, { exact: true })).toBeVisible()
+    await expect(page.getByText(`Подпись: ${image.caption}`, { exact: true })).toBeVisible()
   })
 
   await test.step('8. Увидеть AI tags', async () => {
@@ -260,7 +260,7 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   })
 
   await test.step('9. Вручную удалить неправильный tag', async () => {
-    const removeButton = page.getByRole('button', { name: `Remove ${remove.name}`, exact: true })
+    const removeButton = page.getByRole('button', { name: `Убрать тег ${remove.name}`, exact: true })
     const [response] = await Promise.all([
       waitForApi(page, 'DELETE', `/api/admin/images/${image.id}/tags/${remove.id}`),
       removeButton.click(),
@@ -270,11 +270,11 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   })
 
   await test.step('10. Добавить свой tag', async () => {
-    await page.getByRole('button', { name: 'Add Tag', exact: true }).click()
-    await pickOption(page, page.getByText('Select a tag', { exact: true }), `${add.name} (${add.type})`, add.name)
+    await page.getByRole('button', { name: 'Добавить тег', exact: true }).click()
+    await pickOption(page, page.getByText('Выберите тег', { exact: true }), tagOptionLabel(add), add.name)
     const [response] = await Promise.all([
       waitForApi(page, 'POST', `/api/admin/images/${image.id}/tags`),
-      page.getByRole('button', { name: 'Add', exact: true }).click(),
+      page.getByRole('button', { name: 'Добавить', exact: true }).click(),
     ])
     expect(response.request().postDataJSON()).toEqual({ tag_id: add.id })
     expect(response.status(), 'POST image tag').toBe(201)
@@ -284,7 +284,7 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     // Both edits survive a reload.
     await gotoReady(page, `/gallery/${image.id}`)
     await expect(tagBadge(page, add.name, 'manual')).toBeVisible()
-    await expect(page.getByRole('button', { name: `Remove ${remove.name}`, exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: `Убрать тег ${remove.name}`, exact: true })).toHaveCount(0)
   })
 
   await test.step('13. Выполнить поиск по tag', async () => {
@@ -293,12 +293,12 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
     expect(expected.map((it) => it.id)).toContain(image.id)
 
     await gotoReady(page, '/search')
-    await pickOption(page, page.getByRole('combobox', { name: 'Search Mode' }), 'Tags only')
-    await pickOption(page, page.getByText('Select tags (all must match)', { exact: true }), `${add.name} (${add.type})`, add.name)
+    await pickOption(page, page.getByRole('combobox', { name: 'Режим поиска' }), 'Только теги')
+    await pickOption(page, page.getByText('Выберите теги (нужны все)', { exact: true }), tagOptionLabel(add), add.name)
     await page.keyboard.press('Escape')
     const [response] = await Promise.all([
       waitForApi(page, 'POST', '/api/search'),
-      page.getByRole('button', { name: 'Search', exact: true }).click(),
+      page.getByRole('button', { name: 'Найти', exact: true }).click(),
     ])
     expect(response.request().postDataJSON()).toMatchObject({ mode: 'tags', tag_ids: [add.id] })
     expect(response.status(), 'POST /api/search (tags)').toBe(200)
@@ -316,15 +316,15 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
   })
 
   await test.step(`14. Выполнить запрос «${QUERY}»`, async () => {
-    await pickOption(page, page.getByRole('combobox', { name: 'Search Mode' }), 'Semantic query')
-    await page.getByPlaceholder('e.g., workers in hard hats near industrial equipment').fill(QUERY)
-    await page.getByRole('checkbox', { name: 'Debug (show similarity score)' }).check()
+    await pickOption(page, page.getByRole('combobox', { name: 'Режим поиска' }), 'По смыслу запроса')
+    await page.getByPlaceholder('Например: рабочие в касках возле промышленного оборудования').fill(QUERY)
+    await page.getByRole('checkbox', { name: 'Отладка (показать степень сходства)' }).check()
   })
 
   await test.step('15. Получить изображения, отсортированные по semantic similarity', async () => {
     const [response] = await Promise.all([
       waitForApi(page, 'POST', '/api/search'),
-      page.getByRole('button', { name: 'Search', exact: true }).click(),
+      page.getByRole('button', { name: 'Найти', exact: true }).click(),
     ])
     expect(response.request().postDataJSON()).toMatchObject({ mode: 'semantic', query: QUERY, debug: true })
     expect(response.status(), 'POST /api/search (semantic)').toBe(200)
@@ -344,19 +344,19 @@ test('§75: login, batch of 20, progress, moderation, manual tag edits, tag and 
 
     // The page shows the ranking in the returned order, with the debug score on every card.
     const results = page.getByTestId('search-results')
-    await expect(page.getByRole('heading', { name: `Results (${result.meta.total})` })).toBeVisible()
+    await expect(page.getByRole('heading', { name: `Результаты (${result.meta.total})` })).toBeVisible()
     const cards = results.getByRole('link')
     await expect(cards).toHaveCount(result.data.length)
     const cardTexts = (await cards.allTextContents()).map((text) => text.replace(/\s+/g, ' ').trim())
     result.data.forEach((hit, i) => {
       expect(cardTexts[i], `result card ${i + 1}`).toContain(hit.original_name)
-      expect(cardTexts[i], `result card ${i + 1}`).toContain(`Score: ${hit.semantic_score!.toFixed(3)}`)
+      expect(cardTexts[i], `result card ${i + 1}`).toContain(`Сходство: ${hit.semantic_score!.toFixed(3)}`)
     })
-    const shown = (await results.getByText(/^\s*Score: -?\d+\.\d{3}\s*$/).allTextContents()).map((text) =>
-      Number(text.replace('Score:', '')),
+    const shown = (await results.getByText(/^\s*Сходство: -?\d+\.\d{3}\s*$/).allTextContents()).map((text) =>
+      Number(text.replace('Сходство:', '')),
     )
     expect(shown).toHaveLength(result.data.length)
-    expectNonIncreasing(shown, 'Score values on the page')
+    expectNonIncreasing(shown, 'similarity values on the page')
 
     if (result.meta.total === count) {
       // Fresh stack: the ranking covers exactly this run's images.
@@ -373,13 +373,16 @@ function candidateCard(page: Page, displayName: string): Locator {
   return page
     .locator('div')
     .filter({ has: page.getByText(displayName, { exact: true }) })
-    .filter({ has: page.getByRole('button', { name: 'Merge Into...' }) })
+    .filter({ has: page.getByRole('button', { name: 'Объединить с…' }) })
     .last()
 }
 
-/** A tag badge on the image card, e.g. "Каска (manual)". */
+/** Tag sources as the admin shows them (apps/admin/utils/labels.ts). */
+const SOURCE_LABELS: Record<ImageTag['source'], string> = { ai: 'ИИ', manual: 'вручную', import: 'импорт' }
+
+/** A tag badge on the image card, e.g. "Каска (вручную)". */
 function tagBadge(page: Page, name: string, source: ImageTag['source']): Locator {
-  return page.getByTestId('image-tags').getByText(new RegExp(`^\\s*${escapeRegExp(name)}\\s*\\(${source}\\)`))
+  return page.getByTestId('image-tags').getByText(new RegExp(`^\\s*${escapeRegExp(name)}\\s*\\(${SOURCE_LABELS[source]}\\)`))
 }
 
 /** Thumbnails/previews come through /api/media and nginx X-Accel-Redirect (§57, ADR-0011). */

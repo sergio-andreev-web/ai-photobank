@@ -20,7 +20,7 @@ export async function login(page: Page): Promise<void> {
   const [response] = await Promise.all([
     waitForApi(page, 'POST', '/api/auth/login'),
     // "Sign in" today, "Sign in to Photobank" after the admin redesign (#44).
-    page.getByRole('button', { name: /^Sign in/ }).click(),
+    page.getByRole('button', { name: 'Войти', exact: true }).click(),
   ])
   expect(response.status(), 'POST /api/auth/login').toBe(200)
   await page.waitForURL('**/dashboard')
@@ -66,12 +66,33 @@ export async function apiGet<T>(page: Page, path: string): Promise<T> {
 export async function pickOption(page: Page, trigger: Locator, label: string, searchTerm?: string): Promise<void> {
   await trigger.click()
   if (searchTerm !== undefined) {
-    // USelectMenu renders an autofocused search input (Nuxt UI locale placeholder "Search...");
+    // USelectMenu renders an autofocused search input (Nuxt UI ru locale placeholder "Поиск...");
     // typing narrows both the server-side tag lookup and the client-side filter, so the
     // wanted tag is found even when the catalog is larger than one page of options.
-    await page.getByPlaceholder('Search...', { exact: true }).fill(searchTerm)
+    await page.getByPlaceholder('Поиск...', { exact: true }).fill(searchTerm)
   }
   await page.getByRole('option', { name: label, exact: true }).click()
+}
+
+/** Tag types as the Russian-only admin shows them (apps/admin/utils/labels.ts). */
+const TAG_TYPE_LABELS: Record<string, string> = {
+  object: 'Объект',
+  person: 'Человек',
+  activity: 'Действие',
+  scene: 'Сцена',
+  location: 'Место',
+  season: 'Сезон',
+  weather: 'Погода',
+  brand: 'Бренд',
+  event: 'Событие',
+  color: 'Цвет',
+  concept: 'Понятие',
+  other: 'Другое',
+}
+
+/** A tag option in the admin's selects: "Каска (Объект)". */
+export function tagOptionLabel(tag: { name: string; type: string }): string {
+  return `${tag.name} (${TAG_TYPE_LABELS[tag.type] ?? tag.type})`
 }
 
 export function escapeRegExp(text: string): string {
