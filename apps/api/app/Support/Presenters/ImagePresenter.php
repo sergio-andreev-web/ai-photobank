@@ -69,7 +69,7 @@ final class ImagePresenter
     /**
      * @return array{thumbnail: string|null, preview: string|null, original: string}
      */
-    private static function urls(Image $image): array
+    public static function urls(Image $image): array
     {
         return [
             'thumbnail' => $image->thumbnail_key ? self::mediaUrl($image->id, 'thumbnail') : null,

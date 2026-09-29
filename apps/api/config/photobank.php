@@ -131,6 +131,30 @@ return [
         'similar_min_similarity' => (float) env('SIMILAR_MIN_SIMILARITY', 0.7),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Faces (ADR-0015)
+    |--------------------------------------------------------------------------
+    |
+    | ArcFace cosine on 29 test photos (2026-09-30): the same person 0.64–0.87
+    | (incl. profile views), different people ≤ 0.15.
+    |
+    */
+
+    'faces' => [
+        'enabled' => (bool) env('FACES_ENABLED', true),
+        // ≥ auto_assign → the face is labeled with the person automatically (status auto).
+        'auto_assign_threshold' => (float) env('FACE_AUTO_ASSIGN_THRESHOLD', 0.55),
+        // ≥ match → suggested to the admin (status suggested).
+        'match_threshold' => (float) env('FACE_MATCH_THRESHOLD', 0.40),
+        // Unknown people: unassigned faces this similar form a group…
+        'cluster_threshold' => (float) env('FACE_CLUSTER_THRESHOLD', 0.45),
+        // …of well-visible faces only…
+        'cluster_min_size_px' => (int) env('FACE_CLUSTER_MIN_SIZE_PX', 64),
+        // …seen on at least this many images.
+        'cluster_min_images' => (int) env('FACE_CLUSTER_MIN_IMAGES', 2),
+    ],
+
     'tagging' => [
         'auto_attach_threshold' => (float) env('TAG_AUTO_ATTACH_THRESHOLD', 0.92),
         'candidate_threshold' => (float) env('TAG_CANDIDATE_THRESHOLD', 0.68),

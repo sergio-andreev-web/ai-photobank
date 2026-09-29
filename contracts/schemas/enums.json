@@ -40,6 +40,12 @@
       "enum": ["pending", "created", "merged", "rejected"],
       "x-tz": "§23"
     },
+    "FaceStatus": {
+      "type": "string",
+      "enum": ["unassigned", "suggested", "auto", "confirmed"],
+      "x-adr": "ADR-0015",
+      "description": "unassigned — человек не известен; suggested — похоже, ждет подтверждения; auto — уверенное совпадение, подписано автоматически; confirmed — подтверждено администратором (эталон)."
+    },
     "ProcessingTaskType": {
       "type": "string",
       "enum": ["metadata", "variants", "ai_analysis", "tag_resolution", "finalize"],

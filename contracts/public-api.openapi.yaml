@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.9.0
+  version: 1.10.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -28,6 +28,8 @@ servers:
       Same-origin за nginx: Nuxt и Laravel (`/api`, `/sanctum`) под одним origin, поэтому CORS не нужен
       (утверждено, ADR-0001).
 tags:
+  - name: people
+    description: Люди и лица (ADR-0015).
   - name: auth
   - name: dashboard
   - name: batches
@@ -442,6 +444,15 @@ paths:
             format: int64
             minimum: 1
         - $ref: '#/components/parameters/TagIdsFilter'
+        - name: person_id
+          in: query
+          required: false
+          x-adr: ADR-0015
+          description: Изображения, где этот человек определен (лица `auto` или `confirmed`).
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
         - name: created_from
           in: query
           required: false
@@ -558,6 +569,300 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/ImageNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/people:
+    get:
+      tags: [people]
+      operationId: listPeople
+      summary: Справочник людей
+      x-adr: ADR-0015
+      description: Люди, заведенные администратором, по имени. `q` — подстрока имени без учета регистра.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+      responses:
+        '200':
+          description: Страница людей.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [people]
+      operationId: createPerson
+      summary: Добавить человека
+      x-adr: ADR-0015
+      description: Имена могут совпадать (разные люди с одним именем).
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonCreateRequest'
+      responses:
+        '201':
+          description: Человек добавлен.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/people/{person}:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [people]
+      operationId: getPerson
+      summary: Человек
+      x-adr: ADR-0015
+      responses:
+        '200':
+          description: Человек.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PersonNotFound'
+    patch:
+      tags: [people]
+      operationId: updatePerson
+      summary: Переименовать человека или изменить заметку
+      x-adr: ADR-0015
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonPatchRequest'
+      responses:
+        '200':
+          description: Обновленный человек.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PersonNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [people]
+      operationId: deletePerson
+      summary: Удалить человека вместе с его биометрией (152-ФЗ)
+      x-adr: ADR-0015
+      description: |
+        Удаляет человека и все лица (векторы), привязанные к нему в любом статусе. Изображения остаются; их лица
+        найдутся снова только при новом поиске лиц. Необратимо.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '204':
+          description: Удалено.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PersonNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/people/{person}/faces:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [people]
+      operationId: listPersonFaces
+      summary: Лица человека
+      x-adr: ADR-0015
+      description: Лица, привязанные к человеку; `status` фильтрует (например, `suggested` — на подтверждение). Сначала лучшие совпадения.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: './schemas/enums.json#/$defs/FaceStatus'
+      responses:
+        '200':
+          description: Страница лиц.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PersonNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/images/{image}/faces:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    get:
+      tags: [people]
+      operationId: listImageFaces
+      summary: Лица на изображении
+      x-adr: ADR-0015
+      description: Все найденные лица изображения, от крупных к мелким. Пустой список — лиц нет или поиск лиц еще не выполнен.
+      responses:
+        '200':
+          description: Лица.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Face'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+  /api/admin/faces/clusters:
+    get:
+      tags: [people]
+      operationId: listFaceClusters
+      summary: Незнакомые люди — группы похожих неназначенных лиц
+      x-adr: ADR-0015
+      description: |
+        Неназначенные хорошо видимые лица, сгруппированные по сходству; только группы, встреченные хотя бы на двух
+        изображениях. Сначала самые большие. Вычисляется на лету.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Группы.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FaceCluster'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/faces/assign:
+    post:
+      tags: [people]
+      operationId: assignFaces
+      summary: Назначить лица человеку («запомнить человека»)
+      x-adr: ADR-0015
+      description: |
+        Лица становятся `confirmed` (эталонами) существующего человека (`person_id`) или нового (`name`). Затем все
+        неподтвержденные лица сопоставляются заново: уверенные совпадения получают `auto`, похожие — `suggested`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FaceAssignRequest'
+      responses:
+        '200':
+          description: Назначено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaceAssignResult'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PersonNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/faces/{face}/reject:
+    parameters:
+      - $ref: '#/components/parameters/FaceId'
+    post:
+      tags: [people]
+      operationId: rejectFace
+      summary: «Это не он/не она»
+      x-adr: ADR-0015
+      description: |
+        Снимает человека с лица (из любого статуса) и запоминает отказ: этому лицу этот человек больше не
+        предлагается. Лицо становится `unassigned`. Если это был эталон, прочие лица сопоставляются заново.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '200':
+          description: Лицо после отказа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Face'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/FaceNotFound'
         '419':
           $ref: '#/components/responses/CsrfTokenMismatch'
   /api/admin/images/download:
@@ -1599,6 +1904,18 @@ components:
       schema:
         type: string
   parameters:
+    PersonId:
+      name: person
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
+    FaceId:
+      name: face
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Id'
     Page:
       name: page
       in: query
@@ -2013,6 +2330,185 @@ components:
             $ref: '#/components/schemas/ImageSummary'
         meta:
           $ref: '#/components/schemas/PaginationMeta'
+    FaceBox:
+      type: object
+      required: [x, y, width, height]
+      description: Рамка лица в долях размера изображения (0..1).
+      properties:
+        x: {type: number, minimum: 0, maximum: 1}
+        y: {type: number, minimum: 0, maximum: 1}
+        width: {type: number, minimum: 0, maximum: 1}
+        height: {type: number, minimum: 0, maximum: 1}
+    PersonRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+    FaceImage:
+      type: object
+      required: [id, original_name, urls]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        original_name:
+          type: string
+        urls:
+          $ref: '#/components/schemas/ImageUrls'
+    Face:
+      type: object
+      required: [id, image, box, score, status, person, similarity]
+      x-adr: ADR-0015
+      description: Лицо без вектора (биометрия наружу не отдается).
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        image:
+          $ref: '#/components/schemas/FaceImage'
+        box:
+          $ref: '#/components/schemas/FaceBox'
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        status:
+          $ref: './schemas/enums.json#/$defs/FaceStatus'
+        person:
+          oneOf:
+            - $ref: '#/components/schemas/PersonRef'
+            - type: 'null'
+        similarity:
+          type: [number, 'null']
+          description: Сходство с эталонами человека для `suggested`/`auto`; null для `confirmed`/`unassigned`.
+    FaceList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Face'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    FaceCluster:
+      type: object
+      required: [faces, images_count]
+      x-adr: ADR-0015
+      properties:
+        faces:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/Face'
+        images_count:
+          type: integer
+          minimum: 2
+    Person:
+      type: object
+      required: [id, name, note, faces_count, images_count, suggested_count, cover, created_at, updated_at]
+      x-adr: ADR-0015
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+          maxLength: 255
+        note:
+          type: [string, 'null']
+        faces_count:
+          type: integer
+          minimum: 0
+          description: Подтвержденные лица (эталоны).
+        images_count:
+          type: integer
+          minimum: 0
+          description: Не удаленные изображения с лицом `auto` или `confirmed`.
+        suggested_count:
+          type: integer
+          minimum: 0
+          description: Лица `suggested`, ждущие подтверждения.
+        cover:
+          description: Лицо для аватара (лучшее подтвержденное) или null.
+          oneOf:
+            - $ref: '#/components/schemas/Face'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+    PersonList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Person'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    PersonCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        note:
+          type: [string, 'null']
+          maxLength: 2000
+    PersonPatchRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        note:
+          type: [string, 'null']
+          maxLength: 2000
+    FaceAssignRequest:
+      type: object
+      additionalProperties: false
+      required: [face_ids]
+      description: Ровно одно из `person_id` (существующий человек) и `name` (новый человек).
+      properties:
+        face_ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Id'
+        person_id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+    FaceAssignResult:
+      type: object
+      required: [person, assigned_count, auto_count, suggested_count]
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        assigned_count:
+          type: integer
+          minimum: 0
+          description: Лица из запроса, ставшие эталонами.
+        auto_count:
+          type: integer
+          minimum: 0
+          description: Прочие лица, после пересопоставления подписанные этим человеком автоматически.
+        suggested_count:
+          type: integer
+          minimum: 0
+          description: Прочие лица, предложенные этому человеку на подтверждение.
     ImageDownloadRequest:
       type: object
       additionalProperties: false
@@ -2489,6 +2985,18 @@ components:
                   message: Image not found
                   details: {}
                   trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
+    PersonNotFound:
+      description: '`PERSON_NOT_FOUND` (ADR-0015).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FaceNotFound:
+      description: '`FACE_NOT_FOUND` (ADR-0015).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     TagNotFound:
       description: '`TAG_NOT_FOUND`.'
       content:

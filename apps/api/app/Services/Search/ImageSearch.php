@@ -229,12 +229,14 @@ final readonly class ImageSearch
     }
 
     /**
-     * Full text over the file name, caption, OCR text and the names of the image's tags; `russian` stems both
+     * Full text over the file name, caption, OCR text, the names of the image's tags and of the
+     * people identified on it (ADR-0015); `russian` stems both
      * sides, so «жилищная» matches «ЖИЛИЩНАЯ». plainto_tsquery ANDs the query words. The file
      * name is split on separators first: the parser reads `IMG_0042.jpg` as one file token.
      */
     private const string TEXT_MATCH_SQL = "to_tsvector('russian', regexp_replace(coalesce(i.original_name, ''), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce(i.caption, '') || ' ' || coalesce(i.ocr_text, '') || ' ' || "
-        ."coalesce((SELECT string_agg(t.name, ' ') FROM image_tags it_m JOIN tags t ON t.id = it_m.tag_id WHERE it_m.image_id = i.id), '')) "
+        ."coalesce((SELECT string_agg(t.name, ' ') FROM image_tags it_m JOIN tags t ON t.id = it_m.tag_id WHERE it_m.image_id = i.id), '') || ' ' || "
+        ."coalesce((SELECT string_agg(p.name, ' ') FROM faces f_m JOIN people p ON p.id = f_m.person_id WHERE f_m.image_id = i.id AND f_m.status IN ('auto', 'confirmed')), '')) "
         ."@@ plainto_tsquery('russian', ?)";
 
     /**
@@ -297,6 +299,12 @@ final readonly class ImageSearch
             ->whereIn('image_tags.image_id', $rows->pluck('id'))
             ->get(['image_tags.image_id', 'tags.name'])
             ->groupBy('image_id');
+        $peopleNames = DB::table('faces')
+            ->join('people', 'people.id', '=', 'faces.person_id')
+            ->whereIn('faces.image_id', $rows->pluck('id'))
+            ->whereIn('faces.status', ['auto', 'confirmed'])
+            ->get(['faces.image_id', 'people.name'])
+            ->groupBy('image_id');
 
         $scored = [];
         foreach ($rows as $row) {
@@ -304,7 +312,7 @@ final readonly class ImageSearch
             if ($stored === null || count($stored) !== count($vector)) {
                 continue;
             }
-            $names = $tagNames->get($row->id, collect())->pluck('name')->all();
+            $names = [...$tagNames->get($row->id, collect())->pluck('name')->all(), ...$peopleNames->get($row->id, collect())->pluck('name')->all()];
             $haystack = implode(' ', [(string) $row->original_name, (string) $row->caption, (string) $row->ocr_text, ...$names]);
             $scored[] = [(int) $row->id, Vectors::cosine($vector, $stored), self::wordsMatch($text, $haystack)];
         }

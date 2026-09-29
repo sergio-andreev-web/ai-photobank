@@ -4,6 +4,7 @@ namespace Tests\Support;
 
 use App\Contracts\Ai\AiClientInterface;
 use App\Contracts\Ai\Data\AiHealthResult;
+use App\Contracts\Ai\Data\FaceDetectionResult;
 use App\Contracts\Ai\Data\ImageAnalysisResult;
 use App\Contracts\Ai\Data\TextEmbeddingsResult;
 use App\Services\Ai\FakeAiClient;
@@ -97,6 +98,11 @@ final class ScriptedEmbeddingsAiClient implements AiClientInterface
                 return $this->vectors[$text] ??= self::vector($this->nextPrivateAxis++, 1.0);
             }, $texts),
         );
+    }
+
+    public function detectFaces(string $imageContents, string $requestId): FaceDetectionResult
+    {
+        return $this->fake->detectFaces($imageContents, $requestId);
     }
 
     public function health(): AiHealthResult
