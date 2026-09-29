@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\BatchController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ImageController;
 use App\Http\Controllers\Admin\ImageTagController;
 use App\Http\Controllers\Admin\SearchController;
@@ -37,6 +38,8 @@ Route::prefix('api')->group(function () {
 
     Route::middleware(['auth', 'admin.role'])->group(function () {
         Route::prefix('admin')->group(function () {
+            Route::get('/dashboard', DashboardController::class);
+
             Route::get('/batches', [BatchController::class, 'index']);
             Route::post('/batches', [BatchController::class, 'store']);
             Route::get('/batches/{batch}', [BatchController::class, 'show'])->whereNumber('batch');
@@ -46,6 +49,8 @@ Route::prefix('api')->group(function () {
             Route::get('/images', [ImageController::class, 'index']);
             Route::get('/images/{image}', [ImageController::class, 'show'])->whereNumber('image');
             Route::get('/images/{image}/similar', [ImageController::class, 'similar'])->whereNumber('image');
+            Route::get('/images/trash', [ImageController::class, 'trash']);
+            Route::post('/images/{image}/restore', [ImageController::class, 'restore'])->whereNumber('image');
             Route::patch('/images/{image}', [ImageController::class, 'update'])->whereNumber('image');
             Route::delete('/images/{image}', [ImageController::class, 'destroy'])->whereNumber('image');
             Route::post('/images/{image}/reprocess', [ImageController::class, 'reprocess'])->whereNumber('image');

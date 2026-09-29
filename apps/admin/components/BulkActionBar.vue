@@ -55,7 +55,7 @@
         Удалить {{ images.length }} {{ pluralRu(images.length, IMAGE_FORMS_ACC) }}?
       </p>
       <p class="mt-1 text-sm text-red-700">
-        Они исчезнут из галереи, поиска и счётчиков. Файлы и история анализа сохранятся.
+        Они исчезнут из галереи, поиска и счётчиков. Их можно будет восстановить из корзины.
       </p>
       <div class="mt-3 flex gap-2">
         <UButton color="error" size="sm" @click="run('delete')">Удалить</UButton>

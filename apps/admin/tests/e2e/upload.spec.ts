@@ -330,3 +330,36 @@ test.describe('batch upload', () => {
     expect(imageRequests).toHaveLength(2)
   })
 })
+
+test('a duplicate whose original is in the trash can be restored from the upload list', async ({ page }) => {
+  await loginAsAdmin(page)
+  await createBatch(page)
+  await mockBatchImages(page)
+  await page.route('**/api/admin/batches/42/images', (route) => {
+    const body = route.request().postData() || ''
+    return body.includes('trashed.jpg')
+      ? apiError(route, 409, 'IMAGE_ALREADY_EXISTS', 'Image already exists', { existing_image_id: 77, existing_image_deleted: true })
+      : apiError(route, 409, 'IMAGE_ALREADY_EXISTS', 'Image already exists', { existing_image_id: 78, existing_image_deleted: false })
+  })
+  const restored: string[] = []
+  await page.route('**/api/admin/images/77/restore', (route) => {
+    restored.push(route.request().method())
+    return json(route, 200, imageSummary({ id: 77 }))
+  })
+
+  await gotoReady(page, '/uploader')
+  await page.getByRole('button', { name: 'Создать партию' }).click()
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: 'trashed.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
+    { name: 'active.jpg', mimeType: 'image/jpeg', buffer: TINY_JPEG },
+  ])
+
+  const trashed = rowFor(page, 'trashed.jpg')
+  await expect(trashed).toContainText('Пропущен: такое изображение #77 лежит в корзине')
+  await expect(rowFor(page, 'active.jpg').getByRole('link', { name: 'Открыть' })).toHaveAttribute('href', '/gallery/78')
+
+  await trashed.getByRole('button', { name: 'Восстановить' }).click()
+  await expect(trashed).toContainText('Дубликат: изображение #77 восстановлено из корзины')
+  await expect(trashed.getByRole('link', { name: 'Открыть' })).toHaveAttribute('href', '/gallery/77')
+  expect(restored).toEqual(['POST'])
+})

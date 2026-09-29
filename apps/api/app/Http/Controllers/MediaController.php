@@ -19,7 +19,8 @@ class MediaController extends Controller
 {
     public function show(Request $request, PhotoStorageInterface $storage, int $image, string $variant): Response
     {
-        $imageModel = Image::find($image);
+        // Images in the trash are served too, so the trash can be browsed (ADR-0013).
+        $imageModel = Image::withTrashed()->find($image);
 
         if ($imageModel === null) {
             throw new ApiException('IMAGE_NOT_FOUND', 404, 'Image not found');

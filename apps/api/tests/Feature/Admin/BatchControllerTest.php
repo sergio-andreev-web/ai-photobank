@@ -150,6 +150,18 @@ class BatchControllerTest extends TestCase
         $second->assertStatus(409);
         $second->assertJsonPath('error.code', 'IMAGE_ALREADY_EXISTS');
         $second->assertJsonPath('error.details.existing_image_id', $existingImageId);
+        $second->assertJsonPath('error.details.existing_image_deleted', false);
+
+        // The same file after its image went to the trash: still a duplicate, flagged for restore (ADR-0013).
+        Image::find($existingImageId)->delete();
+        $third = $this->post(
+            "/api/admin/batches/{$batch->id}/images",
+            ['image' => UploadedFile::fake()->createWithContent('photo.jpg', file_get_contents($file->getRealPath()))],
+            $this->csrfHeaders(),
+        );
+        $third->assertStatus(409)
+            ->assertJsonPath('error.details.existing_image_id', $existingImageId)
+            ->assertJsonPath('error.details.existing_image_deleted', true);
     }
 
     public function test_upload_image_handles_concurrent_duplicate_insert_as_409(): void

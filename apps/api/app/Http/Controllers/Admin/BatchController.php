@@ -127,6 +127,8 @@ class BatchController extends Controller
         if ($existing !== null) {
             throw new ApiException('IMAGE_ALREADY_EXISTS', 409, 'Image already exists', [
                 'existing_image_id' => $existing->id,
+                // In the trash: the admin can restore it instead (ADR-0013).
+                'existing_image_deleted' => $existing->trashed(),
             ]);
         }
 
@@ -190,6 +192,7 @@ class BatchController extends Controller
 
             throw new ApiException('IMAGE_ALREADY_EXISTS', 409, 'Image already exists', [
                 'existing_image_id' => $winner?->id,
+                'existing_image_deleted' => (bool) $winner?->trashed(),
             ]);
         } catch (Throwable $e) {
             $storage->delete($storageKey);

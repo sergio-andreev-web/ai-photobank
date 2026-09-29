@@ -167,6 +167,16 @@ export interface ImageList {
   meta: PaginationMeta
 }
 
+/** Item of GET /admin/images/trash (ADR-0013). */
+export interface TrashedImageSummary extends ImageSummary {
+  deleted_at: string
+}
+
+export interface TrashedImageList {
+  data: TrashedImageSummary[]
+  meta: PaginationMeta
+}
+
 export type ImageTagSource = 'ai' | 'manual' | 'import'
 
 export interface ImageTag {

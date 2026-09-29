@@ -76,6 +76,48 @@ class ImageController extends Controller
     }
 
     /**
+     * GET /admin/images/trash (ADR-0013): soft-deleted images, most recently deleted first.
+     */
+    public function trash(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'page' => ['integer', 'min:1'],
+            'per_page' => ['integer', 'min:1', 'max:100'],
+        ]);
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 50);
+
+        $query = Image::onlyTrashed()->with('tags')->orderByDesc('deleted_at')->orderByDesc('id');
+        $total = (clone $query)->count();
+
+        return response()->json([
+            'data' => $query->forPage($page, $perPage)->get()
+                ->map(fn (Image $image): array => ImagePresenter::summary($image) + ['deleted_at' => Api::dateTime($image->deleted_at)])
+                ->all(),
+            'meta' => Api::paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    /**
+     * POST /admin/images/{image}/restore (ADR-0013): undo the soft delete; idempotent.
+     */
+    public function restore(Request $request, int $image, BatchStatusUpdater $batches): JsonResponse
+    {
+        $imageModel = Image::withTrashed()->find($image);
+        if ($imageModel === null) {
+            throw new ApiException('IMAGE_NOT_FOUND', 404, 'Image not found');
+        }
+
+        if ($imageModel->trashed()) {
+            $imageModel->restore();
+            // Back in the batch counters, which may reopen or re-finish the batch.
+            $batches->refresh($imageModel->batch_id);
+        }
+
+        return response()->json(ImagePresenter::detail($this->findImage($image)));
+    }
+
+    /**
      * GET /admin/images/{image}/similar (ADR-0012).
      */
     public function similar(Request $request, int $image, ImageSearch $search): JsonResponse

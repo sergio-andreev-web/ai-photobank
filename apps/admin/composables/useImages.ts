@@ -6,6 +6,7 @@ import type {
   ImageSummary,
   ImageTag,
   PaginationParams,
+  TrashedImageList,
 } from '~/types/api'
 import { fetchAllPages } from '~/utils/pagination'
 
@@ -67,6 +68,18 @@ export function useImages() {
     return data
   }
 
+  /** GET /admin/images/trash (ADR-0013): soft-deleted images, most recently deleted first. */
+  async function listTrash(params?: PaginationParams) {
+    const { data } = await api.get<TrashedImageList>('/admin/images/trash', { params })
+    return data
+  }
+
+  /** POST /admin/images/{image}/restore (ADR-0013); idempotent. */
+  async function restoreImage(id: number) {
+    const { data } = await api.post<ImageDetail>(`/admin/images/${id}/restore`)
+    return data
+  }
+
   /** GET /admin/images/{image}/similar (ADR-0012): neighbours by image embedding, best first. */
   async function listSimilar(id: number, params?: PaginationParams) {
     const { data } = await api.get<ImageList>(`/admin/images/${id}/similar`, { params })
@@ -99,6 +112,8 @@ export function useImages() {
     updateImage,
     deleteImage,
     listSimilar,
+    listTrash,
+    restoreImage,
     uploadImage,
     reprocessImage,
     retryImage,

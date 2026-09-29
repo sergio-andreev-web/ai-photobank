@@ -64,6 +64,7 @@ const navigation = [
   { to: '/tags', label: 'Теги', icon: 'i-heroicons-tag' },
   { to: '/candidates', label: 'Модерация', icon: 'i-heroicons-inbox-stack' },
   { to: '/search', label: 'Поиск', icon: 'i-heroicons-magnifying-glass' },
+  { to: '/trash', label: 'Корзина', icon: 'i-heroicons-trash' },
 ]
 
 const initial = computed(() => auth.user?.name?.charAt(0)?.toUpperCase() || 'A')

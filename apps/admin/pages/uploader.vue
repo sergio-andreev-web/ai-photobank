@@ -121,6 +121,24 @@
                 {{ FILE_STATE_LABELS[fileState(upload)] }}
               </UBadge>
               <UButton
+                v-if="upload.state === 'duplicate' && upload.existingImageId && upload.existingImageDeleted && !upload.restored"
+                size="xs"
+                variant="soft"
+                color="warning"
+                :loading="upload.restoring"
+                @click="restoreDuplicate(upload)"
+              >
+                Восстановить
+              </UButton>
+              <UButton
+                v-else-if="upload.state === 'duplicate' && upload.existingImageId"
+                size="xs"
+                variant="ghost"
+                :to="`/gallery/${upload.existingImageId}`"
+              >
+                Открыть
+              </UButton>
+              <UButton
                 v-if="upload.state === 'error' && acceptingUploads"
                 size="xs"
                 variant="soft"
@@ -178,6 +196,10 @@ interface UploadItem extends TrackedFile {
   errorCode: string | null
   errorMessage: string | null
   existingImageId: number | null
+  /** The duplicate's original is in the trash (ADR-0013): offer to restore it. */
+  existingImageDeleted: boolean
+  restoring: boolean
+  restored: boolean
 }
 
 const batches = useBatches()
@@ -226,6 +248,10 @@ function statusLabel(upload: UploadItem): string {
     case 'uploaded':
       return 'Загружен, ждёт обработки'
     case 'duplicate':
+      if (upload.restored) return `Дубликат: изображение #${upload.existingImageId} восстановлено из корзины`
+      if (upload.existingImageId && upload.existingImageDeleted) {
+        return `Пропущен: такое изображение #${upload.existingImageId} лежит в корзине`
+      }
       return upload.existingImageId
         ? `Пропущен: дубликат изображения #${upload.existingImageId}`
         : 'Пропущен: дубликат'
@@ -332,6 +358,9 @@ function enqueueFiles(files: File[]) {
     errorCode: null,
     errorMessage: null,
     existingImageId: null,
+    existingImageDeleted: false,
+    restoring: false,
+    restored: false,
     imageId: null,
     imageStatus: null,
     imageGone: false,
@@ -364,7 +393,9 @@ async function uploadOne(item: UploadItem) {
     const { code, message } = useApiError(e)
     if (code === 'IMAGE_ALREADY_EXISTS') {
       item.state = 'duplicate'
-      item.existingImageId = (e as any)?.response?.data?.error?.details?.existing_image_id ?? null
+      const details = (e as any)?.response?.data?.error?.details
+      item.existingImageId = details?.existing_image_id ?? null
+      item.existingImageDeleted = details?.existing_image_deleted === true
     } else {
       item.state = 'error'
       item.errorCode = code
@@ -373,6 +404,20 @@ async function uploadOne(item: UploadItem) {
   }
   // Follow processing from the first stored file on, not only after the whole selection was sent.
   if (item.state === 'uploaded') startWatchingIfNeeded()
+}
+
+/** The duplicate's original was in the trash: bring it back instead of uploading again (ADR-0013). */
+async function restoreDuplicate(item: UploadItem) {
+  if (!item.existingImageId) return
+  item.restoring = true
+  try {
+    await images.restoreImage(item.existingImageId)
+    item.restored = true
+  } catch (e) {
+    createError.value = useApiError(e).message
+  } finally {
+    item.restoring = false
+  }
 }
 
 async function retryUpload(item: UploadItem) {

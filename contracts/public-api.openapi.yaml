@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.5.0
+  version: 1.6.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -310,7 +310,8 @@ paths:
         Ответ приходит после сохранения оригинала и постановки обработки в очередь; AI не ожидается (§81).
         Content-based MIME-проверка, санитизация имени, случайное имя хранения (§63).
         Дубликат по SHA-256 не сохраняется: 409 `IMAGE_ALREADY_EXISTS` с `details.existing_image_id` (§27);
-        frontend показывает файл как skipped duplicate.
+        frontend показывает файл как skipped duplicate. `details.existing_image_deleted` (с 1.6.0, ADR-0013) — true,
+        если найденное изображение в корзине: его можно восстановить (`POST /api/admin/images/{image}/restore`).
         Имя поля формы, допустимые типы, лимит размера и код 201 — утверждено (ADR-0005).
       security:
         - sessionCookie: []
@@ -550,6 +551,61 @@ paths:
       responses:
         '204':
           description: Удалено.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+  /api/admin/images/trash:
+    get:
+      tags: [images]
+      operationId: listTrashedImages
+      summary: Корзина — удаленные изображения
+      x-adr: ADR-0013
+      description: |
+        Изображения в soft delete (§78), сначала недавно удаленные (deleted_at desc, id desc). Файлы и история
+        анализов сохраняются, изображение можно восстановить. Элемент — ImageSummary + `deleted_at`.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Страница удаленных изображений.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrashedImageList'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/admin/images/{image}/restore:
+    parameters:
+      - $ref: '#/components/parameters/ImageId'
+    post:
+      tags: [images]
+      operationId: restoreImage
+      summary: Восстановить изображение из корзины
+      x-adr: ADR-0013
+      description: |
+        Снимает soft delete: изображение возвращается в списки, поиск, media и счетчики (партия пересчитывается).
+        Теги, анализы и embeddings не менялись при удалении и становятся видны снова. Для неудаленного изображения —
+        200 без изменений (идемпотентно). Нет такого изображения → 404 `IMAGE_NOT_FOUND`.
+      security:
+        - sessionCookie: []
+          xsrfToken: []
+      responses:
+        '200':
+          description: Изображение восстановлено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageDetail'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1423,7 +1479,8 @@ paths:
         URL можно использовать напрямую в `<img src>` (утверждено, ADR-0001/ADR-0011). В Docker Laravel отвечает
         заголовком `X-Accel-Redirect` на internal location nginx, тело отдает nginx (§57) — клиент видит обычный
         ответ с файлом. thumbnail/preview — image/webp (§12); original — исходный MIME, `Content-Disposition: inline`
-        с санитизированным именем. Вариант еще не создан → 404 `MEDIA_NOT_AVAILABLE`.
+        с санитизированным именем. Вариант еще не создан → 404 `MEDIA_NOT_AVAILABLE`. Изображения в корзине
+        (soft delete) отдаются тоже — для просмотра корзины (ADR-0013, дополнение к ADR-0011).
         Ошибки возвращаются JSON-ом стандартной формы.
       responses:
         '200':
@@ -1908,6 +1965,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImageSummary'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    TrashedImageSummary:
+      x-adr: ADR-0013
+      allOf:
+        - $ref: '#/components/schemas/ImageSummary'
+        - type: object
+          required: [deleted_at]
+          properties:
+            deleted_at:
+              $ref: '#/components/schemas/DateTime'
+    TrashedImageList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrashedImageSummary'
         meta:
           $ref: '#/components/schemas/PaginationMeta'
     ImagePatchRequest:
@@ -2564,6 +2640,7 @@ components:
           message: Image already exists
           details:
             existing_image_id: 152
+            existing_image_deleted: false
           trace_id: 7d1c2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f
     ErrorCandidateResolved:
       value:
