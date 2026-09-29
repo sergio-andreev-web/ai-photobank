@@ -368,6 +368,23 @@ class ProcessingPipelineTest extends TestCase
         $this->assertSame('ready', $image->refresh()->status);
     }
 
+    public function test_reprocess_keeps_a_caption_edited_by_an_admin(): void
+    {
+        $image = $this->processedImage();
+        $image->update(['caption' => 'Ручная подпись', 'caption_edited' => true]);
+
+        $this->reprocess($image);
+        $this->runQueuedJobs();
+
+        $image->refresh();
+        $this->assertSame('ready', $image->status);
+        $this->assertSame('Ручная подпись', $image->caption);
+        $this->assertTrue($image->caption_edited);
+        // The new analysis still records what the model said (history, §76).
+        $latest = ImageAnalysis::where('image_id', $image->id)->orderByDesc('id')->first();
+        $this->assertSame('Fake caption for deterministic test fixture.', $latest->caption);
+    }
+
     public function test_reprocess_of_failed_image_without_variants_starts_from_the_missing_stage(): void
     {
         $image = $this->createUploadedImage(contents: 'not an image');

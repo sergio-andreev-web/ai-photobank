@@ -153,18 +153,45 @@ class ImageController extends Controller
     {
         $imageModel = $this->findImage($image);
 
-        $unknown = array_diff(array_keys($request->all()), ['original_name']);
+        $fields = array_keys($request->all());
+        $unknown = array_diff($fields, ['original_name', 'caption']);
         if ($unknown !== []) {
             throw ValidationException::withMessages([
                 '_unexpected' => __('validation.unexpected_fields', ['fields' => implode(', ', $unknown)]),
             ]);
         }
+        if ($fields === []) {
+            throw ValidationException::withMessages([
+                '_empty' => __('validation.at_least_one_field', ['fields' => 'original_name, caption']),
+            ]);
+        }
+
+        // TrimStrings + ConvertEmptyStringsToNull would turn a blank caption into null ("revert to
+        // the AI caption"); the contract rejects a blank one, so read the raw body for it.
+        $raw = json_decode($request->getContent(), true);
+        if (is_array($raw) && is_string($raw['caption'] ?? null) && trim($raw['caption']) === '') {
+            throw ValidationException::withMessages(['caption' => __('validation.min.string', ['attribute' => __('validation.attributes.caption'), 'min' => 1])]);
+        }
 
         $validated = $request->validate([
-            'original_name' => ['required', 'string', 'min:1', 'max:1024'],
+            'original_name' => ['sometimes', 'required', 'string', 'min:1', 'max:1024'],
+            'caption' => ['sometimes', 'nullable', 'string', 'min:1', 'max:2000'],
         ]);
 
-        $imageModel->original_name = $validated['original_name'];
+        if (array_key_exists('original_name', $validated)) {
+            $imageModel->original_name = $validated['original_name'];
+        }
+        if (array_key_exists('caption', $validated)) {
+            if ($validated['caption'] === null) {
+                // Back to what the model said (ADR-0006, 2026-09-30 addendum).
+                $latest = $imageModel->analyses->sortBy([['created_at', 'desc'], ['id', 'desc']])->first();
+                $imageModel->caption = $latest?->caption;
+                $imageModel->caption_edited = false;
+            } else {
+                $imageModel->caption = trim($validated['caption']);
+                $imageModel->caption_edited = true;
+            }
+        }
         $imageModel->save();
 
         return response()->json(ImagePresenter::detail($imageModel->fresh([

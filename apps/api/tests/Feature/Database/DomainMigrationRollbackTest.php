@@ -30,10 +30,14 @@ class DomainMigrationRollbackTest extends TestCase
             $this->assertTrue(Schema::hasTable($table), "Expected {$table} to exist before rollback");
         }
 
-        // These 11 migrations were added by this task, in creation order; rolling back that
-        // many steps must remove exactly this set of tables without touching earlier ones
-        // (users, upload_batches, cache, jobs).
-        $this->artisan('migrate:rollback', ['--step' => 11])->assertExitCode(0);
+        // The 11 domain migrations (from 2026_09_25_175000) plus every later migration: rolling
+        // back that many steps must remove exactly the domain tables without touching earlier
+        // ones (users, upload_batches, cache, jobs).
+        $steps = count(array_filter(
+            glob(database_path('migrations/*.php')) ?: [],
+            static fn (string $path): bool => basename($path) >= '2026_09_25_175000',
+        ));
+        $this->artisan('migrate:rollback', ['--step' => $steps])->assertExitCode(0);
 
         foreach (self::DOMAIN_TABLES as $table) {
             $this->assertFalse(Schema::hasTable($table), "Expected {$table} to be dropped after rollback");

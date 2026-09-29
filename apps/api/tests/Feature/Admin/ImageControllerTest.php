@@ -138,6 +138,43 @@ class ImageControllerTest extends TestCase
         $this->assertDatabaseHas('images', ['id' => $image->id, 'original_name' => 'renamed.jpg']);
     }
 
+    public function test_caption_can_be_edited_and_reverted_to_the_ai_caption(): void
+    {
+        $user = $this->loginAsAdmin();
+        $image = $this->makeImage($user, ['status' => 'ready', 'caption' => 'Подпись модели']);
+        ImageAnalysis::create([
+            'image_id' => $image->id, 'vision_model' => 'qwen', 'vision_model_version' => 'r1',
+            'embedding_model' => 'siglip', 'embedding_model_version' => 'r1',
+            'prompt_version' => 'image-analysis-v3', 'caption' => 'Подпись модели', 'concepts' => [], 'ocr' => [],
+            'raw_response' => [],
+        ]);
+
+        $this->patchJson("/api/admin/images/{$image->id}", ['caption' => '  Три футболиста на поле.  '], $this->csrfHeaders())
+            ->assertOk()
+            ->assertJsonPath('caption', 'Три футболиста на поле.')
+            ->assertJsonPath('caption_edited', true)
+            ->assertJsonPath('original_name', 'photo.jpg');
+
+        $this->patchJson("/api/admin/images/{$image->id}", ['caption' => null], $this->csrfHeaders())
+            ->assertOk()
+            ->assertJsonPath('caption', 'Подпись модели')
+            ->assertJsonPath('caption_edited', false);
+    }
+
+    public function test_caption_validation(): void
+    {
+        $user = $this->loginAsAdmin();
+        $image = $this->makeImage($user, ['caption' => 'Подпись']);
+
+        $this->patchJson("/api/admin/images/{$image->id}", ['caption' => '   '], $this->csrfHeaders())
+            ->assertStatus(422)->assertJsonStructure(['error' => ['details' => ['fields' => ['caption']]]]);
+        $this->patchJson("/api/admin/images/{$image->id}", ['caption' => str_repeat('а', 2001)], $this->csrfHeaders())
+            ->assertStatus(422);
+        $this->patchJson("/api/admin/images/{$image->id}", [], $this->csrfHeaders())
+            ->assertStatus(422);
+        $this->assertSame('Подпись', $image->fresh()->caption);
+    }
+
     public function test_update_image_rejects_unknown_fields(): void
     {
         $user = $this->loginAsAdmin();
@@ -145,7 +182,7 @@ class ImageControllerTest extends TestCase
 
         $response = $this->patchJson(
             "/api/admin/images/{$image->id}",
-            ['caption' => 'not editable'],
+            ['ocr_text' => 'not editable'],
             $this->csrfHeaders(),
         );
 
