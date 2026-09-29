@@ -1,5 +1,5 @@
 .PHONY: help setup up up-dev up-ai down migrate seed test lint ai-mac ai-mac-cpu _ai-mac-run ai-test ai-health logs reset \
-	prod-config prod-up prod-down prod-logs prod-health backup restore
+	prod-config prod-up prod-down prod-logs prod-health backup restore test-e2e
 
 help:
 	@echo "AI Photobank — Development Commands"
@@ -20,6 +20,7 @@ help:
 	@echo "Testing & Linting:"
 	@echo "  make test        Run all tests (backend, frontend, AI)"
 	@echo "  make lint        Run code quality checks"
+	@echo "  make test-e2e    Browser §75 acceptance run against the running stack (changes its data)"
 	@echo ""
 	@echo "AI Development:"
 	@echo "  make ai-mac      Run AI service natively on macOS with MPS (§8, §58)"
@@ -39,23 +40,31 @@ help:
 	@echo "  make backup      Snapshot the database and photo storage"
 	@echo "  make restore SNAPSHOT=<ts>  Restore a snapshot (destructive)"
 
-# First-time setup: compose up, migrations, seed
+# First-time setup (§66): compose up, migrations, seed, mock AI.
+# Every step waits on the services' own healthchecks (`--wait`) instead of a
+# fixed sleep, so a cold start on a clean machine or CI runner (images just
+# built, first pgvector/RabbitMQ boot) cannot race the migrations, and setup
+# only reports success once the whole stack is actually up.
+SETUP_WAIT_TIMEOUT ?= 300
+
 setup: .env
 	@echo "Initializing development environment..."
-	docker compose up -d postgres redis rabbitmq
-	@echo "Waiting for database..."
-	@sleep 5
-	docker compose up -d api
+	docker compose up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT) postgres redis rabbitmq
+	docker compose up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT) api
 	@echo "Running migrations..."
 	docker compose exec -T api php artisan migrate --force
 	@echo "Seeding database..."
 	docker compose exec -T api php artisan db:seed
 	# AI_BASE_URL defaults to the CPU/mock AI container, which lives behind the ai profile.
-	docker compose --profile ai up -d
+	# api-worker has no healthcheck, so --wait only requires it to be running.
+	docker compose --profile ai up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT)
 	@echo ""
 	@echo "✓ Setup complete!"
-	@echo "Frontend:  http://localhost:3000"
-	@echo "Backend:   http://localhost/api"
+	@echo "Admin UI:  http://localhost  (nginx serves the SPA, /api and /sanctum on one origin;"
+	@echo "           the bare Nuxt server on :3000 has no /api, so sign-in does not work there)"
+	@echo "Login:     admin@example.com / password123 (seeded for APP_ENV=local)"
+	@echo "API:       http://localhost/api"
+	@echo "Mock AI:   http://localhost:8001 (ai-cpu)"
 	@echo "RabbitMQ:  http://localhost:15672"
 
 # Copy env template if not exists
@@ -63,7 +72,14 @@ setup: .env
 	@echo "Creating .env from .env.example..."
 	cp .env.example .env
 	@sed -i.bak "s|^APP_KEY=$$|APP_KEY=base64:$$(openssl rand -base64 32)|" .env && rm -f .env.bak
-	@echo "✓ .env created with a fresh APP_KEY. Edit it if needed, then run: make setup"
+	@echo "✓ .env created with a fresh APP_KEY."
+
+# Browser acceptance run of ТЗ §75 against the stack that is already running
+# (make setup): uploads a batch, moderates candidates, edits tags — it changes
+# the stack's data. E2E_AI_OUTAGE=1 also stops/starts ai-cpu (§46).
+# See tests/e2e/stack/README.md for the variables.
+test-e2e:
+	cd tests/e2e/stack && npm ci --no-audit --no-fund && npx playwright install chromium && npx playwright test
 
 # Start all services
 up:
