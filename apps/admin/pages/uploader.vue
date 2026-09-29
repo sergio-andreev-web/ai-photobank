@@ -147,6 +147,8 @@
         </p>
       </div>
     </div>
+
+    <BatchHistory ref="history" :current-batch-id="currentBatch?.id ?? null" @resume="resumeBatch" />
   </div>
 </template>
 
@@ -191,6 +193,7 @@ const completing = ref(false)
 const uploads = ref<UploadItem[]>([])
 
 let stopWatching: (() => void) | null = null
+const history = ref<{ reload: () => Promise<void> } | null>(null)
 
 const acceptingUploads = computed(
   () => currentBatch.value?.status === 'created' || currentBatch.value?.status === 'uploading'
@@ -278,6 +281,7 @@ async function createBatch() {
   try {
     currentBatch.value = await batches.createBatch(batchName.value || undefined)
     batchName.value = ''
+    void history.value?.reload()
   } catch (e) {
     createError.value = useApiError(e).message
   } finally {
@@ -290,6 +294,17 @@ function resetBatch() {
   stopWatching = null
   currentBatch.value = null
   uploads.value = []
+  void history.value?.reload()
+}
+
+/** Reopens an unfinished batch from the history to add files or finish it. */
+function resumeBatch(batch: Batch) {
+  stopWatching?.()
+  stopWatching = null
+  uploads.value = []
+  createError.value = null
+  currentBatch.value = batch
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function handleFileSelect(event: Event) {
@@ -394,6 +409,7 @@ async function handleComplete() {
   try {
     currentBatch.value = await batches.completeBatch(currentBatch.value.id)
     startWatchingIfNeeded()
+    void history.value?.reload()
   } catch (e) {
     createError.value = useApiError(e).message
   } finally {

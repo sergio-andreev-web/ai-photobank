@@ -133,6 +133,15 @@
           @click="onToggle(image.id, $event)"
         />
       </label>
+      <button
+        type="button"
+        class="gallery-card-zoom"
+        :aria-label="`Просмотр ${image.original_name}`"
+        title="Просмотр на весь экран"
+        @click="viewerIndex = images.indexOf(image)"
+      >
+        <UIcon name="i-heroicons-arrows-pointing-out" />
+      </button>
       <NuxtLink
         :to="`/gallery/${image.id}`"
         class="surface-card group block overflow-hidden transition-shadow hover:shadow-lg"
@@ -180,6 +189,13 @@
       </div>
     </div>
 
+    <ImageLightbox
+      v-if="viewerIndex !== null && images[viewerIndex]"
+      v-model:index="viewerIndex"
+      :images="images"
+      @close="viewerIndex = null"
+    />
+
     <!-- Pagination -->
     <div v-if="pagination && pagination.last_page > 1" class="flex justify-center gap-2">
       <UButton v-if="pagination.page > 1" variant="ghost" @click="loadImages(pagination.page - 1)"> Назад </UButton>
@@ -198,6 +214,7 @@ definePageMeta({
 
 import type { Batch, ImageStatus, ImageSummary, PaginationMeta, Tag } from '~/types/api'
 import { createdFromParam, createdToParam } from '~/utils/dateRange'
+import { readGalleryRouteQuery } from '~/utils/galleryRoute'
 import { keepVisible, pageSelectionState, toggleSelection } from '~/utils/selection'
 import { IMAGE_STATUS_LABELS, labelOf, TAG_TYPE_LABELS } from '~/utils/labels'
 import { semanticSearchLocation } from '~/utils/searchRoute'
@@ -221,6 +238,9 @@ const loadError = ref<string | null>(null)
 const pagination = ref<PaginationMeta | null>(null)
 const aiQuery = ref('')
 
+// Deep link from the batch history: /gallery?batch_id=42[&status=failed].
+const routeFilters = readGalleryRouteQuery(useRoute().query)
+
 const filters = reactive<{
   status: ImageStatus | typeof ALL
   batchId: number | typeof ALL
@@ -229,8 +249,8 @@ const filters = reactive<{
   dateFrom: string
   dateTo: string
 }>({
-  status: ALL,
-  batchId: ALL,
+  status: routeFilters.status ?? ALL,
+  batchId: routeFilters.batchId ?? ALL,
   tagIds: [],
   dateFrom: '',
   dateTo: '',
@@ -257,6 +277,8 @@ const sortOptions: { label: string; value: ImageSort }[] = [
 const selected = ref<Set<number>>(new Set())
 let selectionAnchor: number | null = null
 const notice = ref<{ message: string; tone: 'success' | 'warning' } | null>(null)
+/** Index of the image open in the full-screen viewer (current page), or null. */
+const viewerIndex = ref<number | null>(null)
 
 const pageIds = computed(() => images.value.map((image) => image.id))
 const selectedImages = computed(() => images.value.filter((image) => selected.value.has(image.id)))
@@ -357,6 +379,7 @@ let loadSeq = 0
 async function loadImages(page = 1, options: { keepSelection?: boolean } = {}) {
   const seq = ++loadSeq
   if (!options.keepSelection) clearSelection()
+  viewerIndex.value = null
   // A reload after a bulk action keeps the grid on screen instead of flashing the loading state.
   if (!options.keepSelection) loading.value = true
   loadError.value = null
