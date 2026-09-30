@@ -65,6 +65,7 @@ const navigation = [
   { to: '/candidates', label: 'Модерация', icon: 'i-heroicons-inbox-stack' },
   { to: '/people', label: 'Люди', icon: 'i-heroicons-user-group' },
   { to: '/search', label: 'Поиск', icon: 'i-heroicons-magnifying-glass' },
+  { to: '/settings', label: 'Настройки', icon: 'i-heroicons-cog-6-tooth' },
   { to: '/trash', label: 'Корзина', icon: 'i-heroicons-trash' },
 ]
 

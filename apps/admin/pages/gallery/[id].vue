@@ -212,6 +212,8 @@
             @changed="(message) => { notice = message }"
           />
 
+          <ImageResearch :key="image.id" :image-id="image.id" :status="image.status" />
+
           <!-- Image Tags -->
           <div class="rounded-xl border border-slate-200 p-5">
             <div class="flex items-center justify-between">

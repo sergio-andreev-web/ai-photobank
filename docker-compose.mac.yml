@@ -20,6 +20,7 @@ x-real-embedding: &real-embedding
 services:
   api:
     environment:
+      WEB_RESEARCH_BASE_URL: "${WEB_RESEARCH_BASE_URL:-http://host.docker.internal:8002}"
       AI_BASE_URL: http://host.docker.internal:8001
       <<: *real-embedding
 
@@ -29,8 +30,14 @@ services:
   # starts), so images would never reach the native AI service.
   api-worker:
     environment:
+      WEB_RESEARCH_BASE_URL: "${WEB_RESEARCH_BASE_URL:-http://host.docker.internal:8002}"
       AI_BASE_URL: http://host.docker.internal:8001
       <<: *real-embedding
+
+  research-worker:
+    environment:
+      WEB_RESEARCH_BASE_URL: "${WEB_RESEARCH_BASE_URL:-http://host.docker.internal:8002}"
+      WEB_RESEARCH_TOKEN: "${WEB_RESEARCH_TOKEN:-}"
 
   admin:
     environment:

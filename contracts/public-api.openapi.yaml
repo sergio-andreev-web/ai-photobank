@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Photobank — Public API
-  version: 1.10.0
+  version: 1.11.0
   summary: Публичный HTTP API Laravel — единственный источник данных для Nuxt.
   description: |
     Статус: **утвержден, версия 1.0.0** (см. contracts/README.md).
@@ -28,6 +28,7 @@ servers:
       Same-origin за nginx: Nuxt и Laravel (`/api`, `/sanctum`) под одним origin, поэтому CORS не нужен
       (утверждено, ADR-0001).
 tags:
+  - name: settings
   - name: people
     description: Люди и лица (ADR-0015).
   - name: auth
@@ -43,6 +44,94 @@ tags:
 security:
   - sessionCookie: []
 paths:
+  /api/admin/settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      x-adr: ADR-0016
+      responses:
+        '200':
+          description: Настройки и доступность провайдеров.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResearchSettings'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+    patch:
+      tags: [settings]
+      operationId: updateSettings
+      x-adr: ADR-0016
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                object_research_enabled: {type: boolean}
+                object_research_provider: {type: string, enum: [codex_cli, claude_cli, openai_api, anthropic_api, ollama]}
+      responses:
+        '200':
+          description: Сохранено.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResearchSettings'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /api/admin/images/{image}/research:
+    parameters:
+      - name: image
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    get:
+      tags: [settings]
+      operationId: imageResearchHistory
+      x-adr: ADR-0016
+      responses:
+        '200':
+          description: Последние 20 запусков, новые первыми.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    maxItems: 20
+                    items: {$ref: '#/components/schemas/ResearchRun'}
+        '404': {$ref: '#/components/responses/ImageNotFound'}
+    post:
+      tags: [settings]
+      operationId: startImageResearch
+      x-adr: ADR-0016
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                question: {type: string, maxLength: 1000}
+      responses:
+        '202':
+          description: Новый или существующий активный запуск.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResearchRun'}
+        '404': {$ref: '#/components/responses/ImageNotFound'}
+        '409':
+          description: IMAGE_NOT_RESEARCHABLE — требуется ready и доступное превью.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '503':
+          description: WEB_RESEARCH_UNAVAILABLE — провайдер/сервис не готов.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /sanctum/csrf-cookie:
     get:
       tags: [auth]
@@ -1984,6 +2073,37 @@ components:
           format: int64
           minimum: 1
   schemas:
+    ResearchSettings:
+      type: object
+      required: [object_research_enabled, object_research_provider, providers]
+      properties:
+        object_research_enabled: {type: boolean, default: false}
+        object_research_provider: {type: string, enum: [codex_cli, claude_cli, openai_api, anthropic_api, ollama]}
+        providers:
+          type: array
+          items:
+            type: object
+            required: [id, available]
+            properties:
+              id: {type: string, enum: [codex_cli, claude_cli, openai_api, anthropic_api, ollama]}
+              available: {type: boolean}
+    ResearchRun:
+      type: object
+      required: [id, image_id, trigger, provider, question, status, result, error_code, created_at, finished_at]
+      properties:
+        id: {type: integer}
+        image_id: {type: integer}
+        trigger: {type: string, enum: [manual, automatic]}
+        provider: {type: string, enum: [codex_cli, claude_cli, openai_api, anthropic_api, ollama]}
+        question: {type: string}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        result:
+          anyOf:
+            - {$ref: './schemas/object-research.json'}
+            - {type: 'null'}
+        error_code: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
     Id:
       type: integer
       format: int64

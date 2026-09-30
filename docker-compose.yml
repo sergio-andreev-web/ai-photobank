@@ -93,6 +93,8 @@ services:
       RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
       PHOTO_STORAGE_DISK: "${PHOTO_STORAGE_DISK}"
       PHOTO_STORAGE_ROOT: "${PHOTO_STORAGE_ROOT}"
+      WEB_RESEARCH_BASE_URL: "${WEB_RESEARCH_BASE_URL:-http://web-research:8002}"
+      WEB_RESEARCH_TOKEN: "${WEB_RESEARCH_TOKEN:-}"
       AI_BASE_URL: "${AI_BASE_URL}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
       AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
@@ -157,6 +159,8 @@ services:
       RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD}"
       PHOTO_STORAGE_DISK: "${PHOTO_STORAGE_DISK}"
       PHOTO_STORAGE_ROOT: "${PHOTO_STORAGE_ROOT}"
+      WEB_RESEARCH_BASE_URL: "${WEB_RESEARCH_BASE_URL:-http://web-research:8002}"
+      WEB_RESEARCH_TOKEN: "${WEB_RESEARCH_TOKEN:-}"
       AI_BASE_URL: "${AI_BASE_URL}"
       AI_SERVICE_API_KEY: "${AI_SERVICE_API_KEY}"
       AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT}"
@@ -188,6 +192,43 @@ services:
       - photobank_storage:/app/storage
     networks:
       - photobank
+
+  research-worker:
+    extends:
+      service: api-worker
+    container_name: photobank-research-worker
+    command: php artisan queue:work rabbitmq --queue=images.research --sleep=3 --tries=1 --timeout=210 --max-time=3600
+
+  web-research:
+    profiles: [research]
+    build:
+      context: .
+      dockerfile: services/web-research/Dockerfile
+    restart: unless-stopped
+    environment:
+      WEB_RESEARCH_TOKEN: "${WEB_RESEARCH_TOKEN:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      WEB_RESEARCH_OPENAI_MODEL: "${WEB_RESEARCH_OPENAI_MODEL:-}"
+      WEB_RESEARCH_ANTHROPIC_MODEL: "${WEB_RESEARCH_ANTHROPIC_MODEL:-}"
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://ollama:11434}"
+      OLLAMA_RESEARCH_MODEL: "${OLLAMA_RESEARCH_MODEL:-qwen3.5:4b}"
+    networks: [photobank]
+    shm_size: 256mb
+    init: true
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  ollama:
+    profiles: [research-local]
+    image: ollama/ollama:0.19.0
+    networks: [photobank]
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
 
   admin:
     build:
@@ -270,6 +311,7 @@ services:
       - photobank
 
 volumes:
+  ollama_models:
   postgres_data:
   redis_data:
   rabbitmq_data:

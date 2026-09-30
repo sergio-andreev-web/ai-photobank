@@ -24,6 +24,7 @@ final class FinalizeStage implements ProcessingStage
         $image->error_code = null;
         $image->error_message = null;
         $image->save();
+        app(\App\Services\Research\ResearchScheduler::class)->schedule($image, 'automatic');
 
         // Faces (ADR-0015) run as their own job once the image is ready; after reprocess the
         // scanner only re-matches the known faces.
