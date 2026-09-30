@@ -484,3 +484,11 @@ The infrastructure is designed to:
 - Support isolated testing (no external dependencies)
 - Use CPU-based models in CI (no GPU required)
 - Match production (RunPod) with same contract
+
+## Исследование объектов (MCP / Playwright)
+
+Настройки сайта и ручной запуск используют отдельный worker `images.research`. Сервис и Qwen3.5 4B
+работают через HTTP, без зависимости от Mac. Native CLI MVP и Linux CPU/NVIDIA инструкции:
+[services/web-research/README.md](../services/web-research/README.md). `make start` включает установленный
+нативный сервис; `make research-install` подготавливает Node/Chromium. Контейнерный профиль — `research`,
+Ollama — `research-local`; секрет общий WEB_RESEARCH_TOKEN.

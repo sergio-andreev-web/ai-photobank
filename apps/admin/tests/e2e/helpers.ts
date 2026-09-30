@@ -38,6 +38,7 @@ export function pageOf<T>(data: T[], meta: Record<string, unknown> = {}) {
 
 /** Mocks the Sanctum CSRF cookie + login/me endpoints so pages behind the `auth` middleware load. */
 export async function mockAuth(page: Page) {
+  await page.route("**/api/admin/images/*/research", route => json(route, 200, {data: []}))
   await page.route('**/sanctum/csrf-cookie', (route) =>
     route.fulfill({
       status: 204,

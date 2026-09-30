@@ -33,7 +33,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = ROOT / "schemas"
 EXAMPLES_DIR = ROOT / "examples"
-OPENAPI_FILES = [ROOT / "public-api.openapi.yaml", ROOT / "ai-api.openapi.yaml"]
+OPENAPI_FILES = [ROOT / "public-api.openapi.yaml", ROOT / "ai-api.openapi.yaml", ROOT / "web-research.openapi.yaml"]
 
 SUPPORTED_KEYWORDS = {
     # validation
@@ -403,6 +403,7 @@ def schema_at(ref: str) -> Tuple[Any, Path]:
 
 
 EXAMPLE_FILE_SCHEMAS = {
+    "research/uncertain.json": "object-research.json",
     "ai/analyze-response.json": "image-analysis.json",
     "ai/text-embeddings-request.json": "text-embeddings.json#/$defs/TextEmbeddingsRequest",
     "ai/text-embeddings-response.json": "text-embeddings.json#/$defs/TextEmbeddingsResponse",
@@ -593,6 +594,7 @@ def main() -> int:
     ai_ops = check_openapi(ROOT / "ai-api.openapi.yaml")
     check_required(public_ops, REQUIRED_PUBLIC_OPS, "public-api")
     check_required(ai_ops, REQUIRED_AI_OPS, "ai-api")
+    check_openapi(ROOT / "web-research.openapi.yaml")
     check_example_files()
     negative_checks()
     optional_library_checks()

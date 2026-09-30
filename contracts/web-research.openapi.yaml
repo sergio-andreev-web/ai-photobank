@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: Photobank object web research
+  version: 1.11.0
+servers: [{url: 'http://localhost:8002'}]
+security: [{serviceToken: []}]
+paths:
+  /health:
+    get:
+      operationId: researchHealth
+      security: []
+      responses:
+        '200':
+          description: Process alive.
+  /ready:
+    get:
+      operationId: researchReady
+      responses:
+        '200':
+          description: Provider configuration (not authentication guarantee).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, available]
+                      properties:
+                        id: {type: string}
+                        available: {type: boolean}
+  /v1/research:
+    post:
+      operationId: researchObject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image_base64, mime_type, provider, question]
+              properties:
+                image_base64: {type: string, minLength: 1, maxLength: 13981016}
+                mime_type: {type: string, enum: [image/webp, image/jpeg, image/png]}
+                provider: {type: string, enum: [codex_cli, claude_cli, openai_api, anthropic_api, ollama]}
+                question: {type: string, maxLength: 1000}
+      responses:
+        '200':
+          description: Verified structured agent result.
+          content:
+            application/json:
+              schema: {$ref: './schemas/object-research.json'}
+        '400':
+          description: INVALID_REQUEST
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResearchError"}
+        '401':
+          description: UNAUTHENTICATED
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResearchError"}
+        '502':
+          description: WEB_SEARCH_BLOCKED, AGENT_FAILED, AGENT_OUTPUT_INVALID
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResearchError"}
+        '503':
+          description: PROVIDER_UNAVAILABLE, BUSY
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResearchError"}
+        '504':
+          description: RESEARCH_TIMEOUT
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ResearchError"}
+components:
+  schemas:
+    ResearchError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code]
+          properties:
+            code: {type: string}
+  securitySchemes:
+    serviceToken: {type: http, scheme: bearer}

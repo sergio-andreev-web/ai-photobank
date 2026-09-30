@@ -34,7 +34,47 @@ make stop      # остановить все (данные сохраняютс�
 
 ## Текущая работа
 
-Активных незавершенных задач нет. Все три этапа распознавания лиц в `main`.
+### Исследование объектов — Codex, 2026-09-30
+
+Совместный пакет 05, контракт 1.11.0 / ADR-0016. Ветка `codex/object-web-research` от `main`;
+Artists integration/ART workflow здесь не применяется. `.idea/` сохранена без изменений.
+
+Реализованы настройки (автоматика off по умолчанию), отдельная очередь `images.research`,
+идемпотентный ручной запуск, история/ошибки/polling в карточке изображения. Включение применяется только
+к новым ready изображениям, reprocess не повторяет автоматическое исследование. Выключение отменяет
+не начатые automatic jobs; manual работает при любом положении галочки. Предложения не меняют подписи,
+canonical tags или людей. Поиск объектов универсальный, без предметных категорий/правил в коде.
+
+Новый `services/web-research`: Playwright Google Lens, job-scoped stdio MCP (inspect_image,
+visual_search, read_source), адаптеры Codex CLI / Claude CLI / OpenAI Responses / Anthropic Messages /
+Ollama Qwen3.5 4B. Только bytes превью, никаких storage keys/DB/ID пользователей. Проверяются схема,
+фактически прочитанные ссылки, размеры, таймауты, лимит инструментов; приватные адреса блокируются.
+Ключи только в окружении; CLI получают временный MCP config, глобальные настройки не меняются.
+Для Codex три конкретных инструмента разрешены в рамках задания, shell выключен, sandbox read-only.
+
+Подготовлены Docker-сервис и Ollama для Linux CPU/NVIDIA (`research`, `research-local`,
+`docker-compose.research-gpu.yml`), отдельный worker и production overlay. Нет зависимости от Apple MPS.
+Native daemon включен в make start/stop (detached session, survives terminal exit); инструкции в services/web-research/README.md.
+Локальный стенд пересобран и мигрирован, http://localhost/settings доступен, выбран ollama, автоматика off.
+Qwen3.5 4B скачана (3.4 GB, кеш Ollama). Корневая .env дополнена локальными параметрами/случайным токеном,
+не коммитится. Сервис .run/web-research.log/.pid, порт 8002.
+
+Проверки: PHPUnit 344 теста / 1407 assertions, 9 skipped; Vitest 125 passed; сервис 10 passed,
+включая настоящий stdio MCP transport, fake API/Ollama loops и HTTP/URL/schema ошибки.
+OpenAPI/JSON Schema валидны, Mac/production Compose валидны, Docker build сервиса и запуск /health
+в Linux-контейнере успешны. CLI Codex/Claude реально вызвали инструменты и вернули valid uncertain
+на синтетической картинке и фиктивном источнике; реальная Qwen3.5 4B вызвала visual_search/read_source
+и вернула valid structured result на рисунке и детерминированном тексте (не тест точности веб-поиска).
+Vue-tsc exit 0, существующее предупреждение vue-router/volar/sfc-route-blocks сохраняется.
+
+Живой Lens: после исправления загрузки длинных JS URL превью отправлено, далее Google возвращает
+/sorry CAPTCHA. Обхода нет: WEB_SEARCH_BLOCKED. Успешное определение по реальным веб-источникам
+в этом окружении пока не подтверждено. Live OpenAI/Anthropic не запускались: нет API keys/models;
+их tool loops проверены mock ответами. NVIDIA inference не запускался, подготовлена конфигурация.
+Полный финальный Playwright: 103 passed. Коммит реализации 4b7de73, ветка отправлена; создан
+[PR #74](https://github.com/sergio-andreev-web/ai-photobank/pull/74), еще не в main. Следующий шаг — пробы на реальных
+объектах с доступным поисковиком, оценка точности/скорости Qwen, затем deployment сайта.
+
 
 ## Сделано (PR в `main`)
 

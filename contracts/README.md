@@ -2,10 +2,12 @@
 
 | | |
 | --- | --- |
-| Версия | `1.10.0` |
+| Версия | `1.11.0` |
 | Статус | **Утверждено владельцем продукта 2026-09-25.** ADR-0001–0011 — Accepted; реализации пакетов 01–04 разрешены. |
 | Владелец | пакет 00 «Контракты» (`contracts/**`, `docs/adr/**`) |
 | Источник требований | [docs/technical-specification.md](../docs/technical-specification.md) (далее «ТЗ», ссылки `§N`) |
+
+ADR-0016 принят по запросу владельца 2026-09-30 (универсальный поиск объектов).
 
 Контракты — единственный источник истины между модулями (§10): Nuxt ориентируется только на
 `public-api.openapi.yaml`, Laravel и FastAPI — на `ai-api.openapi.yaml` и `schemas/**`.
@@ -15,6 +17,8 @@
 | Файл | Назначение | Потребители |
 | --- | --- | --- |
 | `public-api.openapi.yaml` | Публичный API Laravel: auth, dashboard, batches/upload, images, image tags, tags, aliases, tag candidates, search, media | frontend, backend, QA |
+| `web-research.openapi.yaml` | Сервис MCP/Playwright: health, readiness, исследование bytes изображения | backend, web-research, infra, QA |
+| `schemas/object-research.json` | Результат исследования объекта с источниками | backend, web-research |
 | `ai-api.openapi.yaml` | API AI service: `/health`, `/ready`, `/v1/images/analyze`, `/v1/embeddings/text` | backend (AiClient), AI, infra (health checks), QA |
 | `schemas/image-analysis.json` | Ответ analyze; общий schema test backend и AI (§71) | backend, AI |
 | `schemas/concepts.json` | Массив визуальных понятий | backend, AI |
@@ -86,6 +90,8 @@ Inline-примеры в OpenAPI покрывают критические оп�
 | `EMBEDDING_VERSION_MISMATCH` | 503 | решение ADR (ADR-0009) |
 | `PERSON_NOT_FOUND` | 404 | решение ADR (ADR-0015) |
 | `FACE_NOT_FOUND` | 404 | решение ADR (ADR-0015) |
+| `IMAGE_NOT_RESEARCHABLE` | 409 | ADR-0016 |
+| `WEB_RESEARCH_UNAVAILABLE` | 503 | ADR-0016 |
 
 `NOT_FOUND` и `METHOD_NOT_ALLOWED` — общие ответы на запрос к несуществующему пути public API и к методу, который
 маршрут не поддерживает. Отсутствующий ресурс существующего маршрута по-прежнему возвращает свой код
@@ -160,3 +166,4 @@ python3 contracts/tools/validate_contracts.py
 ## Утвержденные решения
 
 Все 11 решений и закрытые вопросы перечислены в [decision-checklist.md](../docs/adr/decision-checklist.md).
+1.11.0 — настройки и универсальное исследование объектов, ADR-0016. Новые потребители: web-research, backend, frontend, infra.

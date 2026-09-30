@@ -99,6 +99,7 @@ MAC_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.mac.yml
 
 start: .env
 	infra/scripts/ai-mac.sh start
+	infra/scripts/web-research.sh start
 	$(MAKE) up-mac
 	@echo ""
 	@echo "✓ Photobank is running with real models"
@@ -115,10 +116,11 @@ up-mac: .env
 	$(MAC_COMPOSE) exec -T api php artisan db:seed --force
 	$(MAC_COMPOSE) up -d --wait --wait-timeout $(SETUP_WAIT_TIMEOUT) admin nginx
 	# api-worker has no healthcheck, so it is started without --wait (see setup).
-	$(MAC_COMPOSE) up -d api-worker
+	$(MAC_COMPOSE) up -d api-worker research-worker
 
 stop:
 	$(MAC_COMPOSE) --profile ai down
+	infra/scripts/web-research.sh stop
 	infra/scripts/ai-mac.sh stop
 
 status:
@@ -361,3 +363,20 @@ ps:
 # Full cleanup (including images)
 fclean: down
 	docker system prune -a -f
+
+# Native Mac CLI connectors (Node 22+); API/Ollama work in Linux containers too.
+research-install:
+	cd services/web-research && npm ci && npx playwright install chromium
+
+research-native:
+	cd services/web-research && npm start
+
+research-up:
+	docker compose --profile research up -d --build web-research research-worker
+
+research-local-up:
+	docker compose --profile research --profile research-local up -d --build web-research ollama research-worker
+	docker compose exec ollama ollama pull $${OLLAMA_RESEARCH_MODEL:-qwen3.5:4b}
+
+research-test:
+	cd services/web-research && npm test

@@ -41,6 +41,10 @@ Route::prefix('api')->group(function () {
     Route::middleware(['auth', 'admin.role'])->group(function () {
         Route::prefix('admin')->group(function () {
             Route::get('/dashboard', DashboardController::class);
+            Route::get('/settings', [\App\Http\Controllers\Admin\ResearchController::class, 'settings']);
+            Route::patch('/settings', [\App\Http\Controllers\Admin\ResearchController::class, 'updateSettings']);
+            Route::get('/images/{image}/research', [\App\Http\Controllers\Admin\ResearchController::class, 'history'])->whereNumber('image');
+            Route::post('/images/{image}/research', [\App\Http\Controllers\Admin\ResearchController::class, 'start'])->whereNumber('image');
 
             Route::get('/batches', [BatchController::class, 'index']);
             Route::post('/batches', [BatchController::class, 'store']);
