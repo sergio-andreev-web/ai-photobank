@@ -54,7 +54,7 @@ Ollama Qwen3.5 4B. Только bytes превью, никаких storage keys/
 
 Подготовлены Docker-сервис и Ollama для Linux CPU/NVIDIA (`research`, `research-local`,
 `docker-compose.research-gpu.yml`), отдельный worker и production overlay. Нет зависимости от Apple MPS.
-Native daemon включен в make start/stop; инструкции в services/web-research/README.md.
+Native daemon включен в make start/stop (detached session, survives terminal exit); инструкции в services/web-research/README.md.
 Локальный стенд пересобран и мигрирован, http://localhost/settings доступен, выбран ollama, автоматика off.
 Qwen3.5 4B скачана (3.4 GB, кеш Ollama). Корневая .env дополнена локальными параметрами/случайным токеном,
 не коммитится. Сервис .run/web-research.log/.pid, порт 8002.

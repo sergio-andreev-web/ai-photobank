@@ -10,8 +10,17 @@ case "${1:-status}" in
   mkdir -p "$ROOT/.run"
   cd "$ROOT/services/web-research"
   # Credentials are read by Node's env-file loader, never echoed or evaluated as shell code.
-  nohup node --env-file-if-exists=../../.env src/server.mjs > "$LOG_FILE" 2>&1 < /dev/null &
-  echo "$!" > "$PID_FILE"
+  node - "$LOG_FILE" > "$PID_FILE" <<'JS'
+const {spawn} = require('node:child_process');
+const fs = require('node:fs');
+const log = fs.openSync(process.argv[2], 'a');
+const child = spawn(process.execPath, ['--env-file-if-exists=../../.env', 'src/server.mjs'], {
+  stdio: ['ignore', log, log], detached: true,
+});
+child.unref();
+fs.closeSync(log);
+console.log(child.pid);
+JS
   sleep 1
   if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then rm -f "$PID_FILE"; echo 'Web research did not start; configure WEB_RESEARCH_TOKEN, see .run/web-research.log'; exit 0; fi
   echo 'Web research started'
