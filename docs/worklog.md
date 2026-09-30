@@ -71,7 +71,8 @@ Vue-tsc exit 0, существующее предупреждение vue-router
 /sorry CAPTCHA. Обхода нет: WEB_SEARCH_BLOCKED. Успешное определение по реальным веб-источникам
 в этом окружении пока не подтверждено. Live OpenAI/Anthropic не запускались: нет API keys/models;
 их tool loops проверены mock ответами. NVIDIA inference не запускался, подготовлена конфигурация.
-Полный финальный Playwright: 103 passed. Ветка подготовлена к PR; следующий шаг — пробы на реальных
+Полный финальный Playwright: 103 passed. Коммит реализации 4b7de73, ветка отправлена; создан
+[PR #74](https://github.com/sergio-andreev-web/ai-photobank/pull/74), еще не в main. Следующий шаг — пробы на реальных
 объектах с доступным поисковиком, оценка точности/скорости Qwen, затем deployment сайта.
 
 
